@@ -1,0 +1,25 @@
+*.DS_Store
+# npm
+node_modules
+
+# package directory
+obsidian-timestamp-utility
+
+# Docker-Compose
+.tools
+
+# build
+main.js
+styles.css
+*.js.map
+*.zip
+dist/
+release/
+coverage/
+.nyc_output/
+test-vault/
+
+TODO.md
+CHANGELOG.md
+.idea
+data.json
