@@ -7,6 +7,9 @@ on:
     types:
       - closed
 
+permissions:
+  contents: write  # Grants permission to push tags and commits
+
 jobs:
   build-and-release:
     if: github.event.pull_request.merged == true
@@ -40,7 +43,6 @@ jobs:
           TAG="v${VERSION}"
           git tag -f "${TAG}"
           git push origin "${TAG}" --force
-
 
       - name: Create Release
         id: create_release
