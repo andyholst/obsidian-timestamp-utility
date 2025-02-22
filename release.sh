@@ -40,13 +40,15 @@ for commit in $(git rev-list "$MERGE_BASE..$HEAD_COMMIT"); do
 done
 echo "All commits in the current branch validated successfully"
 
-# Apply the tag to the HEAD commit
-echo "Applying tag $TAG to HEAD commit $HEAD_COMMIT..."
-git tag -d "$TAG" 2>/dev/null || true
-git tag -f "$TAG" || { echo "Error: Failed to create tag $TAG"; git tag -l; exit 1; }
 
-# Generate changelog for commits from after the merge base to the tagged HEAD
-echo "Generating changelog for commits from $MERGE_BASE to $TAG..."
+# Get the HEAD commit hash
+HEAD_COMMIT=$(git rev-parse HEAD)
+echo "Processing HEAD commit: $HEAD_COMMIT"
+
+# Get the full commit message of HEAD
+FULL_MESSAGE=$(git log -1 --pretty=format:"%B" "$HEAD_COMMIT")
+echo "Commit message to parse:"
+echo "$FULL_MESSAGE"
 
 # Function to trim leading and trailing whitespace
 trim() {
@@ -99,16 +101,13 @@ parse_line() {
     esac
 }
 
-# Process each commit in the range
-for commit in $(git rev-list "$MERGE_BASE..$HEAD_COMMIT"); do
-    # Get the full commit message (subject + body)
-    full_message=$(git log -1 --pretty=format:"%B" "$commit")
-    while IFS= read -r line; do
-        # Skip empty lines to avoid blank entries
-        [ -z "$line" ] && continue
-        parse_line "$line"
-    done <<< "$full_message"
-done
+# Parse the HEAD commit message
+echo "Generating changelog for HEAD commit $HEAD_COMMIT..."
+while IFS= read -r line; do
+    # Skip empty lines to avoid blank entries
+    [ -z "$line" ] && continue
+    parse_line "$line"
+done <<< "$FULL_MESSAGE"
 
 # Build the new changelog section with actual line breaks
 NEW_CHANGELOG="## $TAG\n\n"
@@ -128,7 +127,7 @@ if [ ${#FIXES[@]} -gt 0 ]; then
 fi
 
 if [ ${#PERFS[@]} -gt 0 ]; then
-    NEWCHANGELOG+="### ⚡ Performance Improvements\n"
+    NEW_CHANGELOG+="### ⚡ Performance Improvements\n"
     for perf in "${PERFS[@]}"; do
         NEW_CHANGELOG+="- **$perf**\n"
     done
@@ -163,7 +162,7 @@ fi
 CHANGELOG_FILE="/app/CHANGELOG.md"
 
 # Create or update the changelog file with interpreted newlines
-echo "Creating new CHANGELOG.md with commits from the current branch..."
+echo "Creating new CHANGELOG.md with HEAD commit message..."
 echo -e "$NEW_CHANGELOG" > "$CHANGELOG_FILE"
 
 # Verify that the changelog file exists
