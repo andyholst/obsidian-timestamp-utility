@@ -34,12 +34,6 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "TAG=v$VERSION" >> $GITHUB_ENV
 
-      - name: Build and release
-        run: make release
-        env:
-          REPO_NAME: obsidian-timestamp-utility
-          TAG: ${{ env.TAG }}
-
       - name: Configure Git
         run: |
           git config user.name "Andy Holst"
@@ -49,6 +43,12 @@ jobs:
         run: |
           git tag -f "${{ env.TAG }}"
           git push origin "${{ env.TAG }}" --force
+
+      - name: Build and release
+        run: make release
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+          TAG: ${{ env.TAG }}
 
       - name: Create Release
         id: create_release
@@ -60,7 +60,7 @@ jobs:
           release_name: ${{ env.TAG }}
           draft: false
           prerelease: false
-          body_path: CHANGELOG.md
+          body_path: ./release/CHANGELOG.md
 
       - name: Upload main.js
         uses: actions/upload-release-asset@v1
