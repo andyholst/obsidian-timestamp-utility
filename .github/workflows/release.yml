@@ -1,0 +1,95 @@
+name: Release Obsidian Timestamp Utility
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  build-and-release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install Make
+        run: sudo apt-get update && sudo apt-get install -y make
+
+      - name: Build and release
+        run: make release
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+      - name: Configure Git
+        run: |
+          git config user.name "Andy Holst"
+          git config user.email "andy.holst@protonmail.com"
+
+      - name: Tag the release
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}"
+          git tag -f "${TAG}"
+          git push origin "${TAG}" --force
+
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ env.VERSION }}
+          release_name: ${{ env.VERSION }} Latest
+          draft: false
+          prerelease: false
+          body_path: CHANGELOG.md
+
+      - name: Upload main.js
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release/main.js
+          asset_name: main.js
+          asset_content_type: application/javascript
+
+      - name: Upload manifest.json
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release/manifest.json
+          asset_name: manifest.json
+          asset_content_type: application/json
+
+      - name: Upload README.md
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release/README.md
+          asset_name: README.md
+          asset_content_type: text/markdown
+
+      - name: Upload CHANGELOG.md
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release/CHANGELOG.md
+          asset_name: CHANGELOG.md
+          asset_content_type: text/markdown

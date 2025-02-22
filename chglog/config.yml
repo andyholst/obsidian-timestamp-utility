@@ -1,0 +1,32 @@
+style: github
+template: "CHANGELOG.tpl.md"
+info:
+  title: "CHANGELOG"
+  repository_url: "https://github.com/andyholst/obsidian-timestamp-utility"
+options:
+  commits:
+    filters:
+      Type:
+      - feat
+      - fix
+      - perf
+      - refactor
+      - docs
+      - chore
+    commit_parsers:
+    - pattern: "^(feat|chore|fix|perf|refactor|docs)(?:\\(.*?\\))?:\\s*(.+)$"
+      group: "$1"
+      subject: "$2"
+      body: "(?s).*"
+    sort_by: "Date"
+    sort_direction: "asc"
+  commit_groups:
+    group_by: "group"
+    title_maps:
+      feat: "✨ New Features"
+      fix: "🐞 Bug Fixes"
+      perf: "⚡ Improvements"
+      refactor: "🔧 Improvements"
+      docs: "📝 Documentation"
+      chore: "🛠️ Maintenance"
+    default_title: "🔍 Changes"

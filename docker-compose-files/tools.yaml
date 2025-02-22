@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker-files/npm/Dockerfile
+    volumes:
+    - ../:/app
+    working_dir: /app
+    environment:
+    - TAG=${TAG:-v0.1.0}
+    - REPO_NAME=${REPO_NAME:-obsidian-timestamp-utility}
