@@ -6,7 +6,7 @@ VERSION := $(shell node -p "require('./package.json').version")
 TAG := v$(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
 
-.PHONY: all build-image build-app test-app release
+.PHONY: all build-image build-app test-app release clean
 
 all: build-app test-app release
 
@@ -28,8 +28,12 @@ test-app: build-app
 			npm install --no-package-lock --loglevel=silly && \
 			npm test"
 
-release: build-app
+release: clean build-app
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
+			chmod +x /app/release.sh && \
 			find /app -name '*.sh' -exec dos2unix {} \; || { echo 'Error: dos2unix failed on some .sh files'; exit 1; } && \
 			/app/release.sh"
 	test -f release/release-$(TAG).zip || { echo "Release zip not created"; exit 1; }
+
+clean:
+	rm -rf .tools release dist
