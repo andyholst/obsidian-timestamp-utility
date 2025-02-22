@@ -8,7 +8,7 @@ on:
       - closed
 
 permissions:
-  contents: write  # Grants permission to push tags and commits
+  contents: write
 
 jobs:
   build-and-release:
@@ -27,10 +27,18 @@ jobs:
       - name: Install Make
         run: sudo apt-get update && sudo apt-get install -y make
 
+      - name: Set Version
+        id: set_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
+
       - name: Build and release
         run: make release
         env:
           REPO_NAME: obsidian-timestamp-utility
+          TAG: ${{ env.TAG }}
 
       - name: Configure Git
         run: |
@@ -39,10 +47,8 @@ jobs:
 
       - name: Tag the release
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          TAG="v${VERSION}"
-          git tag -f "${TAG}"
-          git push origin "${TAG}" --force
+          git tag -f "${{ env.TAG }}"
+          git push origin "${{ env.TAG }}" --force
 
       - name: Create Release
         id: create_release
@@ -50,8 +56,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: v${{ env.VERSION }}
-          release_name: ${{ env.VERSION }} Latest
+          tag_name: ${{ env.TAG }}
+          release_name: ${{ env.TAG }}
           draft: false
           prerelease: false
           body_path: CHANGELOG.md
