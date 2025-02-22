@@ -20,6 +20,6 @@ coverage/
 test-vault/
 
 TODO.md
-CHANGELOG.md
+release_notes.md
 .idea
 data.json

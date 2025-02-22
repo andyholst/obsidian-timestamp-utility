@@ -44,6 +44,9 @@ jobs:
           git tag -f "${{ env.TAG }}"
           git push origin "${{ env.TAG }}" --force
 
+      - name: Make scripts executable
+        run: find . -name '*.sh' -exec chmod +x {} \;
+
       - name: Build and release
         run: make release
         env:
@@ -60,7 +63,7 @@ jobs:
           release_name: ${{ env.TAG }}
           draft: false
           prerelease: false
-          body_path: ./release/CHANGELOG.md
+          body_path: ./release/release_notes.md
 
       - name: Upload main.js
         uses: actions/upload-release-asset@v1
