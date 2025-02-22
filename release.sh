@@ -163,15 +163,8 @@ fi
 CHANGELOG_FILE="/app/CHANGELOG.md"
 
 # Create or update the changelog file with interpreted newlines
-if [ ! -f "$CHANGELOG_FILE" ]; then
-    echo "Creating new CHANGELOG.md with commits from the current branch..."
-    echo -e "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n$NEW_CHANGELOG" > "$CHANGELOG_FILE"
-else
-    echo "Appending changelog for the current branch to existing CHANGELOG.md..."
-    # Insert the new section after the header with actual newlines
-    sed -i "/^# Changelog/a\\" "$CHANGELOG_FILE"
-    echo -e "$NEW_CHANGELOG" >> "$CHANGELOG_FILE"
-fi
+echo "Creating new CHANGELOG.md with commits from the current branch..."
+echo -e "$NEW_CHANGELOG" > "$CHANGELOG_FILE"
 
 # Verify that the changelog file exists
 test -f "$CHANGELOG_FILE" || { echo "Error: CHANGELOG.md was not created or updated"; ls -la /app; exit 1; }

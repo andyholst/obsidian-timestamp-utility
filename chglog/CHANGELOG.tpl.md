@@ -1,5 +1,3 @@
-# Changelog
-
 {{ range .Versions }}
 ## {{ .Tag.Name }} {{ if eq .Tag.Name (index $.Versions 0).Tag.Name }}Latest{{ end }}
 
