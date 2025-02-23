@@ -2,6 +2,13 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## v0.1.2
+
+### 🐞 Bug Fixes
+
+- **publish to Obsidian community with correct version**
+- **bumped the version of the Timestamp Utility to be released for the Obsidian community**
+
 ## v0.1.1
 
 ### ✨ New Features
