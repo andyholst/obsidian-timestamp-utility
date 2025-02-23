@@ -52,6 +52,7 @@ jobs:
         env:
           REPO_NAME: obsidian-timestamp-utility
           TAG: ${{ env.TAG }}
+          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
 
       - name: Create Release
         id: create_release

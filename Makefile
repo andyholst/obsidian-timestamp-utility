@@ -20,12 +20,12 @@ build-image: $(DOCKER_COMPOSE_PATH)
 
 build-app: build-image
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
-			npm install --no-package-lock --loglevel=silly && \
+			npm install --loglevel=silly && \
 			npm run build-package"
 
 test-app: build-app
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
-			npm install --no-package-lock --loglevel=silly && \
+			npm install --loglevel=silly && \
 			npm test"
 
 changelog: build-image
