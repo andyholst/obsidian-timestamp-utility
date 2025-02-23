@@ -18,23 +18,26 @@ fi
 echo "TAG=$TAG"
 echo "REPO_NAME=$REPO_NAME"
 
-# Use provided COMMIT_RANGE if set (e.g., from GitHub Actions), otherwise compute it
-if [ -n "$COMMIT_RANGE" ]; then
-    echo "Using provided COMMIT_RANGE: $COMMIT_RANGE"
-else
-    # Fallback logic for local runs
-    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    echo "Current branch: $CURRENT_BRANCH"
-    MAIN_BRANCH="main"
-    git fetch origin "$MAIN_BRANCH" >/dev/null 2>&1 || { echo "Error: Failed to fetch $MAIN_BRANCH"; exit 1; }
-    MERGE_BASE=$(git merge-base "origin/$MAIN_BRANCH" "$CURRENT_BRANCH")
-    if [ -z "$MERGE_BASE" ]; then
-        echo "Error: Could not determine merge base between $CURRENT_BRANCH and $MAIN_BRANCH"
-        exit 1
-    fi
-    COMMIT_RANGE="$MERGE_BASE..HEAD"
-    echo "Computed COMMIT_RANGE: $COMMIT_RANGE"
+# Get the current branch name
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "Current branch: $CURRENT_BRANCH"
+
+# Define the main branch (adjust if your main branch is named differently, e.g., 'master')
+MAIN_BRANCH="main"
+
+# Ensure the main branch exists and is fetched
+git fetch origin "$MAIN_BRANCH" >/dev/null 2>&1 || { echo "Error: Failed to fetch $MAIN_BRANCH"; exit 1; }
+
+# Determine the merge base between the current branch and the main branch
+MERGE_BASE=$(git merge-base "origin/$MAIN_BRANCH" "$CURRENT_BRANCH")
+if [ -z "$MERGE_BASE" ]; then
+    echo "Error: Could not determine merge base between $CURRENT_BRANCH and $MAIN_BRANCH"
+    exit 1
 fi
+
+# Set the commit range to process only commits unique to this branch
+COMMIT_RANGE="$MERGE_BASE..HEAD"
+echo "Processing commits in range: $COMMIT_RANGE"
 
 # Validate commits in the range with commitlint
 echo "Validating commits with commitlint from $COMMIT_RANGE..."
@@ -48,7 +51,7 @@ for commit in $(git rev-list --no-merges "$COMMIT_RANGE"); do
     }
 done
 if [ "$COMMITS_FOUND" = false ]; then
-    echo "No new commits found in range $COMMIT_RANGE"
+    echo "No new commits found in $CURRENT_BRANCH compared to $MAIN_BRANCH"
 else
     echo "Commits validated successfully"
 fi
@@ -104,8 +107,8 @@ parse_line() {
     esac
 }
 
-# Process commits from the specified range
-echo "Generating release notes for commits in range $COMMIT_RANGE..."
+# Process only commits from this feature branch
+echo "Generating release notes for commits in range $COMMIT_RANGE on $CURRENT_BRANCH..."
 for commit in $(git rev-list --no-merges "$COMMIT_RANGE"); do
     COMMIT_MESSAGE=$(git log -1 --pretty=format:"%B" "$commit")
     while IFS= read -r line; do
@@ -176,7 +179,7 @@ RELEASE_NOTES=$(printf "%b" "$RELEASE_NOTES" | sed -e :a -e '/^\n*$/{$d;N;ba}')$
 RELEASE_NOTES_FILE="/app/release_notes.md"
 
 # Create or overwrite the release notes file with proper newlines
-echo "Creating release_notes.md with commits from $COMMIT_RANGE..."
+echo "Creating release_notes.md with commits from $COMMIT_RANGE on $CURRENT_BRANCH..."
 printf "%b" "$RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
 
 # Verify that the release notes file exists
