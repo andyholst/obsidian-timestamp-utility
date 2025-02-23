@@ -32,7 +32,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "TAG=v$VERSION" >> $GITHUB_ENV
+          echo "TAG=$VERSION" >> $GITHUB_ENV
 
       - name: Configure Git
         run: |
