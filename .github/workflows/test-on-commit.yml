@@ -20,6 +20,9 @@ jobs:
       - name: Install Make
         run: sudo apt-get update && sudo apt-get install -y make
 
+      - name: Make scripts executable
+        run: find . -name '*.sh' -exec chmod +x {} \;
+
       - name: Run tests
         run: make test-app
         env:
