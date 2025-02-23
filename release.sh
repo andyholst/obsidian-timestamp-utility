@@ -18,26 +18,31 @@ fi
 echo "TAG=$TAG"
 echo "REPO_NAME=$REPO_NAME"
 
-# Get the latest tag (excluding the current $TAG)
-LATEST_TAG=$(git tag --sort=-creatordate | grep -v "$TAG" | head -n 1)
-if [ -z "$LATEST_TAG" ]; then
-    echo "No previous tags found, processing all commits up to HEAD"
-    COMMIT_RANGE="HEAD"
-else
-    echo "Latest tag: $LATEST_TAG"
-    # Get the commit hash of the latest tag
-    LATEST_TAG_COMMIT=$(git rev-list -n 1 "$LATEST_TAG")
-    COMMIT_RANGE="$LATEST_TAG_COMMIT..HEAD"
+# Get the current branch name
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "Current branch: $CURRENT_BRANCH"
+
+# Define the main branch (adjust if your main branch is named differently, e.g., 'master')
+MAIN_BRANCH="main"
+
+# Ensure the main branch exists and is fetched
+git fetch origin "$MAIN_BRANCH" >/dev/null 2>&1 || { echo "Error: Failed to fetch $MAIN_BRANCH"; exit 1; }
+
+# Determine the merge base between the current branch and the main branch
+MERGE_BASE=$(git merge-base "origin/$MAIN_BRANCH" "$CURRENT_BRANCH")
+if [ -z "$MERGE_BASE" ]; then
+    echo "Error: Could not determine merge base between $CURRENT_BRANCH and $MAIN_BRANCH"
+    exit 1
 fi
+
+# Set the commit range to process only commits unique to this branch
+COMMIT_RANGE="$MERGE_BASE..HEAD"
+echo "Processing commits in range: $COMMIT_RANGE"
 
 # Validate commits in the range with commitlint
 echo "Validating commits with commitlint from $COMMIT_RANGE..."
 COMMITS_FOUND=false
 for commit in $(git rev-list --no-merges "$COMMIT_RANGE"); do
-    # Skip the commit that created the latest tag itself
-    if [ -n "$LATEST_TAG_COMMIT" ] && [ "$commit" = "$LATEST_TAG_COMMIT" ]; then
-        continue
-    fi
     COMMITS_FOUND=true
     git show -s --format=%B "$commit" | commitlint || {
         echo "Error: Commit $commit does not conform to conventional commit standards"
@@ -46,7 +51,7 @@ for commit in $(git rev-list --no-merges "$COMMIT_RANGE"); do
     }
 done
 if [ "$COMMITS_FOUND" = false ]; then
-    echo "No new commits found since $LATEST_TAG"
+    echo "No new commits found in $CURRENT_BRANCH compared to $MAIN_BRANCH"
 else
     echo "Commits validated successfully"
 fi
@@ -102,13 +107,9 @@ parse_line() {
     esac
 }
 
-# Process only commits from this feature branch since the last tag
-echo "Generating release notes for commits in range $COMMIT_RANGE on current branch..."
+# Process only commits from this feature branch
+echo "Generating release notes for commits in range $COMMIT_RANGE on $CURRENT_BRANCH..."
 for commit in $(git rev-list --no-merges "$COMMIT_RANGE"); do
-    # Skip the commit that created the latest tag itself
-    if [ -n "$LATEST_TAG_COMMIT" ] && [ "$commit" = "$LATEST_TAG_COMMIT" ]; then
-        continue
-    fi
     COMMIT_MESSAGE=$(git log -1 --pretty=format:"%B" "$commit")
     while IFS= read -r line; do
         [ -z "$line" ] && continue
@@ -178,7 +179,7 @@ RELEASE_NOTES=$(printf "%b" "$RELEASE_NOTES" | sed -e :a -e '/^\n*$/{$d;N;ba}')$
 RELEASE_NOTES_FILE="/app/release_notes.md"
 
 # Create or overwrite the release notes file with proper newlines
-echo "Creating release_notes.md with commits from $COMMIT_RANGE on current branch..."
+echo "Creating release_notes.md with commits from $COMMIT_RANGE on $CURRENT_BRANCH..."
 printf "%b" "$RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
 
 # Verify that the release notes file exists
