@@ -3,7 +3,7 @@ DOCKER_COMPOSE_PATH := .tools/docker-compose
 DOCKER_COMPOSE_FILE := docker-compose-files/tools.yaml
 REPO_NAME := obsidian-timestamp-utility
 VERSION := $(shell node -p "require('./package.json').version")
-TAG := v$(VERSION)
+TAG := $(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
 
 .PHONY: all build-image build-app test-app release changelog clean
