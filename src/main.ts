@@ -27,6 +27,30 @@ export default class TimestampPlugin extends obsidian.Plugin {
                 }
             }
         });
+
+        this.addCommand({
+            id: 'rename-with-timestamp-title',
+            name: 'Rename Current File with Timestamp as prefix and with First Heading Title as filename',
+            callback: async () => {
+                const file = this.app.workspace.getActiveFile();
+                const view = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
+                const editor = view?.editor;
+
+                if (file && file.parent && editor) {
+                    const content = editor.getValue();
+                    const titleMatch = content.match(/^#\s+(.+)$/m);
+                    let newBasename = 'untitled';
+
+                    if (titleMatch && titleMatch[1]) {
+                        newBasename = titleMatch[1].trim().replace(/\s+/g, '_').toLowerCase();
+                    }
+
+                    const directoryPath = file.parent.path;
+                    const newName = `${directoryPath}/${this.generateTimestamp()}_${newBasename}.${file.extension}`;
+                    await this.app.fileManager.renameFile(file, newName);
+                }
+            }
+        });
     }
 
     generateTimestamp(): string {
