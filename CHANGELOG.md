@@ -2,6 +2,17 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.3.0
+
+### ✨ New Features
+
+- **added generate a list of YYYY-MM-DD dates logic**
+- **implemented generate range list of dates with happy/unhappy tests.**
+
+### 📝 Documentation
+
+- **updated README.md file how to use the generate the date range list.**
+
 ## 0.2.0
 
 ### ✨ New Features
