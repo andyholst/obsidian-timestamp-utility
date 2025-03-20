@@ -1,10 +1,9 @@
-// __mocks__/obsidian.ts
 export class Plugin {
   app: any;
   manifest: any;
   constructor(app: any, manifest: any) {
       this.app = app;
-      this.manifest = manifest; // Use the parameter
+      this.manifest = manifest;
   }
   async onload() {}
   addCommand(command: any) {
@@ -74,4 +73,19 @@ export class App {
       getNewFileParent: jest.fn(),
       generateMarkdownLink: jest.fn(() => ''),
   };
+}
+
+export class Modal {
+  app: any;
+  constructor(app: any) {
+      this.app = app;
+  }
+  onOpen() {}
+  onClose() {}
+  open() {}
+  close() {}
+}
+
+export class Notice {
+  constructor() {}
 }

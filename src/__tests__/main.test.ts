@@ -1,18 +1,16 @@
 import TimestampPlugin from '../main';
 import * as obsidian from 'obsidian';
 
-// Mock manifest
 const mockManifest: obsidian.PluginManifest = {
     id: 'obsidian-timestamp-utility',
     name: 'Timestamp Utility',
-    version: '0.2.0',
+    version: '0.3.0',
     minAppVersion: '0.15.0',
     description: 'Insert timestamps and rename files with timestamp prefixes.',
     author: 'Your Name',
     isDesktopOnly: false,
 };
 
-// Mock editor
 const mockEditor: obsidian.MarkdownView['editor'] = {
     replaceSelection: jest.fn(),
     getValue: jest.fn(() => ''),
@@ -48,12 +46,10 @@ const mockEditor: obsidian.MarkdownView['editor'] = {
     processLines: jest.fn(() => 0),
 };
 
-// Mock MarkdownView
 const mockView: obsidian.MarkdownView = {
     editor: mockEditor,
 } as any;
 
-// Mock file
 const mockFile: obsidian.TFile = {
     basename: 'My Note',
     extension: 'md',
@@ -64,7 +60,6 @@ const mockFile: obsidian.TFile = {
     name: 'My Note.md',
 };
 
-// Mock App
 const mockApp: obsidian.App = {
     workspace: {
         getActiveViewOfType: jest.fn(() => mockView),
@@ -76,7 +71,7 @@ const mockApp: obsidian.App = {
         generateMarkdownLink: jest.fn(() => ''),
         trashFile: jest.fn(),
         processFrontMatter: jest.fn(),
-        getAvailablePathForAttachment: jest.fn(() => Promise.resolve(''))
+        getAvailablePathForAttachment: jest.fn(() => Promise.resolve('')),
     },
     keymap: {} as any,
     scope: {} as any,
@@ -84,18 +79,54 @@ const mockApp: obsidian.App = {
     metadataCache: {} as any,
     lastEvent: null as any,
     loadLocalStorage: jest.fn(() => null),
-    saveLocalStorage: jest.fn()
+    saveLocalStorage: jest.fn(),
 };
 
-// Mock commands
 const mockCommands: { [key: string]: obsidian.Command } = {};
+
+function parseDateString(dateStr: string): Date | null {
+    if (!/^\d{8}$/.test(dateStr)) {
+        return null;
+    }
+    const year = parseInt(dateStr.slice(0, 4));
+    const month = parseInt(dateStr.slice(4, 6)) - 1;
+    const day = parseInt(dateStr.slice(6, 8));
+    const date = new Date(year, month, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
+        return null;
+    }
+    return date;
+}
+
+function generateDateRange(startStr: string, endStr: string): string | null {
+    const startDate = parseDateString(startStr);
+    if (!startDate) {
+        return null;
+    }
+    const endDate = parseDateString(endStr);
+    if (!endDate) {
+        return null;
+    }
+    if (startDate > endDate) {
+        return null;
+    }
+    const dates: string[] = [];
+    let currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+        const year = currentDate.getFullYear().toString();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        dates.push(`${year}-${month}-${day}`);
+        currentDate.setDate(currentDate.getDate() + 1);
+    }
+    return dates.join('\n');
+}
 
 describe('TimestampPlugin', () => {
     let plugin: TimestampPlugin;
 
     beforeEach(() => {
         jest.clearAllMocks();
-        // Reset mockFile to its initial state with proper typing
         mockFile.basename = 'My Note';
         mockFile.extension = 'md';
         mockFile.parent = { path: 'folder' } as obsidian.TFolder;
@@ -103,12 +134,11 @@ describe('TimestampPlugin', () => {
         mockFile.vault = { adapter: {} } as obsidian.Vault;
         mockFile.path = 'folder/My Note.md';
         mockFile.name = 'My Note.md';
-        // Reset mocks with proper type assertions
         mockApp.workspace.getActiveFile = jest.fn(() => mockFile) as jest.Mock<obsidian.TFile | null>;
-        mockApp.workspace.getActiveViewOfType = jest.fn(() => mockView) as <T extends obsidian.View>(type: new (...args: any[]) => T) => T | null;
+        mockApp.workspace.getActiveViewOfType = jest.fn(() => mockView) as <T extends obsidian.View>(
+            type: new (...args: any[]) => T
+        ) => T | null;
         plugin = new TimestampPlugin(mockApp, mockManifest);
-
-        // Mock addCommand
         plugin.addCommand = (command: obsidian.Command): obsidian.Command => {
             mockCommands[command.id] = command;
             return command;
@@ -245,6 +275,48 @@ describe('TimestampPlugin', () => {
             } else {
                 throw new Error('rename-with-timestamp-title command is not properly defined');
             }
+        });
+    });
+
+    describe('generateDateRange', () => {
+        test('generates correct date range within the same month', () => {
+            const result = generateDateRange('20250101', '20250105');
+            expect(result).toBe('2025-01-01\n2025-01-02\n2025-01-03\n2025-01-04\n2025-01-05');
+        });
+
+        test('generates correct date range spanning months', () => {
+            const result = generateDateRange('20250131', '20250203');
+            expect(result).toBe('2025-01-31\n2025-02-01\n2025-02-02\n2025-02-03');
+        });
+
+        test('returns null for invalid start date format', () => {
+            const result = generateDateRange('2025010', '20250105');
+            expect(result).toBeNull();
+        });
+
+        test('returns null for invalid end date format', () => {
+            const result = generateDateRange('20250101', '202502');
+            expect(result).toBeNull();
+        });
+
+        test('returns null when start date is after end date', () => {
+            const result = generateDateRange('20250105', '20250101');
+            expect(result).toBeNull();
+        });
+
+        test('returns null for invalid start date', () => {
+            const result = generateDateRange('20250230', '20250301');
+            expect(result).toBeNull();
+        });
+
+        test('generates single date when start and end are the same', () => {
+            const result = generateDateRange('20250101', '20250101');
+            expect(result).toBe('2025-01-01');
+        });
+
+        test('generates correct date range including leap day', () => {
+            const result = generateDateRange('20240228', '20240301');
+            expect(result).toBe('2024-02-28\n2024-02-29\n2024-03-01');
         });
     });
 });
