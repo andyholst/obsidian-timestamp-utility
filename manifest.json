@@ -1,7 +1,7 @@
 {
   "id": "timestamp-utility",
   "name": "Timestamp Utility",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "minAppVersion": "0.15.0",
   "description": "Insert timestamps and rename files with timestamp prefixes.",
   "author": "Andy Holst",
