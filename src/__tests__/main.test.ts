@@ -4,7 +4,7 @@ import * as obsidian from 'obsidian';
 const mockManifest: obsidian.PluginManifest = {
     id: 'obsidian-timestamp-utility',
     name: 'Timestamp Utility',
-    version: '0.3.0',
+    version: '0.3.1',
     minAppVersion: '0.15.0',
     description: 'Insert timestamps and rename files with timestamp prefixes.',
     author: 'Your Name',
@@ -46,10 +46,6 @@ const mockEditor: obsidian.MarkdownView['editor'] = {
     processLines: jest.fn(() => 0),
 };
 
-const mockView: obsidian.MarkdownView = {
-    editor: mockEditor,
-} as any;
-
 const mockFile: obsidian.TFile = {
     basename: 'My Note',
     extension: 'md',
@@ -59,6 +55,11 @@ const mockFile: obsidian.TFile = {
     path: 'folder/My Note.md',
     name: 'My Note.md',
 };
+
+const mockView: obsidian.MarkdownView = {
+    editor: mockEditor,
+    file: mockFile,
+} as any;
 
 const mockApp: obsidian.App = {
     workspace: {
@@ -140,6 +141,14 @@ describe('TimestampPlugin', () => {
         ) => T | null;
         plugin = new TimestampPlugin(mockApp, mockManifest);
         plugin.addCommand = (command: obsidian.Command): obsidian.Command => {
+            if (command.editorCallback) {
+                command.callback = () => {
+                    const view = mockApp.workspace.getActiveViewOfType(obsidian.MarkdownView);
+                    if (view) {
+                        command.editorCallback!(view.editor, view);
+                    }
+                };
+            }
             mockCommands[command.id] = command;
             return command;
         };
@@ -199,6 +208,7 @@ describe('TimestampPlugin', () => {
 
         test('does nothing if no active file', async () => {
             mockApp.workspace.getActiveFile = jest.fn(() => null);
+            mockApp.workspace.getActiveViewOfType = jest.fn(() => null);
             await plugin.onload();
             const command = mockCommands['rename-with-timestamp'];
             expect(command).toBeDefined();

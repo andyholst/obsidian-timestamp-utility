@@ -7,22 +7,33 @@ This plugin enhances your Obsidian experience by adding four convenient commands
 - **Rename Current File with Timestamp as Prefix and First Heading Title as Filename**: Renames the active file using a timestamp prefix and the first heading title from the file content in the format `YYYYMMDDHHMMSS_title` (e.g., `20250221134527_my_awesome_title.md`). If no heading is found, it uses "untitled" (e.g., `20250221134527_untitled.md`).
 - **Insert Dates in Range (YYYY-MM-DD, one per line)**: Opens a modal where you can input a start and end date in `YYYYMMDD` format. It then inserts a list of dates from the start to the end date (inclusive) in `YYYY-MM-DD` format, each on a new line.
 
-## Prerequisites
-
-Before installing and using this plugin, ensure you have the following:
-
-- **[Docker](https://www.docker.com/)**: Required for building and running the plugin in a containerized environment.
-- **[Make](https://www.gnu.org/software/make/)**: Required for building and running the Makefile to manage the plugin's build process.
-- A Git repository initialized in the project directory: Required for automatic versioning and tagging.
-
 ## Installation
 
-Follow these steps to set up the plugin:
+You can install the plugin either by downloading a pre-built release or by building it from source. Most users should use the **From Release** method, which does not require any additional tools. Developers who want to modify or contribute to the plugin can use the **From Source** method, which requires Docker, Make, and Git.
 
-1. **Clone this repository**: Use the command `git clone <repository-url>` to clone the repository to your local machine, then navigate to the project directory with `cd obsidian-timestamp-utility`.
-2. **Build the plugin**: Run `make build-app` to compile the plugin.
-3. **Install the plugin**: Copy the `dist` folder to your Obsidian plugins directory and restart Obsidian.
-4. **Use the commands**: Open the command palette (Ctrl+P or Cmd+P) and search for "Insert Current Timestamp", "Rename Current File with Timestamp Prefix", or "Insert Dates in Range".
+### From Release
+
+1. Download the latest release from [link to releases] (e.g., a ZIP file).
+2. Extract the downloaded archive to obtain the plugin files (e.g., `main.js`, `manifest.json`).
+3. In your Obsidian vault, navigate to the `.obsidian/plugins` directory. If it doesn’t exist, create it.
+4. Create a new folder named `timestamp-plugin` (this name should match the plugin’s ID in `manifest.json`).
+5. Copy the extracted plugin files into this new folder.
+6. Restart Obsidian.
+7. Go to **Settings > Community plugins**, find "Timestamp Plugin", and toggle it on to enable it.
+
+### From Source
+
+To build the plugin from source, you will need:
+
+- **[Docker](https://www.docker.com/)**: Required for building and running the plugin in a containerized environment.
+- **[Make](https://www.gnu.org/software/make/)**: Required for building and running the Makefile to manage the plugin’s build process.
+- A Git repository initialized in the project directory: Required for automatic versioning and tagging.
+
+Follow these steps:
+
+1. Clone this repository: Use the command `git clone https://github.com/andyholst/obsidian-timestamp-utility.git` to clone the repository to your local machine, then navigate to the project directory with `cd obsidian-timestamp-utility`.
+2. Build the plugin: Run `make build-app` to compile the plugin. This will generate the plugin files in the `dist` folder.
+3. Install the plugin: Follow steps 3-7 from the "From Release" section above, using the files from the `dist` folder.
 
 ## Usage
 
