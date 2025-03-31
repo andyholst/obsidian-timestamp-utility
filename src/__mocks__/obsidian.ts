@@ -13,6 +13,7 @@ export class Plugin {
 
 export class MarkdownView {
   editor: any;
+  file?: TFile;
   constructor() {
       this.editor = {
           replaceSelection: jest.fn(),
@@ -48,6 +49,7 @@ export class MarkdownView {
           transaction: jest.fn(),
           processLines: jest.fn(() => 0),
       };
+      this.file = new TFile();
   }
 }
 
@@ -69,7 +71,7 @@ export class Workspace {
 export class App {
   workspace: Workspace = new Workspace();
   fileManager: any = {
-      renameFile: jest.fn(),
+      renameFile: jest.fn().mockResolvedValue(undefined),
       getNewFileParent: jest.fn(),
       generateMarkdownLink: jest.fn(() => ''),
   };

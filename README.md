@@ -1,10 +1,11 @@
 # Timestamp Plugin for Obsidian
 
-This plugin enhances your Obsidian experience by adding four convenient commands for working with timestamps and date ranges to support the Zettelkasten method:
+This plugin enhances your Obsidian experience by adding five convenient commands for working with timestamps and date ranges to support the Zettelkasten method:
 
 - **Insert Current Timestamp (YYYYMMDDHHMMSS)**: Inserts a timestamp at the cursor position in the format `YYYYMMDDHHMMSS` (e.g., `20250221134527` for February 21, 2025, 1:45:27 PM).
 - **Rename Current File with Timestamp Prefix (YYYYMMDDHHMMSS)**: Renames the active file by adding a timestamp prefix in the format `YYYYMMDDHHMMSS_filename` (e.g., `20250221134527_notes.md`).
 - **Rename Current File with Timestamp as Prefix and First Heading Title as Filename**: Renames the active file using a timestamp prefix and the first heading title from the file content in the format `YYYYMMDDHHMMSS_title` (e.g., `20250221134527_my_awesome_title.md`). If no heading is found, it uses "untitled" (e.g., `20250221134527_untitled.md`).
+- **Rename Current File with the First Heading Title as Filename**: Renames the active file using the first level 1 heading (e.g., `# My Awesome Title`) as the filename (e.g., `my_awesome_title.md`). If no heading is found, it uses "untitled" (e.g., `untitled.md`).
 - **Insert Dates in Range (YYYY-MM-DD, one per line)**: Opens a modal where you can input a start and end date in `YYYYMMDD` format. It then inserts a list of dates from the start to the end date (inclusive) in `YYYY-MM-DD` format, each on a new line.
 
 ## Installation
@@ -60,6 +61,14 @@ To rename the active file using a timestamp prefix and the first heading title:
 1. Open the command palette (Ctrl+P or Cmd+P).
 2. Search for "Rename Current File with Timestamp as Prefix and First Heading Title as Filename".
 3. Press Enter to rename the file based on the first heading (e.g., `# My Awesome Title`) or "untitled" if no heading exists.
+
+### Rename Current File with the First Heading Title as Filename
+
+To rename the active file using the first heading title:
+
+1. Open the command palette (Ctrl+P or Cmd+P).
+2. Search for "Rename Current File with the First Heading Title as Filename".
+3. Press Enter to rename the file based on the first level 1 heading (e.g., `# My Awesome Title`) or "untitled" if no heading exists.
 
 ### Insert Dates in Range
 
