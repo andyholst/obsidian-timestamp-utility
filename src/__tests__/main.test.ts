@@ -4,7 +4,7 @@ import * as obsidian from 'obsidian';
 const mockManifest: obsidian.PluginManifest = {
     id: 'obsidian-timestamp-utility',
     name: 'Timestamp Utility',
-    version: '0.3.1',
+    version: '0.4.0',
     minAppVersion: '0.15.0',
     description: 'Insert timestamps and rename files with timestamp prefixes.',
     author: 'Your Name',
@@ -67,7 +67,7 @@ const mockApp: obsidian.App = {
         getActiveFile: jest.fn(() => mockFile),
     } as any,
     fileManager: {
-        renameFile: jest.fn(),
+        renameFile: jest.fn().mockResolvedValue(undefined),
         getNewFileParent: jest.fn(),
         generateMarkdownLink: jest.fn(() => ''),
         trashFile: jest.fn(),
@@ -142,10 +142,10 @@ describe('TimestampPlugin', () => {
         plugin = new TimestampPlugin(mockApp, mockManifest);
         plugin.addCommand = (command: obsidian.Command): obsidian.Command => {
             if (command.editorCallback) {
-                command.callback = () => {
+                command.callback = async () => {
                     const view = mockApp.workspace.getActiveViewOfType(obsidian.MarkdownView);
                     if (view) {
-                        command.editorCallback!(view.editor, view);
+                        await command.editorCallback!(view.editor, view);
                     }
                 };
             }
@@ -327,6 +327,53 @@ describe('TimestampPlugin', () => {
         test('generates correct date range including leap day', () => {
             const result = generateDateRange('20240228', '20240301');
             expect(result).toBe('2024-02-28\n2024-02-29\n2024-03-01');
+        });
+    });
+
+    describe('rename-filename-with-title command', () => {
+        test('renames file with first heading title', async () => {
+            (mockEditor.getValue as jest.Mock).mockReturnValue('# My Awesome Title\nSome content');
+            await plugin.onload();
+            const command = mockCommands['rename-filename-with-title'];
+            expect(command).toBeDefined();
+            if (command && typeof command.callback === 'function') {
+                await command.callback();
+                expect(mockApp.fileManager.renameFile).toHaveBeenCalledWith(
+                    mockFile,
+                    'folder/my_awesome_title.md'
+                );
+            } else {
+                throw new Error('rename-filename-with-title command is not properly defined');
+            }
+        });
+
+        test('renames file to untitled if no heading is found', async () => {
+            (mockEditor.getValue as jest.Mock).mockReturnValue('No heading here');
+            await plugin.onload();
+            const command = mockCommands['rename-filename-with-title'];
+            expect(command).toBeDefined();
+            if (command && typeof command.callback === 'function') {
+                await command.callback();
+                expect(mockApp.fileManager.renameFile).toHaveBeenCalledWith(
+                    mockFile,
+                    'folder/untitled.md'
+                );
+            } else {
+                throw new Error('rename-filename-with-title command is not properly defined');
+            }
+        });
+
+        test('does nothing if no active file', async () => {
+            mockApp.workspace.getActiveViewOfType = jest.fn(() => null);
+            await plugin.onload();
+            const command = mockCommands['rename-filename-with-title'];
+            expect(command).toBeDefined();
+            if (command && typeof command.callback === 'function') {
+                await command.callback();
+                expect(mockApp.fileManager.renameFile).not.toHaveBeenCalled();
+            } else {
+                throw new Error('rename-filename-with-title command is not properly defined');
+            }
         });
     });
 });

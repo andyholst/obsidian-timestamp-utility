@@ -16,7 +16,7 @@ function parseDateString(dateStr: string): Date | null {
 }
 
 class DateRangeModal extends obsidian.Modal {
-    onSubmit: (rangeText: string) => void;
+    private onSubmit: (rangeText: string) => void;
 
     constructor(app: obsidian.App, onSubmit: (rangeText: string) => void) {
         super(app);
@@ -97,43 +97,43 @@ export default class TimestampPlugin extends obsidian.Plugin {
         this.addCommand({
             id: 'rename-with-timestamp',
             name: 'Rename Current File with Timestamp Prefix (YYYYMMDDHHMMSS)',
-            editorCallback: (_editor: obsidian.Editor, ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
-                if ('file' in ctx && ctx.file) {
-                    const file = ctx.file;
-                    if (file && file.parent) {
-                        const directoryPath = file.parent.path;
-                        const sanitizedBasename = file.basename.replace(/\s+/g, '_').toLowerCase();
-                        const newName = `${directoryPath}/${this.generateTimestamp()}_${sanitizedBasename}.${file.extension}`;
-                        this.app.fileManager.renameFile(file, newName);
-                    }
-                } else {
-                    new obsidian.Notice('This command requires an active Markdown view.');
-                }
+            editorCallback: async (_editor: obsidian.Editor, ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
+                await this.renameFile(ctx, (_innerEditor, file) => {
+                    const sanitizedBasename = file.basename.replace(/\s+/g, '_').toLowerCase();
+                    return `${this.generateTimestamp()}_${sanitizedBasename}`;
+                });
             },
         });
 
         this.addCommand({
             id: 'rename-with-timestamp-title',
-            name: 'Rename Current File with Timestamp as prefix and with First Heading Title as filename',
-            editorCallback: async (editor: obsidian.Editor, ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
-                if ('file' in ctx && ctx.file) {
-                    const file = ctx.file;
-                    if (file && file.parent) {
-                        const content = editor.getValue();
-                        const titleMatch = content.match(/^#\s+(.+)$/m);
-                        let newBasename = 'untitled';
-
-                        if (titleMatch && titleMatch[1]) {
-                            newBasename = titleMatch[1].trim().replace(/\s+/g, '_').toLowerCase();
-                        }
-
-                        const directoryPath = file.parent.path;
-                        const newName = `${directoryPath}/${this.generateTimestamp()}_${newBasename}.${file.extension}`;
-                        await this.app.fileManager.renameFile(file, newName);
+            name: 'Rename Current File with Timestamp as Prefix and First Heading Title as Filename',
+            editorCallback: async (_editor: obsidian.Editor, ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
+                await this.renameFile(ctx, (innerEditor, _file) => {
+                    const content = innerEditor.getValue();
+                    const titleMatch = content.match(/^#\s+(.+)$/m);
+                    let newBasename = 'untitled';
+                    if (titleMatch && titleMatch[1]) {
+                        newBasename = titleMatch[1].trim().replace(/\s+/g, '_').toLowerCase();
                     }
-                } else {
-                    new obsidian.Notice('This command requires an active Markdown view.');
-                }
+                    return `${this.generateTimestamp()}_${newBasename}`;
+                });
+            },
+        });
+
+        this.addCommand({
+            id: 'rename-filename-with-title',
+            name: 'Rename Current File with the First Heading Title as Filename',
+            editorCallback: async (_editor: obsidian.Editor, ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
+                await this.renameFile(ctx, (innerEditor, _file) => {
+                    const content = innerEditor.getValue();
+                    const titleMatch = content.match(/^#\s+(.+)$/m);
+                    let newBasename = 'untitled';
+                    if (titleMatch && titleMatch[1]) {
+                        newBasename = titleMatch[1].trim().replace(/\s+/g, '_').toLowerCase();
+                    }
+                    return newBasename;
+                });
             },
         });
 
@@ -147,6 +147,25 @@ export default class TimestampPlugin extends obsidian.Plugin {
                 modal.open();
             },
         });
+    }
+
+    private async renameFile(
+        ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo,
+        getNewBasename: (editor: obsidian.Editor, file: obsidian.TFile) => string
+    ) {
+        if ('editor' in ctx && 'file' in ctx && ctx.file) {
+            const view = ctx as obsidian.MarkdownView;
+            const file = view.file;
+            if (file && file.parent) {
+                const editor = view.editor;
+                const newBasename = getNewBasename(editor, file);
+                const directoryPath = file.parent.path;
+                const newName = `${directoryPath}/${newBasename}.${file.extension}`;
+                await this.app.fileManager.renameFile(file, newName);
+            }
+        } else {
+            new obsidian.Notice('This command requires an active Markdown view.');
+        }
     }
 
     // Generates a timestamp in YYYYMMDDHHMMSS format
