@@ -6,7 +6,9 @@ VERSION := $(shell node -p "require('./package.json').version")
 TAG := $(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
 
-.PHONY: all build-image build-app test-app release changelog clean
+DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yaml
+
+.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-interpeter-agent
 
 all: build-app test-app release
 
@@ -42,3 +44,23 @@ release: clean build-app
 
 clean:
 	rm -rf .tools release dist
+
+build-image-agents: $(DOCKER_COMPOSE_PATH)
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
+
+run-interpeter-agent: build-image-agents
+	@if [ -z "$(ISSUE_URL)" ]; then \
+			echo "Error: ISSUE_URL is not set. Usage: make run-interpeter-agent ISSUE_URL=<url>"; \
+			exit 1; \
+	fi
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm ticket-interpreter-agent python /app/src/ticket_interpreter.py $(ISSUE_URL)
+
+test-agents-unit: build-image-agents
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents
+
+test-agents-integration: build-image-agents
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm integration-test-agents
+
+test-agents: test-agents-unit test-agents-integration
+
+test: test-app test-agents

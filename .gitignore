@@ -23,3 +23,5 @@ TODO.md
 release_notes.md
 .idea
 data.json
+
+__pycache__

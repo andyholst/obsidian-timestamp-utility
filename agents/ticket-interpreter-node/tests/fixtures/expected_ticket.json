@@ -1,0 +1,15 @@
+{
+  "title": "Implement Timestamp-based UUID Generator in Obsidian",
+"description": "Add a command to Obsidian that generates a Universally Unique Identifier (UUID) based on the current timestamp and inserts it into the active note at the cursor position.",  "requirements": [
+    "The command must be accessible via Obsidian's command palette.",
+    "It should generate a UUID using the current timestamp, following the UUID v7 standard.",
+    "The generated UUID must be inserted at the current cursor position in the active note.",
+    "If no note is active when the command is executed, an appropriate error message should be displayed."
+  ],
+  "acceptance_criteria": [
+    "The command is visible in Obsidian's command palette when searched.",
+    "When the command is executed with an active note, a valid UUID v7 is generated and inserted at the cursor position.",
+    "The generated UUID is unique and correctly formatted according to the UUID v7 standard.",
+    "If no note is active when the command is executed, an error message is displayed to the user."
+  ]
+}

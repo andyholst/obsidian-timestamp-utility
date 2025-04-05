@@ -2,6 +2,17 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.1
+
+### ✨ New Features
+
+- **implemented Ticket interpreter Node**
+- **add python ticket interpreter to read GitHub tickets to work with other agents.**
+
+### 📝 Documentation
+
+- **updated the README.md file how to run the agents and test them.**
+
 ## 0.4.0
 
 ### ✨ New Features
