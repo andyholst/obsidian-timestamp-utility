@@ -1,0 +1,11 @@
+services:
+  ticket-interpreter-agent:
+    build:
+      context: ../agents/ticket-interpreter-node
+      dockerfile: Dockerfile
+    volumes:
+      - ../agents/ticket-interpreter-node/src:/app
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}

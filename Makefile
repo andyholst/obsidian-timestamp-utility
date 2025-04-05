@@ -6,7 +6,11 @@ VERSION := $(shell node -p "require('./package.json').version")
 TAG := $(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
 
+DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yml
+
 .PHONY: all build-image build-app test-app release changelog clean
+
+.PHONY: build-image-python run-python
 
 all: build-app test-app release
 
@@ -42,3 +46,13 @@ release: clean build-app
 
 clean:
 	rm -rf .tools release dist
+
+build-image-agents: $(DOCKER_COMPOSE_PATH)
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
+
+run-interpeter-agent: build-image-python
+	@if [ -z "$(ISSUE_URL)" ]; then \
+			echo "Error: ISSUE_URL is not set. Usage: make run-python ISSUE_URL=<url>"; \
+			exit 1; \
+	fi
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm ticket-interpreter python ticket_interpreter.py $(ISSUE_URL)
