@@ -1,7 +1,7 @@
 import pytest
 import json
 from unittest.mock import patch
-from ticket_interpreter import fetch_issue, process_with_llm, State
+from ticket_interpreter import fetch_issue, process_with_llm, State, app
 
 # Sample well-structured ticket content
 WELL_STRUCTURED_TICKET = """
@@ -84,3 +84,12 @@ def test_invalid_llm_response():
         state = {"ticket_content": WELL_STRUCTURED_TICKET}
         process_with_llm(state)
         mock_exit.assert_called_once_with(1)
+
+def test_full_workflow_unit(mock_github_issue):
+    with patch('ticket_interpreter.github', mock_github_issue), \
+         patch('ticket_interpreter.llm') as mock_llm:
+        mock_llm.return_value = json.dumps(EXPECTED_WELL_STRUCTURED_JSON)
+        initial_state = {"url": "https://github.com/user/repo/issues/1"}
+        result = app.invoke(initial_state)
+        assert "result" in result
+        assert result["result"] == EXPECTED_WELL_STRUCTURED_JSON

@@ -6,9 +6,9 @@ VERSION := $(shell node -p "require('./package.json').version")
 TAG := $(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
 
-DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yml
+DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yaml
 
-.PHONY: all build-image build-app test-app release changelog clean test-agents test build-image-agents run-interpeter-agent
+.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-interpeter-agent
 
 all: build-app test-app release
 
@@ -55,7 +55,12 @@ run-interpeter-agent: build-image-agents
 	fi
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm ticket-interpreter-agent python /app/src/ticket_interpreter.py $(ISSUE_URL)
 
-test-agents: build-image-agents
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm ticket-interpreter-agent pytest /app/tests/
+test-agents-unit: build-image-agents
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents
+
+test-agents-integration: build-image-agents
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm integration-test-agents
+
+test-agents: test-agents-unit test-agents-integration
 
 test: test-app test-agents
