@@ -85,3 +85,87 @@ To insert a list of dates in `YYYY-MM-DD` format between a start and end date:
 - The start date must be before or equal to the end date.
 - Both dates must be valid and entered in `YYYYMMDD` format (e.g., `20250230` is invalid and will trigger an error message).
 - If the input is invalid, a notice will appear in Obsidian (e.g., "Invalid start date. Please use YYYYMMDD and ensure it’s a valid date.").
+
+## Running the Ticket Interpreter Agent
+
+The ticket interpreter agent is an AI-powered tool designed to process GitHub issues and extract structured information (e.g., title, description, requirements, and acceptance criteria) using LangChain and LangGraph. The output is provided in JSON format and logged to both the console and a file. The purpose is to use it for other agents to generate TypeScript code, tests and to create pull request and review the generated code tests and see it fulfills the acceptance criteria.
+
+### Prerequisites
+
+Before running the ticket interpreter agent, ensure you have the following:
+
+- [Docker](https://www.docker.com/): Required to run the agent in a containerized environment.
+- [Make](https://www.gnu.org/software/make/): Required to execute the Makefile commands.
+- Environment Variables:
+  - GITHUB_TOKEN: A GitHub personal access token with repository access. Obtain one from [GitHub Settings](https://github.com/settings/tokens).
+  - OLLAMA_HOST: The URL of your Ollama LLM service (default: http://localhost:11434).
+  - OLLAMA_MODEL: The LLM model to use (default: llama3).
+
+Set these environment variables in your terminal:
+export GITHUB_TOKEN=your_token_here
+export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_MODEL=llama3
+
+### Steps to Run the Agent
+
+1. Build the Docker Image:
+   - Build the necessary Docker image for the agent by running: make build-image-agents
+   - This command uses the docker-compose-files/agents.yaml file to set up the environment.
+
+2. Run the Agent:
+   - Execute the ticket interpreter agent with a specific GitHub issue URL using the following command: make run-interpeter-agent ISSUE_URL=https://github.com/owner/repo/issues/123
+   - Replace https://github.com/owner/repo/issues/123 with the URL of the GitHub issue you want to process.
+
+3. View the Output:
+   - The agent processes the issue and outputs the result in JSON format.
+   - Check the console for immediate feedback.
+   - Review the ticket_interpreter.log file in the project directory for detailed logs, including the final JSON output.
+
+Example:
+To process issue #20 from this repository, run: make run-interpeter-agent ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
+
+## Running the Tests
+
+The ticket interpreter agent includes unit and integration tests to verify its functionality. These tests are defined in test_ticket_interpreter.py (unit tests) and test_ticket_interpreter_integration.py (integration tests).
+
+### Prerequisites
+
+- Docker: Required to run the tests in a containerized environment.
+- Make: Required to execute the Makefile commands.
+- Environment Variables: Same as for running the agent (GITHUB_TOKEN, OLLAMA_HOST, OLLAMA_MODEL), plus:
+  - TEST_ISSUE_URL: A base GitHub repository URL (e.g., https://github.com/andyholst/obsidian-timestamp-utility) used by integration tests.
+
+Set the additional variable:
+export TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
+
+### Running Unit Tests
+
+Unit tests cover individual components, such as URL validation, issue fetching, and LLM response processing, using mocked data.
+
+- Run the unit tests with: make test-agents-unit
+
+### Running Integration Tests
+
+Integration tests validate the full workflow with real GitHub API calls and LLM interactions, testing scenarios like well-structured tickets, sloppy tickets, empty tickets, and invalid inputs.
+
+- Run the integration tests with: make test-agents-integration
+
+### Running All Tests
+
+To execute both unit and integration tests together: make test-agents
+
+Notes:
+- Ensure the TEST_ISSUE_URL points to a valid repository with accessible issues (e.g., issues #20, #22, #23) for integration tests to pass.
+- Integration tests require a live Ollama LLM service and a valid GITHUB_TOKEN. If these are unavailable, tests may fail with appropriate error messages (e.g., GithubException or ValueError).
+
+## Development
+
+For those interested in contributing:
+
+1. Clone the Repository: git clone https://github.com/andyholst/obsidian-timestamp-utility.git
+2. Install Dependencies:
+   - Ensure you have Docker and Make installed.
+3. Build and Test:
+   - Use the Makefile commands to build, test, and run the plugin and agent as described above.
+4. Contribute:
+   - Follow standard Git workflows to submit pull requests with your changes.

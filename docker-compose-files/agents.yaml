@@ -1,0 +1,43 @@
+services:
+  ticket-interpreter-agent:
+    build:
+      context: ../agents/ticket-interpreter-node
+      dockerfile: Dockerfile
+    volumes:
+      - ../agents/ticket-interpreter-node/src:/app/src
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - OLLAMA_HOST=http://localhost:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+    network_mode: host
+
+  unit-test-agents:
+    build:
+      context: ../agents/ticket-interpreter-node
+      dockerfile: Dockerfile
+    volumes:
+      - ../agents/ticket-interpreter-node/src:/app/src
+      - ../agents/ticket-interpreter-node/tests:/app/tests
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - OLLAMA_HOST=http://localhost:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+      - PYTHONPATH=/app
+    command: pytest /app/tests/unit
+    network_mode: host
+
+  integration-test-agents:
+    build:
+      context: ../agents/ticket-interpreter-node
+      dockerfile: Dockerfile
+    volumes:
+      - ../agents/ticket-interpreter-node/src:/app/src
+      - ../agents/ticket-interpreter-node/tests:/app/tests
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - OLLAMA_HOST=http://localhost:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:14b}
+      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
+      - PYTHONPATH=/app
+    command: pytest -vv /app/tests/integration
+    network_mode: host
