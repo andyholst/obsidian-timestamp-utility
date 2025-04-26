@@ -16,6 +16,6 @@ COPY --from=builder /app/requirements.txt .
 
 RUN pip install -r requirements.txt
 
-COPY src/ticket_interpreter.py .
+COPY src/agentics.py .
 
-CMD ["python", "ticket_interpreter.py"]
+CMD ["python", "agentics.py"]

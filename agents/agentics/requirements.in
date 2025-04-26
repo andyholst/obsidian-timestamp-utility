@@ -1,6 +1,5 @@
 PyGitHub
-ollama
-langchain
+langchain-ollama
 langchain-community
 pytest
 langgraph

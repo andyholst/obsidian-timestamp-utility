@@ -113,16 +113,16 @@ export OLLAMA_MODEL=llama3
    - This command uses the docker-compose-files/agents.yaml file to set up the environment.
 
 2. Run the Agent:
-   - Execute the ticket interpreter agent with a specific GitHub issue URL using the following command: make run-interpeter-agent ISSUE_URL=https://github.com/owner/repo/issues/123
+   - Execute the ticket interpreter agent with a specific GitHub issue URL using the following command: make run-agentics ISSUE_URL=https://github.com/owner/repo/issues/123
    - Replace https://github.com/owner/repo/issues/123 with the URL of the GitHub issue you want to process.
 
 3. View the Output:
    - The agent processes the issue and outputs the result in JSON format.
    - Check the console for immediate feedback.
-   - Review the ticket_interpreter.log file in the project directory for detailed logs, including the final JSON output.
+   - Review the agentics.log file in the project directory for detailed logs, including the final JSON output.
 
 Example:
-To process issue #20 from this repository, run: make run-interpeter-agent ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
+To process issue #20 from this repository, run: make run-agentics ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
 
 ## Running the Tests
 

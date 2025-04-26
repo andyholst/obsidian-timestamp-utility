@@ -8,7 +8,7 @@ IMAGE_NAME := $(REPO_NAME):$(TAG)
 
 DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yaml
 
-.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-interpeter-agent
+.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-agentics
 
 all: build-app test-app release
 
@@ -48,12 +48,12 @@ clean:
 build-image-agents: $(DOCKER_COMPOSE_PATH)
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
 
-run-interpeter-agent: build-image-agents
+run-agentics: build-image-agents
 	@if [ -z "$(ISSUE_URL)" ]; then \
-			echo "Error: ISSUE_URL is not set. Usage: make run-interpeter-agent ISSUE_URL=<url>"; \
+			echo "Error: ISSUE_URL is not set. Usage: make run-agentics ISSUE_URL=<url>"; \
 			exit 1; \
 	fi
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm ticket-interpreter-agent python /app/src/ticket_interpreter.py $(ISSUE_URL)
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics python /app/src/agentics.py $(ISSUE_URL)
 
 test-agents-unit: build-image-agents
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents

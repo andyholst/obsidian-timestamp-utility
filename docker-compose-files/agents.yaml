@@ -1,10 +1,10 @@
 services:
-  ticket-interpreter-agent:
+  agentics:
     build:
-      context: ../agents/ticket-interpreter-node
+      context: ../agents/agentics
       dockerfile: Dockerfile
     volumes:
-      - ../agents/ticket-interpreter-node/src:/app/src
+      - ../agents/agentics/src:/app/src
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
@@ -13,11 +13,11 @@ services:
 
   unit-test-agents:
     build:
-      context: ../agents/ticket-interpreter-node
+      context: ../agents/agentics
       dockerfile: Dockerfile
     volumes:
-      - ../agents/ticket-interpreter-node/src:/app/src
-      - ../agents/ticket-interpreter-node/tests:/app/tests
+      - ../agents/agentics/src:/app/src
+      - ../agents/agentics/tests:/app/tests
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
@@ -28,11 +28,11 @@ services:
 
   integration-test-agents:
     build:
-      context: ../agents/ticket-interpreter-node
+      context: ../agents/agentics
       dockerfile: Dockerfile
     volumes:
-      - ../agents/ticket-interpreter-node/src:/app/src
-      - ../agents/ticket-interpreter-node/tests:/app/tests
+      - ../agents/agentics/src:/app/src
+      - ../agents/agentics/tests:/app/tests
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434

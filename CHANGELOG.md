@@ -2,6 +2,33 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.2
+
+### ✨ New Features
+
+- **added Code Generation Agent Logic**
+- **added code generation agent to create code and tests based on ticket description.**
+- **added updated the tests to verify that TypeScript code/tests is generated.**
+- **created State class to manage data between agents.**
+- **setup LangGraph workflow to automate the analysis process.**
+
+### 🐞 Bug Fixes
+
+- **fixed the llm prompt operation to use the recommended operation.**
+
+### 🔧 Refactor Improvements
+
+- **refactored out FetchIssueAgent to fetch and validate GitHub issue content.**
+- **refactored out ProcessLLMAgent to analyze ticket content using an LLM.**
+- **implemented OutputResultAgent to log analysis results.**
+- **updated the unit and integration tests for the system.**
+- **renamed the package to agentics to make more sense.**
+- **updated the Makefile and Docker Compose since the Python package has been renamed.**
+
+### 📝 Documentation
+
+- **updated the README.md file based on the updated Makefile.**
+
 ## 0.4.1
 
 ### ✨ New Features
