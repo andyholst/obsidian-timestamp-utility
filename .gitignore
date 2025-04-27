@@ -25,3 +25,4 @@ release_notes.md
 data.json
 
 __pycache__
+.pytest_cache
