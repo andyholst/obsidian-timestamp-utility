@@ -1,5 +1,4 @@
 import json
-
 from .base_agent import BaseAgent
 from .state import State
 
