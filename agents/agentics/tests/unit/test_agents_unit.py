@@ -14,7 +14,7 @@ from src.agentics import (
     OutputResultAgent,
     prompt_template
 )
-
+from src.pre_test_runner_agent import PreTestRunnerAgent
 from src.utils import validate_github_url
 from github import GithubException
 
@@ -181,7 +181,45 @@ def test_code_generator_agent():
     assert result["generated_tests"].strip() == "// Generated tests\n test('UUID works', () => { expect(generateUUID()).toBe('uuid'); });"
     assert mock_llm.invoke.call_count == 2
 
-# Test full workflow with code generation
+# Test PreTestRunnerAgent - Success Case
+@patch('subprocess.run')
+def test_pre_test_runner_agent_success(mock_run):
+    mock_install = MagicMock(returncode=0, stdout="", stderr="")
+    mock_test = MagicMock(returncode=0, stdout="Tests: 20 passed, 20 total\nAll files | 46.15 | 50 | 33.33 | 46.15 |", stderr="")
+    mock_run.side_effect = [mock_install, mock_test]
+    agent = PreTestRunnerAgent()
+    state = {}
+    result = agent(state)
+    assert result["existing_tests_passed"] == 20
+    assert result["existing_coverage_all_files"] == 46.15
+
+# Test PreTestRunnerAgent - Test Failure
+@patch('subprocess.run')
+def test_pre_test_runner_agent_failure(mock_run):
+    mock_install = MagicMock(returncode=0, stdout="", stderr="")
+    mock_test = MagicMock(returncode=1, stdout="", stderr="Test failed")
+    mock_run.side_effect = [mock_install, mock_test]
+    agent = PreTestRunnerAgent()
+    state = {}
+    with pytest.raises(RuntimeError, match="Existing tests failed. Please fix the tests before proceeding."):
+        agent(state)
+
+# Test PreTestRunnerAgent - Parsing Error
+@patch('subprocess.run')
+def test_pre_test_runner_agent_parsing_error(mock_run, caplog):
+    mock_install = MagicMock(returncode=0, stdout="", stderr="")
+    mock_test = MagicMock(returncode=0, stdout="Some random output", stderr="")
+    mock_run.side_effect = [mock_install, mock_test]
+    agent = PreTestRunnerAgent()
+    state = {}
+    with caplog.at_level(logging.WARNING):
+        result = agent(state)
+        assert "Could not find number of passing tests; defaulting to 0" in caplog.text
+        assert "Could not parse coverage; defaulting to 0.0" in caplog.text
+        assert result["existing_tests_passed"] == 0
+        assert result["existing_coverage_all_files"] == 0.0
+
+# Test full workflow with code generation and pre-test runner
 def test_full_workflow_unit():
     mock_github = MagicMock()
     mock_repo = MagicMock()
@@ -199,15 +237,23 @@ def test_full_workflow_unit():
 
     with patch.object(fetch_issue_agent, 'github', mock_github), \
          patch.object(process_llm_agent, 'llm', mock_llm), \
-         patch.object(code_generator_agent, 'llm', mock_llm):
+         patch.object(code_generator_agent, 'llm', mock_llm), \
+         patch('subprocess.run') as mock_run:
+        mock_install = MagicMock(returncode=0, stdout="", stderr="")
+        mock_test = MagicMock(returncode=0, stdout="Tests: 20 passed, 20 total\nAll files | 46.15 | 50 | 33.33 | 46.15 |", stderr="")
+        mock_run.side_effect = [mock_install, mock_test]
         initial_state = {"url": "https://github.com/user/repo/issues/1"}
         result = app.invoke(initial_state)
         assert "result" in result
         assert "generated_code" in result
         assert "generated_tests" in result
+        assert "existing_tests_passed" in result
+        assert "existing_coverage_all_files" in result
         assert result["result"] == EXPECTED_TICKET_JSON
         assert result["generated_code"].strip() == "// Generated TS code\n function generateUUID() { return 'uuid'; }"
         assert result["generated_tests"].strip() == "// Generated tests\n test('UUID works', () => { expect(generateUUID()).toBe('uuid'); });"
+        assert result["existing_tests_passed"] == 20
+        assert result["existing_coverage_all_files"] == 46.15
 
 # Test full workflow with invalid URL
 def test_full_workflow_invalid_url():

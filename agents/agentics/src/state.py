@@ -6,3 +6,5 @@ class State(TypedDict):
     result: dict
     generated_code: str
     generated_tests: str
+    existing_tests_passed: int
+    existing_coverage_all_files: float

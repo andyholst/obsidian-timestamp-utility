@@ -14,22 +14,23 @@ class CodeGeneratorAgent(BaseAgent):
             requirements = task_details['requirements']
             acceptance_criteria = task_details['acceptance_criteria']
 
-            # Generate TypeScript code
             code_prompt = (
                 f"Generate TypeScript code for the following task:\n"
                 f"Title: {title}\nDescription: {description}\n"
                 f"Requirements: {', '.join(requirements)}\n"
                 f"Acceptance Criteria: {', '.join(acceptance_criteria)}\n"
-                f"Ensure the code is well-documented with comments."
+                f"Ensure the code is well-documented with comments.\n"
+                f"Wrap the code in ```typescript``` markdown code blocks."
             )
             code_response = self.llm.invoke(code_prompt)
             generated_code = code_response.strip()
 
-            # Generate tests
             test_prompt = (
-                f"Generate unit and integration tests for this TypeScript code:\n"
+                f"Generate unit and integration tests for this TypeScript code using Jest:\n"
                 f"{generated_code}\n"
-                f"Validate: {', '.join(requirements)} and {', '.join(acceptance_criteria)}."
+                f"Validate: {', '.join(requirements)} and {', '.join(acceptance_criteria)}.\n"
+                f"Ensure the tests include at least one 'test' or 'describe' block and use 'expect' for assertions.\n"
+                f"Wrap the test code in ```typescript``` markdown code blocks."
             )
             test_response = self.llm.invoke(test_prompt)
             generated_tests = test_response.strip()

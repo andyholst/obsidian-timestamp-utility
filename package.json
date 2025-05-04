@@ -1,6 +1,6 @@
 {
   "name": "obsidian-timestamp-utility",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Insert timestamps and rename files with timestamp prefixes.",
   "main": "dist/main.js",
   "type": "module",
