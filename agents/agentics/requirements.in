@@ -1,5 +1,6 @@
-PyGitHub
-langchain-ollama
-langchain-community
+PyGitHub==2.*
+langchain-ollama==0.*
+langchain-community==0.*
 pytest
-langgraph
+langgraph==0.*
+sentence-transformers

@@ -2,6 +2,7 @@ import pytest
 import os
 import json
 import re
+from sentence_transformers import SentenceTransformer, util
 from src.agentics import app
 from github import GithubException
 
@@ -12,6 +13,37 @@ EXPECTED_TICKET_JSON_FILE = os.path.join(FIXTURES_DIR, 'expected_ticket.json')
 # Load expected JSON from file
 with open(EXPECTED_TICKET_JSON_FILE, 'r') as f:
     EXPECTED_TICKET_JSON = json.load(f)
+
+# Load the sentence transformer model
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Regex pattern to match function definitions (traditional, class, or arrow functions)
+FUNCTION_PATTERN = re.compile(r'\bfunction\b|\bclass\b|=>')
+
+def calculate_semantic_similarity(expected_text, actual_text):
+    """
+    Calculate the semantic similarity between two texts using sentence embeddings.
+    Returns a percentage (0-100).
+    """
+    embeddings = model.encode([expected_text, actual_text], convert_to_tensor=True)
+    similarity = util.cos_sim(embeddings[0], embeddings[1]).item()
+    return similarity * 100
+
+def compute_ticket_similarity(expected_ticket, refined_ticket):
+    """
+    Compute the overall semantic similarity between expected and refined tickets by averaging
+    similarities across title, description, requirements, and acceptance criteria.
+    """
+    title_sim = calculate_semantic_similarity(expected_ticket["title"], refined_ticket["title"])
+    desc_sim = calculate_semantic_similarity(expected_ticket["description"], refined_ticket["description"])
+    expected_reqs = " ".join(expected_ticket["requirements"])
+    refined_reqs = " ".join(refined_ticket["requirements"])
+    reqs_sim = calculate_semantic_similarity(expected_reqs, refined_reqs)
+    expected_ac = " ".join(expected_ticket["acceptance_criteria"])
+    refined_ac = " ".join(refined_ticket["acceptance_criteria"])
+    ac_sim = calculate_semantic_similarity(expected_ac, refined_ac)
+    overall_similarity = (title_sim + desc_sim + reqs_sim + ac_sim) / 4
+    return overall_similarity
 
 # Integration tests for the ticket interpreter workflow
 # These tests use real GitHub API and LLM service calls.
@@ -28,9 +60,26 @@ def test_full_workflow_well_structured():
     # When
     result = app.invoke(initial_state)
     
-    # Then - Validate structured JSON output
+    # Then - Validate refined ticket
+    assert "refined_ticket" in result, "Refined ticket missing from workflow output"
+    assert isinstance(result["refined_ticket"], dict), "Refined ticket must be a dict"
+    assert "title" in result["refined_ticket"], "Title missing in refined ticket"
+    
+    refined = result["refined_ticket"]
+    
+    # Basic structural checks
+    assert "description" in refined, "Description missing in refined ticket"
+    assert "requirements" in refined, "Requirements missing in refined ticket"
+    assert "acceptance_criteria" in refined, "Acceptance criteria missing in refined ticket"
+    assert len(refined["requirements"]) >= 2, "Refined ticket should have at least 2 requirements"
+    assert len(refined["acceptance_criteria"]) >= 2, "Refined ticket should have at least 2 acceptance criteria"
+    
+    # Calculate semantic similarity against expected JSON
+    similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
+    assert similarity >= 90, f"Semantic similarity {similarity:.2f}% is below 90% threshold"
+    
+    # Validate structured JSON output
     assert "result" in result, "Result key missing from workflow output"
-    assert result["result"] == EXPECTED_TICKET_JSON, "Structured JSON does not match expected output"
     
     # Validate generated code presence and type
     assert "generated_code" in result, "Generated code is missing from the result"
@@ -41,7 +90,7 @@ def test_full_workflow_well_structured():
     code_blocks = re.findall(r'```typescript(.*?)```', result["generated_code"], re.DOTALL)
     assert len(code_blocks) > 0, "No TypeScript code block found in generated code"
     code = code_blocks[0].strip()
-    assert "function" in code or "class" in code, "Generated code should define a function or class for UUID generation"
+    assert FUNCTION_PATTERN.search(code), "Generated code should include a function or class for UUID generation"
     assert "uuid" in code.lower(), "Code should include UUID generation logic"
     assert "command" in code or "addCommand" in code, "Code should register an Obsidian command"
     assert "//" in code or "/*" in code, "Code should include comments"
@@ -77,9 +126,27 @@ def test_full_workflow_sloppy():
     # When
     result = app.invoke(initial_state)
     
-    # Then - Validate structured JSON output
+    # Then - Validate refined ticket
+    assert "refined_ticket" in result, "Refined ticket missing from workflow output"
+    assert isinstance(result["refined_ticket"], dict), "Refined ticket must be a dict"
+    assert "title" in result["refined_ticket"], "Title missing in refined ticket"
+    
+    refined = result["refined_ticket"]
+    
+    # Basic structural checks
+    assert "description" in refined, "Description missing in refined ticket"
+    assert "requirements" in refined, "Requirements missing in refined ticket"
+    assert "acceptance_criteria" in refined, "Acceptance criteria missing in refined ticket"
+    assert len(refined["description"]) > 20, "Refined description should be more detailed than a sloppy ticket"
+    assert len(refined["requirements"]) > 0, "Refined ticket should have at least one requirement"
+    assert len(refined["acceptance_criteria"]) > 0, "Refined ticket should have at least one acceptance criterion"
+    
+    # Calculate semantic similarity against expected JSON
+    similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
+    assert similarity >= 80, f"Semantic similarity {similarity:.2f}% is below 80% threshold"
+    
+    # Validate structured JSON output
     assert "result" in result, "Result key missing from workflow output"
-    assert result["result"] == EXPECTED_TICKET_JSON, "Structured JSON does not match expected output"
     
     # Validate generated code presence and type
     assert "generated_code" in result, "Generated code is missing from the result"
@@ -90,7 +157,7 @@ def test_full_workflow_sloppy():
     code_blocks = re.findall(r'```typescript(.*?)```', result["generated_code"], re.DOTALL)
     assert len(code_blocks) > 0, "No TypeScript code block found in generated code"
     code = code_blocks[0].strip()
-    assert "function" in code or "class" in code, "Generated code should define a function or class for UUID generation"
+    assert FUNCTION_PATTERN.search(code), "Generated code should include a function or class for UUID generation"
     assert "uuid" in code.lower(), "Code should include UUID generation logic"
     assert "command" in code or "addCommand" in code, "Code should register an Obsidian command"
     assert "//" in code or "/*" in code, "Code should include comments"

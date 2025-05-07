@@ -2,6 +2,15 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.5
+
+### ✨ New Features
+
+- **implement clarify ticket agent**
+- **the TicketClarityAgent has been implemented to clarify existing ticket.**
+- **ticket with clear title, desc, requirements & acceptance criteria for coding agents.**
+- **TicketClarityAgent will set better conditions to generate TS code and tests for other agents.**
+
 ## 0.4.4
 
 ### ✨ New Features

@@ -15,6 +15,7 @@ from src.agentics import (
     prompt_template
 )
 from src.pre_test_runner_agent import PreTestRunnerAgent
+from src.ticket_clarity_agent import TicketClarityAgent
 from src.utils import validate_github_url
 from github import GithubException
 
@@ -219,6 +220,38 @@ def test_pre_test_runner_agent_parsing_error(mock_run, caplog):
         assert result["existing_tests_passed"] == 0
         assert result["existing_coverage_all_files"] == 0.0
 
+# Test TicketClarityAgent with clear ticket
+def test_ticket_clarity_agent_clear_ticket():
+    mock_llm = MagicMock()
+    mock_github = MagicMock()
+    mock_repo = MagicMock()
+    mock_issue = MagicMock()
+    mock_github.get_repo.return_value = mock_repo
+    mock_repo.get_issue.return_value = mock_issue
+
+    # Responses: 5 evaluations (all clear), then 1 refinement on the last iteration
+    responses = [
+        json.dumps({"is_clear": True, "suggestions": []}),  # Evaluate 1
+        json.dumps({"is_clear": True, "suggestions": []}),  # Evaluate 2
+        json.dumps({"is_clear": True, "suggestions": []}),  # Evaluate 3
+        json.dumps({"is_clear": True, "suggestions": []}),  # Evaluate 4
+        json.dumps({"is_clear": True, "suggestions": []}),  # Evaluate 5
+        json.dumps({
+            "title": "Clear Ticket",
+            "description": "Implement a UUID generator in Obsidian.",
+            "requirements": ["Use uuid library"],
+            "acceptance_criteria": ["Verify UUID format"]
+        }),  # Refine 5
+    ]
+    mock_llm.invoke.side_effect = responses
+
+    agent = TicketClarityAgent(mock_llm, mock_github)
+    state = {"url": "https://github.com/user/repo/issues/1", "ticket_content": WELL_STRUCTURED_TICKET}
+    result = agent(state)
+    assert "refined_ticket" in result
+    assert mock_issue.create_comment.called
+    assert mock_llm.invoke.call_count == 6  # 5 evaluations + 1 refinement
+
 # Test full workflow with code generation and pre-test runner
 def test_full_workflow_unit():
     mock_github = MagicMock()
@@ -230,14 +263,16 @@ def test_full_workflow_unit():
 
     mock_llm = MagicMock()
     mock_llm.invoke.side_effect = [
-        json.dumps(EXPECTED_TICKET_JSON),
-        "// Generated TS code\n function generateUUID() { return 'uuid'; }",
-        "// Generated tests\n test('UUID works', () => { expect(generateUUID()).toBe('uuid'); });"
+        json.dumps(EXPECTED_TICKET_JSON),  # For ProcessLLMAgent
+        "// Generated TS code\n function generateUUID() { return 'uuid'; }",  # For CodeGeneratorAgent (code)
+        "// Generated tests\n test('UUID works', () => { expect(generateUUID()).toBe('uuid'); });"  # For CodeGeneratorAgent (tests)
     ]
 
     with patch.object(fetch_issue_agent, 'github', mock_github), \
          patch.object(process_llm_agent, 'llm', mock_llm), \
          patch.object(code_generator_agent, 'llm', mock_llm), \
+         patch('src.ticket_clarity_agent.TicketClarityAgent.__init__', return_value=None), \
+         patch('src.ticket_clarity_agent.TicketClarityAgent.process', return_value={"ticket_content": WELL_STRUCTURED_TICKET, "refined_ticket": EXPECTED_TICKET_JSON}), \
          patch('subprocess.run') as mock_run:
         mock_install = MagicMock(returncode=0, stdout="", stderr="")
         mock_test = MagicMock(returncode=0, stdout="Tests: 20 passed, 20 total\nAll files | 46.15 | 50 | 33.33 | 46.15 |", stderr="")
