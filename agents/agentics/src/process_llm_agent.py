@@ -9,7 +9,10 @@ class ProcessLLMAgent(BaseAgent):
         self.prompt_template = prompt_template
 
     def process(self, state: State) -> State:
-        ticket_content = state['ticket_content']
+        ticket_content = state.get('refined_ticket', state['ticket_content'])
+        # If ticket_content is a dict (e.g., from refinement), convert to string for the prompt
+        if isinstance(ticket_content, dict):
+            ticket_content = json.dumps(ticket_content)
         prompt = self.prompt_template.format(ticket_content=ticket_content)
         max_retries = 3
         for attempt in range(max_retries):
