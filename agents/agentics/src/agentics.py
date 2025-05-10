@@ -12,6 +12,7 @@ from .process_llm_agent import ProcessLLMAgent
 from .code_generator_agent import CodeGeneratorAgent
 from .output_result_agent import OutputResultAgent
 from .pre_test_runner_agent import PreTestRunnerAgent
+from .code_extractor_agent import CodeExtractorAgent
 
 # Environment variables
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -58,6 +59,7 @@ prompt_template = PromptTemplate(
 # Instantiate agents
 fetch_issue_agent = FetchIssueAgent(github)
 ticket_clarity_agent = TicketClarityAgent(llm, github)
+code_extractor_agent = CodeExtractorAgent(llm)
 process_llm_agent = ProcessLLMAgent(llm, prompt_template)
 code_generator_agent = CodeGeneratorAgent(llm)
 pre_test_runner_agent = PreTestRunnerAgent()
@@ -65,22 +67,24 @@ output_result_agent = OutputResultAgent()
 
 # Define the LangGraph workflow
 graph = StateGraph(State)
+graph.add_node("pre_test_runner", pre_test_runner_agent)
 graph.add_node("fetch_issue", fetch_issue_agent)
 graph.add_node("ticket_clarity", ticket_clarity_agent)
+graph.add_node("code_extractor", code_extractor_agent)
 graph.add_node("process_with_llm", process_llm_agent)
 graph.add_node("generate_code", code_generator_agent)
-graph.add_node("pre_test_runner", pre_test_runner_agent)
 graph.add_node("output_result", output_result_agent)
 
 # Define the flow
+graph.add_edge("pre_test_runner", "fetch_issue")
 graph.add_edge("fetch_issue", "ticket_clarity")
-graph.add_edge("ticket_clarity", "process_with_llm")
+graph.add_edge("ticket_clarity", "code_extractor")
+graph.add_edge("code_extractor", "process_with_llm")
 graph.add_edge("process_with_llm", "generate_code")
-graph.add_edge("generate_code", "pre_test_runner")
-graph.add_edge("pre_test_runner", "output_result")
+graph.add_edge("generate_code", "output_result")
 graph.add_edge("output_result", END)
 
-graph.set_entry_point("fetch_issue")
+graph.set_entry_point("pre_test_runner")
 app = graph.compile()
 
 # Main execution

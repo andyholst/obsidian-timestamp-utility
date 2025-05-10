@@ -8,7 +8,7 @@ IMAGE_NAME := $(REPO_NAME):$(TAG)
 
 DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yaml
 
-.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-agentics
+.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-agentics generate-requirements
 
 all: build-app test-app release
 
@@ -44,6 +44,12 @@ release: clean build-app
 
 clean:
 	rm -rf .tools release dist
+
+build-generate-requirements: $(DOCKER_COMPOSE_PATH)
+	docker build -t pip-requirements -f docker-files/pip-requirements/Dockerfile .
+
+generate-requirements: build-generate-requirements
+	docker run --rm -v $(PWD)/agents/agentics:/app pip-requirements
 
 build-image-agents: $(DOCKER_COMPOSE_PATH)
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
