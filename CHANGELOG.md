@@ -2,6 +2,21 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.6
+
+### ✨ New Features
+
+- **added Code Extractor Agent**
+- **added code extractor agent code and tests.**
+- **updated the unit test to make make code extractor agent work with real files.**
+- **added asserts of the expected real relevant files to integration tests.**
+- **added corner cases for the integration test for the CodeExtractorAgent.**
+
+### 🔧 Refactor Improvements
+
+- **improve the build time to execute the tests with specific requirements.**
+- **always run Pre Test Runner Agent first to make TS test works before creating new code.**
+
 ## 0.4.5
 
 ### ✨ New Features

@@ -113,6 +113,30 @@ def test_full_workflow_well_structured():
     assert result["existing_tests_passed"] == 20, "Expected 20 tests to pass based on current test output"
     assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
     assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
+    
+    # Validate relevant files from CodeExtractorAgent
+    assert "relevant_files" in result, "Relevant files missing from workflow output"
+    assert isinstance(result["relevant_files"], list), "Relevant files must be a list"
+    assert len(result["relevant_files"]) > 0, "No relevant files found"
+    for file_data in result["relevant_files"]:
+        assert "file_path" in file_data, "File path missing in relevant file data"
+        assert "content" in file_data, "Content missing in relevant file data"
+        assert file_data["file_path"].startswith("src/"), "File path should be relative to project root"
+        assert file_data["file_path"].endswith(".ts"), "Only TypeScript files should be included"
+    
+    # Specific file checks for UUID ticket
+    relevant_paths = [file_data["file_path"] for file_data in result["relevant_files"]]
+    assert "src/main.ts" in relevant_paths, "Expected 'src/main.ts' in relevant files for UUID implementation"
+    assert "src/__tests__/main.test.ts" in relevant_paths, "Expected 'src/__tests__/main.test.ts' in relevant files for UUID testing"
+    
+    # General content checks for relevant files (pre-existing structure, not new feature content)
+    for file_data in result["relevant_files"]:
+        path = file_data["file_path"]
+        content = file_data["content"]
+        if path == "src/main.ts":
+            assert "export default class" in content or "module.exports" in content, "Main file should define the plugin class"
+        if path == "src/__tests__/main.test.ts":
+            assert "describe" in content or "test" in content, "Test file should contain test blocks"
 
 @pytest.mark.integration
 def test_full_workflow_sloppy():
@@ -180,6 +204,16 @@ def test_full_workflow_sloppy():
     assert result["existing_tests_passed"] == 20, "Expected 20 tests to pass based on current test output"
     assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
     assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
+    
+    # Validate relevant files from CodeExtractorAgent
+    assert "relevant_files" in result, "Relevant files missing from workflow output"
+    assert isinstance(result["relevant_files"], list), "Relevant files must be a list"
+    assert len(result["relevant_files"]) > 0, "No relevant files found"
+    for file_data in result["relevant_files"]:
+        assert "file_path" in file_data, "File path missing in relevant file data"
+        assert "content" in file_data, "Content missing in relevant file data"
+        assert file_data["file_path"].startswith("src/"), "File path should be relative to project root"
+        assert file_data["file_path"].endswith(".ts"), "Only TypeScript files should be included"
 
 @pytest.mark.integration
 def test_empty_ticket():
@@ -216,3 +250,52 @@ def test_non_existent_repo():
     initial_state = {"url": non_existent_url}
     with pytest.raises(GithubException):
         app.invoke(initial_state)
+
+@pytest.mark.integration
+def test_full_workflow_no_match(mocker):
+    """Test workflow with a ticket unrelated to the codebase, expecting no relevant files."""
+    test_repo_url = os.getenv("TEST_ISSUE_URL")
+    assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
+    test_url = f"{test_repo_url}/issues/20"
+    initial_state = {"url": test_url}
+    
+    # Mock TicketClarityAgent to return an unrelated ticket
+    unrelated_ticket = {
+        "title": "Update Documentation",
+        "description": "Revise README with new installation steps.",
+        "requirements": ["Add installation section"],
+        "acceptance_criteria": ["README reflects changes"]
+    }
+    mocker.patch(
+        "src.ticket_clarity_agent.TicketClarityAgent.process",
+        return_value={"url": test_url, "refined_ticket": unrelated_ticket}
+    )
+    
+    result = app.invoke(initial_state)
+    assert "relevant_files" in result, "Relevant files missing from workflow output"
+    assert len(result["relevant_files"]) == 0, "Expected no relevant files for unrelated ticket"
+
+@pytest.mark.integration
+def test_full_workflow_partial_match(mocker):
+    """Test workflow with a ticket partially matching codebase keywords."""
+    test_repo_url = os.getenv("TEST_ISSUE_URL")
+    assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
+    test_url = f"{test_repo_url}/issues/20"
+    initial_state = {"url": test_url}
+    
+    # Mock TicketClarityAgent to return a ticket with keywords
+    partial_ticket = {
+        "title": "Enhance main functionality",
+        "description": "Improve the main plugin logic.",
+        "requirements": ["Update main logic"],
+        "acceptance_criteria": ["Verify main works"]
+    }
+    mocker.patch(
+        "src.ticket_clarity_agent.TicketClarityAgent.process",
+        return_value={"url": test_url, "refined_ticket": partial_ticket}
+    )
+    
+    result = app.invoke(initial_state)
+    assert "relevant_files" in result, "Relevant files missing from workflow output"
+    relevant_paths = [file_data["file_path"] for file_data in result["relevant_files"]]
+    assert "src/main.ts" in relevant_paths, "Expected 'src/main.ts' for partial match on 'main'"
