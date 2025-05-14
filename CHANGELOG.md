@@ -2,6 +2,32 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.7
+
+### ✨ New Features
+
+- **implement the code integrator agent**
+- **make sure code integrator preserve the existing TypeScript code with new TS code.**
+- **make sure code integrator preserve existing TS tests with new tests.**
+
+### 🔧 Refactor Improvements
+
+- **refactored away the mocks of the LLM agents so they are being unit tested for reals.**
+- **fetching GitHub tickets and writing to files has been mocked in unit tests.**
+- **use qwen2.5-coder instead of qwen2.5 LLM model.**
+- **added more logging to enable better troubleshooting in case of errors.**
+- **made the code generator more strict to generate TS code and TS tests accordingly.**
+- **simplified the code integrator to only deal with 2 files, no so much llm prompting.**
+- **updated code extractor to only deal with main.ts and it's main.test.ts file.**
+- **refine the llm agents to reduce halicunation.**
+- **added new test asserts to cover up for refactored agents code and python code.**
+- **added more real unit tests based on refactored  llm agents.**
+- **be able to silent the logs to debug level to give clarity for real exceptions for failure.**
+- **improved the unit tests to run reall LLM agents excepty for the fetch integrator agent.**
+- **get the updated unit tests running with real LM except for fetch ticket agent.**
+- **added more edge unit test cases to verify that the TS code/tests is intact.**
+- **refactored the integration tests to copver the new refactored LLM code.**
+
 ## 0.4.6
 
 ### ✨ New Features
