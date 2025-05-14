@@ -1,15 +1,28 @@
 {
   "title": "Implement Timestamp-based UUID Generator in Obsidian",
-"description": "Add a command to Obsidian that generates a Universally Unique Identifier (UUID) based on the current timestamp and inserts it into the active note at the cursor position.",  "requirements": [
+  "description": "Add a command to Obsidian that generates a UUID (Universally Unique Identifier) based on the current timestamp and inserts it into the active note at the cursor position. This feature will allow users to quickly create unique identifiers for linking, referencing, or organizing content within their notes. The UUID should follow the UUID v7 standard, which is the latest version, offering improved performance and privacy over earlier versions like UUID v1.",
+  "requirements": [
     "The command must be accessible via Obsidian's command palette.",
-    "It should generate a UUID using the current timestamp, following the UUID v7 standard.",
+    "It should generate a UUID using the current timestamp, following the UUID v7 standard, with the following specifications:",
+    "The UUID must be a 128-bit value.",
+    "Use a 48-bit timestamp representing milliseconds since the Unix epoch (1970-01-01 00:00:00 UTC).",
+    "Include a 16-bit random sequence number to ensure uniqueness within the same millisecond.",
+    "Use 64 bits of randomness for the remaining fields.",
+    "Set the version to 7 by setting bits 48-51 to 0111 in binary.",
+    "Set the variant to 1 by setting bits 64-65 to 10 in binary.",
+    "Format the UUID as a 36-character string with hyphens in the pattern `xxxxxxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx`.",
+    "Use the current system time for the timestamp.",
+    "Generate random values securely for the sequence number and remaining bits.",
     "The generated UUID must be inserted at the current cursor position in the active note.",
     "If no note is active when the command is executed, an appropriate error message should be displayed."
   ],
   "acceptance_criteria": [
     "The command is visible in Obsidian's command palette when searched.",
     "When the command is executed with an active note, a valid UUID v7 is generated and inserted at the cursor position.",
-    "The generated UUID is unique and correctly formatted according to the UUID v7 standard.",
+    "The generated UUID is unique and correctly formatted according to the UUID v7 standard, including:",
+    "The third section starts with '7' to indicate version 7.",
+    "The variant bits are set correctly.",
+    "The timestamp reflects a recent time (within 1 minute of generation).",
     "If no note is active when the command is executed, an error message is displayed to the user."
   ]
 }

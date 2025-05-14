@@ -26,3 +26,4 @@ data.json
 
 __pycache__
 .pytest_cache
+agentics_output.txt

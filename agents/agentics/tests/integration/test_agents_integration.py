@@ -2,8 +2,10 @@ import pytest
 import os
 import json
 import re
+import shutil
+from unittest.mock import patch
 from sentence_transformers import SentenceTransformer, util
-from src.agentics import app
+from src.agentics import app, pre_test_runner_agent, code_extractor_agent, code_integrator_agent
 from github import GithubException
 
 # Define paths to the fixtures directory and JSON file
@@ -32,7 +34,7 @@ def calculate_semantic_similarity(expected_text, actual_text):
 def compute_ticket_similarity(expected_ticket, refined_ticket):
     """
     Compute the overall semantic similarity between expected and refined tickets by averaging
-    similarities across title, description, requirements, and acceptance criteria.
+    similarities across title, description, requirements, and acceptance_criteria.
     """
     title_sim = calculate_semantic_similarity(expected_ticket["title"], refined_ticket["title"])
     desc_sim = calculate_semantic_similarity(expected_ticket["description"], refined_ticket["description"])
@@ -45,175 +47,264 @@ def compute_ticket_similarity(expected_ticket, refined_ticket):
     overall_similarity = (title_sim + desc_sim + reqs_sim + ac_sim) / 4
     return overall_similarity
 
+def extract_content(text):
+    """
+    Extract content from markdown code blocks, with optional TypeScript marker.
+    Returns the first block found or the entire text if no blocks exist.
+    """
+    pattern = r'```(?:typescript)?(.*?)```'
+    matches = re.findall(pattern, text, re.DOTALL)
+    return matches[0].strip() if matches else text.strip()
+
+def setup_temp_project(tmp_path):
+    """
+    Set up a temporary project directory by copying the original project.
+    Returns the path to the temporary directory.
+    """
+    temp_dir = tmp_path / "project"
+    shutil.copytree('/project', str(temp_dir))
+    return temp_dir
+
 # Integration tests for the ticket interpreter workflow
 # These tests use real GitHub API and LLM service calls.
 
 @pytest.mark.integration
-def test_full_workflow_well_structured():
-    """Test the full workflow with a well-structured ticket, including code, test generation, and existing test metrics."""
+def test_full_workflow_well_structured(tmp_path):
+    """
+    Test the full workflow with a well-structured ticket, ensuring the specific TypeScript content is written to files
+    and existing functions/tests are preserved.
+    """
     # Given
     test_repo_url = os.getenv("TEST_ISSUE_URL")
     assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
     test_url = f"{test_repo_url}/issues/20"
     initial_state = {"url": test_url}
     
-    # When
-    result = app.invoke(initial_state)
-    
-    # Then - Validate refined ticket
-    assert "refined_ticket" in result, "Refined ticket missing from workflow output"
-    assert isinstance(result["refined_ticket"], dict), "Refined ticket must be a dict"
-    assert "title" in result["refined_ticket"], "Title missing in refined ticket"
-    
-    refined = result["refined_ticket"]
-    
-    # Basic structural checks
-    assert "description" in refined, "Description missing in refined ticket"
-    assert "requirements" in refined, "Requirements missing in refined ticket"
-    assert "acceptance_criteria" in refined, "Acceptance criteria missing in refined ticket"
-    assert len(refined["requirements"]) >= 2, "Refined ticket should have at least 2 requirements"
-    assert len(refined["acceptance_criteria"]) >= 2, "Refined ticket should have at least 2 acceptance criteria"
-    
-    # Calculate semantic similarity against expected JSON
-    similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
-    assert similarity >= 90, f"Semantic similarity {similarity:.2f}% is below 90% threshold"
-    
-    # Validate structured JSON output
-    assert "result" in result, "Result key missing from workflow output"
-    
-    # Validate generated code presence and type
-    assert "generated_code" in result, "Generated code is missing from the result"
-    assert isinstance(result["generated_code"], str), "Generated code must be a string"
-    assert len(result["generated_code"]) > 0, "Generated code cannot be empty"
-    
-    # Extract and validate TypeScript code block
-    code_blocks = re.findall(r'```typescript(.*?)```', result["generated_code"], re.DOTALL)
-    assert len(code_blocks) > 0, "No TypeScript code block found in generated code"
-    code = code_blocks[0].strip()
-    assert FUNCTION_PATTERN.search(code), "Generated code should include a function or class for UUID generation"
-    assert "uuid" in code.lower(), "Code should include UUID generation logic"
-    assert "command" in code or "addCommand" in code, "Code should register an Obsidian command"
-    assert "//" in code or "/*" in code, "Code should include comments"
-    
-    # Validate generated tests presence and type
-    assert "generated_tests" in result, "Generated tests are missing from the result"
-    assert isinstance(result["generated_tests"], str), "Generated tests must be a string"
-    assert len(result["generated_tests"]) > 0, "Generated tests cannot be empty"
-    
-    # Extract and validate TypeScript test block
-    test_blocks = re.findall(r'```typescript(.*?)```', result["generated_tests"], re.DOTALL)
-    assert len(test_blocks) > 0, "No TypeScript test block found in generated tests"
-    tests = test_blocks[0].strip()
-    assert "test" in tests or "describe" in tests, "Generated tests should include a test block"
-    assert "expect" in tests or "assert" in tests, "Tests should include assertions"
-    assert "uuid" in tests.lower(), "Tests should verify UUID generation"
-    
-    # Validate test metrics from PreTestRunnerAgent
-    assert "existing_tests_passed" in result, "Number of passing tests missing from result"
-    assert result["existing_tests_passed"] == 20, "Expected 20 tests to pass based on current test output"
-    assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
-    assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
-    
-    # Validate relevant files from CodeExtractorAgent
-    assert "relevant_files" in result, "Relevant files missing from workflow output"
-    assert isinstance(result["relevant_files"], list), "Relevant files must be a list"
-    assert len(result["relevant_files"]) > 0, "No relevant files found"
-    for file_data in result["relevant_files"]:
-        assert "file_path" in file_data, "File path missing in relevant file data"
-        assert "content" in file_data, "Content missing in relevant file data"
-        assert file_data["file_path"].startswith("src/"), "File path should be relative to project root"
-        assert file_data["file_path"].endswith(".ts"), "Only TypeScript files should be included"
-    
-    # Specific file checks for UUID ticket
-    relevant_paths = [file_data["file_path"] for file_data in result["relevant_files"]]
-    assert "src/main.ts" in relevant_paths, "Expected 'src/main.ts' in relevant files for UUID implementation"
-    assert "src/__tests__/main.test.ts" in relevant_paths, "Expected 'src/__tests__/main.test.ts' in relevant files for UUID testing"
-    
-    # General content checks for relevant files (pre-existing structure, not new feature content)
-    for file_data in result["relevant_files"]:
-        path = file_data["file_path"]
-        content = file_data["content"]
-        if path == "src/main.ts":
-            assert "export default class" in content or "module.exports" in content, "Main file should define the plugin class"
-        if path == "src/__tests__/main.test.ts":
-            assert "describe" in content or "test" in content, "Test file should contain test blocks"
+    # Set up temporary directory and patch project_root for agents
+    temp_dir = setup_temp_project(tmp_path)
+    with patch.object(pre_test_runner_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_extractor_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_integrator_agent, 'project_root', str(temp_dir)):
+        # When
+        result = app.invoke(initial_state)
+        
+        # Then - Validate refined ticket
+        assert "refined_ticket" in result, "Refined ticket missing from workflow output"
+        assert isinstance(result["refined_ticket"], dict), "Refined ticket must be a dict"
+        assert "title" in result["refined_ticket"], "Title missing in refined ticket"
+        
+        refined = result["refined_ticket"]
+        
+        # Basic structural checks
+        assert "description" in refined, "Description missing in refined ticket"
+        assert "requirements" in refined, "Requirements missing in refined ticket"
+        assert "acceptance_criteria" in refined, "Acceptance criteria missing in refined ticket"
+        assert len(refined["requirements"]) >= 2, "Refined ticket should have at least 2 requirements"
+        assert len(refined["acceptance_criteria"]) >= 2, "Refined ticket should have at least 2 acceptance criteria"
+        
+        # Calculate semantic similarity against expected JSON
+        similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
+        assert similarity >= 90, f"Semantic similarity {similarity:.2f}% is below 90% threshold"
+        
+        # Validate structured JSON output
+        assert "result" in result, "Result key missing from workflow output"
+        
+        # Validate generated code presence and type
+        assert "generated_code" in result, "Generated code is missing from the result"
+        assert isinstance(result["generated_code"], str), "Generated code must be a string"
+        assert len(result["generated_code"]) > 0, "Generated code cannot be empty"
+        
+        # Extract and validate TypeScript code block
+        code = extract_content(result["generated_code"])
+        assert FUNCTION_PATTERN.search(code), "Generated code should include functions or classes"
+        assert "parseDateString" in code, "Code should include parseDateString function"
+        assert "DateRangeModal" in code, "Code should include DateRangeModal class"
+        assert "TimestampPlugin" in code, "Code should include TimestampPlugin class"
+        assert "uuid" in code.lower(), "Code should include UUID generation logic"
+        assert "command" in code or "addCommand" in code, "Code should register an Obsidian command"
+        assert "//" in code or "/*" in code, "Code should include comments"
+        
+        # Validate generated tests presence and type
+        assert "generated_tests" in result, "Generated tests are missing from the result"
+        assert isinstance(result["generated_tests"], str), "Generated tests must be a string"
+        assert len(result["generated_tests"]) > 0, "Generated tests cannot be empty"
+        
+        # Extract and validate TypeScript test block
+        tests = extract_content(result["generated_tests"])
+        assert "test" in tests or "describe" in tests, "Generated tests should include a test block"
+        assert "expect" in tests or "assert" in tests, "Tests should include assertions"
+        assert "TimestampPlugin" in tests, "Tests should reference TimestampPlugin"
+        assert "uuid" in tests.lower(), "Tests should verify UUID generation"
+        
+        # Validate test metrics from PreTestRunnerAgent
+        assert "existing_tests_passed" in result, "Number of passing tests missing from result"
+        assert result["existing_tests_passed"] == 20, "Expected 20 tests to pass based on current test output"
+        assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
+        assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
+        
+        # Validate relevant code and test files from CodeExtractorAgent
+        assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
+        assert "relevant_test_files" in result, "Relevant test files missing from workflow output"
+        assert isinstance(result["relevant_code_files"], list), "Relevant code files must be a list"
+        assert isinstance(result["relevant_test_files"], list), "Relevant test files must be a list"
+        assert len(result["relevant_code_files"]) + len(result["relevant_test_files"]) > 0, "No relevant files found"
+        for file_data in result["relevant_code_files"] + result["relevant_test_files"]:
+            assert "file_path" in file_data, "File path missing in relevant file data"
+            assert "content" in file_data, "Content missing in relevant file data"
+            assert file_data["file_path"].startswith("src/"), "File path should be relative to project root"
+            assert file_data["file_path"].endswith(".ts"), "Only TypeScript files should be included"
+        
+        # Specific file checks for UUID ticket
+        code_paths = [file_data["file_path"] for file_data in result["relevant_code_files"]]
+        test_paths = [file_data["file_path"] for file_data in result["relevant_test_files"]]
+        assert "src/main.ts" in code_paths, "Expected 'src/main.ts' in relevant code files for UUID implementation"
+        assert "src/__tests__/main.test.ts" in test_paths, "Expected 'src/__tests__/main.test.ts' in relevant test files for UUID testing"
+        
+        # General content checks for relevant files (pre-existing structure, not new feature content)
+        for file_data in result["relevant_code_files"]:
+            path = file_data["file_path"]
+            content = file_data["content"]
+            if path == "src/main.ts":
+                assert "export default class" in content or "module.exports" in content, "Main file should define the plugin class"
+        for file_data in result["relevant_test_files"]:
+            path = file_data["file_path"]
+            content = file_data["content"]
+            if path == "src/__tests__/main.test.ts":
+                assert "describe" in content or "test" in content, "Test file should contain test blocks"
+        
+        # Validate CodeIntegratorAgent integration in temporary directory
+        generated_code = extract_content(result['generated_code'])
+        generated_tests = extract_content(result['generated_tests'])
+        original_sizes = {f['file_path']: len(f['content']) for f in result["relevant_code_files"] + result["relevant_test_files"]}
+        
+        for file_data in result["relevant_code_files"] + result["relevant_test_files"]:
+            file_path = file_data['file_path']
+            temp_file_path = os.path.join(temp_dir, file_path)
+            assert os.path.exists(temp_file_path), f"{file_path} should exist in temp directory"
+            with open(temp_file_path, 'r') as f:
+                content = f.read()
+                new_size = len(content)
+                if file_path in test_paths:
+                    assert generated_tests in content, f"Generated tests not found in {file_path}"
+                    assert new_size >= original_sizes.get(file_path, 0), f"{file_path} size should not decrease"
+                    # Existing test stuff we expect to still be there
+                    assert "TimestampPlugin" in content, "Test file should reference TimestampPlugin"
+                    assert "describe" in content, "Test file should contain describe blocks"
+                    assert "generateTimestamp" in content, "Test file should test generateTimestamp"
+                    assert "insert-timestamp" in content, "Test file should test insert-timestamp command"
+                    assert "rename-with-timestamp" in content, "Test file should test rename-with-timestamp command"
+                else:
+                    assert generated_code in content, f"Generated code not found in {file_path}"
+                    assert new_size >= original_sizes.get(file_path, 0), f"{file_path} size should not decrease"
+                    # Existing code stuff we expect to still be there
+                    assert "parseDateString" in content, "Code file should contain parseDateString"
+                    assert "DateRangeModal" in content, "Code file should contain DateRangeModal"
+                    assert "TimestampPlugin" in content, "Code file should contain TimestampPlugin"
+                    assert "generateTimestamp" in content, "Code file should contain generateTimestamp"
+                    assert "renameFile" in content, "Code file should contain renameFile"
 
 @pytest.mark.integration
-def test_full_workflow_sloppy():
-    """Test the full workflow with a sloppy ticket, including code, test generation, and existing test metrics."""
-    # Given
+def test_full_workflow_sloppy(tmp_path):
+    """
+    Test the full workflow with a sloppy ticket, ensuring the TypeScript content is integrated and existing content preserved.
+    """
     test_repo_url = os.getenv("TEST_ISSUE_URL")
     assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
     test_url = f"{test_repo_url}/issues/22"
     initial_state = {"url": test_url}
-    
-    # When
-    result = app.invoke(initial_state)
-    
-    # Then - Validate refined ticket
-    assert "refined_ticket" in result, "Refined ticket missing from workflow output"
-    assert isinstance(result["refined_ticket"], dict), "Refined ticket must be a dict"
-    assert "title" in result["refined_ticket"], "Title missing in refined ticket"
-    
-    refined = result["refined_ticket"]
-    
-    # Basic structural checks
-    assert "description" in refined, "Description missing in refined ticket"
-    assert "requirements" in refined, "Requirements missing in refined ticket"
-    assert "acceptance_criteria" in refined, "Acceptance criteria missing in refined ticket"
-    assert len(refined["description"]) > 20, "Refined description should be more detailed than a sloppy ticket"
-    assert len(refined["requirements"]) > 0, "Refined ticket should have at least one requirement"
-    assert len(refined["acceptance_criteria"]) > 0, "Refined ticket should have at least one acceptance criterion"
-    
-    # Calculate semantic similarity against expected JSON
-    similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
-    assert similarity >= 80, f"Semantic similarity {similarity:.2f}% is below 80% threshold"
-    
-    # Validate structured JSON output
-    assert "result" in result, "Result key missing from workflow output"
-    
-    # Validate generated code presence and type
-    assert "generated_code" in result, "Generated code is missing from the result"
-    assert isinstance(result["generated_code"], str), "Generated code must be a string"
-    assert len(result["generated_code"]) > 0, "Generated code cannot be empty"
-    
-    # Extract and validate TypeScript code block
-    code_blocks = re.findall(r'```typescript(.*?)```', result["generated_code"], re.DOTALL)
-    assert len(code_blocks) > 0, "No TypeScript code block found in generated code"
-    code = code_blocks[0].strip()
-    assert FUNCTION_PATTERN.search(code), "Generated code should include a function or class for UUID generation"
-    assert "uuid" in code.lower(), "Code should include UUID generation logic"
-    assert "command" in code or "addCommand" in code, "Code should register an Obsidian command"
-    assert "//" in code or "/*" in code, "Code should include comments"
-    
-    # Validate generated tests presence and type
-    assert "generated_tests" in result, "Generated tests are missing from the result"
-    assert isinstance(result["generated_tests"], str), "Generated tests must be a string"
-    assert len(result["generated_tests"]) > 0, "Generated tests cannot be empty"
-    
-    # Extract and validate TypeScript test block
-    test_blocks = re.findall(r'```typescript(.*?)```', result["generated_tests"], re.DOTALL)
-    assert len(test_blocks) > 0, "No TypeScript test block found in generated tests"
-    tests = test_blocks[0].strip()
-    assert "test" in tests or "describe" in tests, "Generated tests should include a test block"
-    assert "expect" in tests or "assert" in tests, "Tests should include assertions"
-    assert "uuid" in tests.lower(), "Tests should verify UUID generation"
-    
-    # Validate test metrics from PreTestRunnerAgent
-    assert "existing_tests_passed" in result, "Number of passing tests missing from result"
-    assert result["existing_tests_passed"] == 20, "Expected 20 tests to pass based on current test output"
-    assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
-    assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
-    
-    # Validate relevant files from CodeExtractorAgent
-    assert "relevant_files" in result, "Relevant files missing from workflow output"
-    assert isinstance(result["relevant_files"], list), "Relevant files must be a list"
-    assert len(result["relevant_files"]) > 0, "No relevant files found"
-    for file_data in result["relevant_files"]:
-        assert "file_path" in file_data, "File path missing in relevant file data"
-        assert "content" in file_data, "Content missing in relevant file data"
-        assert file_data["file_path"].startswith("src/"), "File path should be relative to project root"
-        assert file_data["file_path"].endswith(".ts"), "Only TypeScript files should be included"
+
+    temp_dir = setup_temp_project(tmp_path)
+    with patch.object(pre_test_runner_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_extractor_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_integrator_agent, 'project_root', str(temp_dir)):
+        result = app.invoke(initial_state)
+
+        assert "refined_ticket" in result, "Refined ticket missing from workflow output"
+        assert isinstance(result["refined_ticket"], dict), "Refined ticket must be a dict"
+        assert "title" in result["refined_ticket"], "Title missing in refined ticket"
+
+        refined = result["refined_ticket"]
+        assert "description" in refined, "Description missing in refined ticket"
+        assert "requirements" in refined, "Requirements missing in refined ticket"
+        assert "acceptance_criteria" in refined, "Acceptance criteria missing in refined ticket"
+        assert len(refined["description"]) > 20, "Refined description should be more detailed than a sloppy ticket"
+        assert len(refined["requirements"]) > 0, "Refined ticket should have at least one requirement"
+        assert len(refined["acceptance_criteria"]) > 0, "Refined ticket should have at least one acceptance criterion"
+
+        similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
+        assert similarity >= 80, f"Semantic similarity {similarity:.2f}% is below 80% threshold"
+
+        assert "result" in result, "Result key missing from workflow output"
+        assert "generated_code" in result, "Generated code is missing from the result"
+        assert isinstance(result["generated_code"], str), "Generated code must be a string"
+        assert len(result["generated_code"]) > 0, "Generated code cannot be empty"
+
+        code = extract_content(result["generated_code"])
+        assert FUNCTION_PATTERN.search(code), "Generated code should include a function or class"
+        assert "parseDateString" in code, "Code should include parseDateString function"
+        assert "DateRangeModal" in code, "Code should include DateRangeModal class"
+        assert "TimestampPlugin" in code, "Code should include TimestampPlugin class"
+        assert "uuid" in code.lower(), "Code should include UUID generation logic"
+        assert "command" in code or "addCommand" in code, "Code should register an Obsidian command"
+        assert "//" in code or "/*" in code, "Code should include comments"
+
+        assert "generated_tests" in result, "Generated tests are missing from the result"
+        assert isinstance(result["generated_tests"], str), "Generated tests must be a string"
+        assert len(result["generated_tests"]) > 0, "Generated tests cannot be empty"
+
+        tests = extract_content(result["generated_tests"])
+        assert "test" in tests or "describe" in tests, "Generated tests should include a test block"
+        assert "expect" in tests or "assert" in tests, "Tests should include assertions"
+        assert "TimestampPlugin" in tests, "Tests should reference TimestampPlugin"
+        assert "uuid" in tests.lower(), "Tests should verify UUID generation"
+
+        assert "existing_tests_passed" in result, "Number of passing tests missing from result"
+        assert result["existing_tests_passed"] == 20, "Expected 20 tests to pass based on current test output"
+        assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
+        assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
+
+        # Validate relevant code and test files from CodeExtractorAgent
+        assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
+        assert "relevant_test_files" in result, "Relevant test files missing from workflow output"
+        assert isinstance(result["relevant_code_files"], list), "Relevant code files must be a list"
+        assert isinstance(result["relevant_test_files"], list), "Relevant test files must be a list"
+        assert len(result["relevant_code_files"]) + len(result["relevant_test_files"]) > 0, "No relevant files found"
+        for file_data in result["relevant_code_files"] + result["relevant_test_files"]:
+            assert "file_path" in file_data, "File path missing in relevant file data"
+            assert "content" in file_data, "Content missing in relevant file data"
+            assert file_data["file_path"].startswith("src/"), "File path should be relative to project root"
+            assert file_data["file_path"].endswith(".ts"), "Only TypeScript files should be included"
+
+        generated_code = extract_content(result['generated_code'])
+        generated_tests = extract_content(result['generated_tests'])
+        original_sizes = {f['file_path']: len(f['content']) for f in result["relevant_code_files"] + result["relevant_test_files"]}
+
+        test_paths = [file_data["file_path"] for file_data in result["relevant_test_files"]]
+        for file_data in result["relevant_code_files"] + result["relevant_test_files"]:
+            file_path = file_data['file_path']
+            temp_file_path = os.path.join(temp_dir, file_path)
+            assert os.path.exists(temp_file_path), f"{file_path} should exist in temp directory"
+            with open(temp_file_path, 'r') as f:
+                content = f.read()
+                new_size = len(content)
+                if file_path in test_paths:
+                    assert generated_tests in content, f"Generated tests not found in {file_path}"
+                    assert new_size >= original_sizes.get(file_path, 0), f"{file_path} size should not decrease"
+                    # Existing test stuff we expect to still be there
+                    assert "TimestampPlugin" in content, "Test file should reference TimestampPlugin"
+                    assert "describe" in content, "Test file should contain describe blocks"
+                    assert "generateTimestamp" in content, "Test file should test generateTimestamp"
+                    assert "insert-timestamp" in content, "Test file should test insert-timestamp command"
+                    assert "rename-with-timestamp" in content, "Test file should test rename-with-timestamp command"
+                else:
+                    assert generated_code in content, f"Generated code not found in {file_path}"
+                    assert new_size >= original_sizes.get(file_path, 0), f"{file_path} size should not decrease"
+                    # Existing code stuff we expect to still be there
+                    assert "parseDateString" in content, "Code file should contain parseDateString"
+                    assert "DateRangeModal" in content, "Code file should contain DateRangeModal"
+                    assert "TimestampPlugin" in content, "Code file should contain TimestampPlugin"
+                    assert "generateTimestamp" in content, "Code file should contain generateTimestamp"
+                    assert "renameFile" in content, "Code file should contain renameFile"
 
 @pytest.mark.integration
 def test_empty_ticket():
@@ -252,14 +343,13 @@ def test_non_existent_repo():
         app.invoke(initial_state)
 
 @pytest.mark.integration
-def test_full_workflow_no_match(mocker):
-    """Test workflow with a ticket unrelated to the codebase, expecting no relevant files."""
+def test_full_workflow_no_match(tmp_path, mocker):
+    """Test workflow with a ticket unrelated to the codebase, expecting new files to be created."""
     test_repo_url = os.getenv("TEST_ISSUE_URL")
     assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
     test_url = f"{test_repo_url}/issues/20"
     initial_state = {"url": test_url}
-    
-    # Mock TicketClarityAgent to return an unrelated ticket
+
     unrelated_ticket = {
         "title": "Update Documentation",
         "description": "Revise README with new installation steps.",
@@ -270,20 +360,40 @@ def test_full_workflow_no_match(mocker):
         "src.ticket_clarity_agent.TicketClarityAgent.process",
         return_value={"url": test_url, "refined_ticket": unrelated_ticket}
     )
-    
-    result = app.invoke(initial_state)
-    assert "relevant_files" in result, "Relevant files missing from workflow output"
-    assert len(result["relevant_files"]) == 0, "Expected no relevant files for unrelated ticket"
+
+    temp_dir = setup_temp_project(tmp_path)
+    with patch.object(pre_test_runner_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_extractor_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_integrator_agent, 'project_root', str(temp_dir)):
+        result = app.invoke(initial_state)
+
+        assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
+        assert "relevant_test_files" in result, "Relevant test files missing from workflow output"
+        assert len(result["relevant_code_files"]) == 1, "Expected one new code file for unrelated ticket"
+        assert len(result["relevant_test_files"]) == 1, "Expected one new test file for unrelated ticket"
+        assert result["relevant_code_files"][0]["file_path"] == "src/update.ts", "Expected new code file 'src/update.ts'"
+        assert result["relevant_test_files"][0]["file_path"] == "src/__tests__/update.test.ts", "Expected new test file 'src/__tests__/update.test.ts'"
+
+        generated_code = extract_content(result['generated_code'])
+        generated_tests = extract_content(result['generated_tests'])
+        for file_data in result["relevant_code_files"] + result["relevant_test_files"]:
+            file_path = os.path.join(temp_dir, file_data['file_path'])
+            assert os.path.exists(file_path), f"{file_path} should exist in temp directory"
+            with open(file_path, 'r') as f:
+                content = f.read()
+                if file_data['file_path'] in result["relevant_test_files"][0]["file_path"]:
+                    assert generated_tests in content, f"Generated tests not found in {file_data['file_path']}"
+                else:
+                    assert generated_code in content, f"Generated code not found in {file_data['file_path']}"
 
 @pytest.mark.integration
-def test_full_workflow_partial_match(mocker):
+def test_full_workflow_partial_match(tmp_path, mocker):
     """Test workflow with a ticket partially matching codebase keywords."""
     test_repo_url = os.getenv("TEST_ISSUE_URL")
     assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
     test_url = f"{test_repo_url}/issues/20"
     initial_state = {"url": test_url}
-    
-    # Mock TicketClarityAgent to return a ticket with keywords
+
     partial_ticket = {
         "title": "Enhance main functionality",
         "description": "Improve the main plugin logic.",
@@ -294,8 +404,45 @@ def test_full_workflow_partial_match(mocker):
         "src.ticket_clarity_agent.TicketClarityAgent.process",
         return_value={"url": test_url, "refined_ticket": partial_ticket}
     )
-    
-    result = app.invoke(initial_state)
-    assert "relevant_files" in result, "Relevant files missing from workflow output"
-    relevant_paths = [file_data["file_path"] for file_data in result["relevant_files"]]
-    assert "src/main.ts" in relevant_paths, "Expected 'src/main.ts' for partial match on 'main'"
+
+    temp_dir = setup_temp_project(tmp_path)
+    with patch.object(pre_test_runner_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_extractor_agent, 'project_root', str(temp_dir)), \
+         patch.object(code_integrator_agent, 'project_root', str(temp_dir)):
+        result = app.invoke(initial_state)
+
+        assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
+        assert "relevant_test_files" in result, "Relevant test files missing from workflow output"
+        code_paths = [file_data["file_path"] for file_data in result["relevant_code_files"]]
+        assert "src/main.ts" in code_paths, "Expected 'src/main.ts' for partial match on 'main'"
+
+        generated_code = extract_content(result['generated_code'])
+        generated_tests = extract_content(result['generated_tests'])
+        original_sizes = {f['file_path']: len(f['content']) for f in result["relevant_code_files"] + result["relevant_test_files"]}
+
+        test_paths = [file_data["file_path"] for file_data in result["relevant_test_files"]]
+        for file_data in result["relevant_code_files"] + result["relevant_test_files"]:
+            file_path = file_data['file_path']
+            temp_file_path = os.path.join(temp_dir, file_path)
+            assert os.path.exists(temp_file_path), f"{file_path} should exist in temp directory"
+            with open(temp_file_path, 'r') as f:
+                content = f.read()
+                new_size = len(content)
+                if file_path in test_paths:
+                    assert generated_tests in content, f"Generated tests not found in {file_path}"
+                    assert new_size >= original_sizes.get(file_path, 0), f"{file_path} size should not decrease"
+                    # Existing test stuff we expect to still be there
+                    assert "TimestampPlugin" in content, "Test file should reference TimestampPlugin"
+                    assert "describe" in content, "Test file should contain describe blocks"
+                    assert "generateTimestamp" in content, "Test file should test generateTimestamp"
+                    assert "insert-timestamp" in content, "Test file should test insert-timestamp command"
+                    assert "rename-with-timestamp" in content, "Test file should test rename-with-timestamp command"
+                else:
+                    assert generated_code in content, f"Generated code not found in {file_path}"
+                    assert new_size >= original_sizes.get(file_path, 0), f"{file_path} size should not decrease"
+                    # Existing code stuff we expect to still be there
+                    assert "parseDateString" in content, "Code file should contain parseDateString"
+                    assert "DateRangeModal" in content, "Code file should contain DateRangeModal"
+                    assert "TimestampPlugin" in content, "Code file should contain TimestampPlugin"
+                    assert "generateTimestamp" in content, "Code file should contain generateTimestamp"
+                    assert "renameFile" in content, "Code file should contain renameFile"

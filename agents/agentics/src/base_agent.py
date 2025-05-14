@@ -5,15 +5,16 @@ class BaseAgent:
     def __init__(self, name: str):
         self.name = name
         self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.INFO)
 
     def __call__(self, state: State) -> State:
+        self.logger.info(f"Starting agent: {self.name}")
         try:
-            self.logger.info(f"Starting {self.name}")
             state = self.process(state)
-            self.logger.info(f"Completed {self.name}")
+            self.logger.info(f"Agent {self.name} completed successfully")
             return state
         except Exception as e:
-            self.logger.error(f"Error in {self.name}: {e}")
+            self.logger.error(f"Error in agent {self.name}: {str(e)}")
             raise
 
     def process(self, state: State) -> State:

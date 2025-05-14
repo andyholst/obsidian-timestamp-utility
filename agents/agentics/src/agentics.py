@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+
 from github import Github, Auth
 from langchain_ollama import OllamaLLM
 from langchain.prompts import PromptTemplate
@@ -13,18 +14,14 @@ from .code_generator_agent import CodeGeneratorAgent
 from .output_result_agent import OutputResultAgent
 from .pre_test_runner_agent import PreTestRunnerAgent
 from .code_extractor_agent import CodeExtractorAgent
+from .code_integrator_agent import CodeIntegratorAgent
 
 # Environment variables
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
-OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'llama3')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen3:14b')
 
-# Initialize clients
-auth = Auth.Token(GITHUB_TOKEN)
-github = Github(auth=auth)
-llm = OllamaLLM(model=OLLAMA_MODEL, base_url=OLLAMA_HOST)
-
-# Set up logging
+# Set up logging for prod.agentics
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 file_handler = logging.FileHandler('agentics.log')
@@ -35,10 +32,46 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
-# Define the prompt template with generic instructions
+# Configure root logger to ensure all agent logs are output to console
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_console_handler = logging.StreamHandler()
+root_console_handler.setFormatter(formatter)
+root_logger.addHandler(root_console_handler)
+
+logger.info("Initializing agentics application")
+logger.info(f"Using GITHUB_TOKEN: {'set' if GITHUB_TOKEN else 'not set'}")
+logger.info(f"OLLAMA_HOST: {OLLAMA_HOST}")
+logger.info(f"OLLAMA_MODEL: {OLLAMA_MODEL}")
+
+# Initialize clients
+logger.info("Initializing GitHub client")
+auth = Auth.Token(GITHUB_TOKEN)
+github = Github(auth=auth)
+logger.info("GitHub client initialized successfully")
+
+logger.info("Initializing Ollama LLM client")
+llm = OllamaLLM(
+    model=OLLAMA_MODEL,
+    base_url=OLLAMA_HOST,
+    temperature=0.6,
+    top_p=0.95,
+    top_k=20,
+    min_p=0,
+    extra_params={
+        "presence_penalty": 1.5,
+        "num_ctx": 32768,
+        "num_predict": 32768
+    }
+)
+logger.info("Ollama LLM client initialized successfully")
+
+# Define the prompt template with generic instructions and thinking mode enabled
+logger.info("Defining prompt template")
 prompt_template = PromptTemplate(
     input_variables=["ticket_content"],
     template=(
+        "/think\n"
         "You are an AI assistant analyzing GitHub tickets for software applications. Your task is to extract or infer the following fields from the ticket content and return them in a structured JSON format:\n\n"
         "- **Title**: Use the first line of the ticket content as the title.\n"
         "- **Description**: Identify or infer a concise description of the issue or feature request. If the ticket has an introductory paragraph, use its first sentence. For brief or vague tickets, create a detailed description based on the title and content. Include the application name if mentioned and expand any acronyms on first use (e.g., 'UUID' to 'Universally Unique Identifier').\n"
@@ -55,17 +88,22 @@ prompt_template = PromptTemplate(
         "}}"
     )
 )
+logger.info("Prompt template defined successfully")
 
 # Instantiate agents
+logger.info("Instantiating agents")
 fetch_issue_agent = FetchIssueAgent(github)
 ticket_clarity_agent = TicketClarityAgent(llm, github)
 code_extractor_agent = CodeExtractorAgent(llm)
 process_llm_agent = ProcessLLMAgent(llm, prompt_template)
 code_generator_agent = CodeGeneratorAgent(llm)
 pre_test_runner_agent = PreTestRunnerAgent()
+code_integrator_agent = CodeIntegratorAgent(llm)
 output_result_agent = OutputResultAgent()
+logger.info("Agents instantiated successfully")
 
 # Define the LangGraph workflow
+logger.info("Defining LangGraph workflow")
 graph = StateGraph(State)
 graph.add_node("pre_test_runner", pre_test_runner_agent)
 graph.add_node("fetch_issue", fetch_issue_agent)
@@ -73,29 +111,37 @@ graph.add_node("ticket_clarity", ticket_clarity_agent)
 graph.add_node("code_extractor", code_extractor_agent)
 graph.add_node("process_with_llm", process_llm_agent)
 graph.add_node("generate_code", code_generator_agent)
+graph.add_node("integrate_code", code_integrator_agent)
 graph.add_node("output_result", output_result_agent)
 
 # Define the flow
+logger.info("Defining workflow edges")
 graph.add_edge("pre_test_runner", "fetch_issue")
 graph.add_edge("fetch_issue", "ticket_clarity")
 graph.add_edge("ticket_clarity", "code_extractor")
 graph.add_edge("code_extractor", "process_with_llm")
 graph.add_edge("process_with_llm", "generate_code")
-graph.add_edge("generate_code", "output_result")
+graph.add_edge("generate_code", "integrate_code")
+graph.add_edge("integrate_code", "output_result")
 graph.add_edge("output_result", END)
 
 graph.set_entry_point("pre_test_runner")
 app = graph.compile()
+logger.info("Workflow defined and compiled successfully")
 
 # Main execution
 if __name__ == "__main__":
+    logger.info("Starting main execution")
     if len(sys.argv) != 2:
         logger.error("Usage: python agentics.py <issue_url>")
         sys.exit(1)
     issue_url = sys.argv[1]
+    logger.info(f"Processing issue URL: {issue_url}")
     initial_state = {"url": issue_url}
     try:
+        logger.info("Invoking workflow")
         app.invoke(initial_state)
+        logger.info("Workflow completed successfully")
     except Exception as e:
-        logger.error(f"Workflow failed: {e}")
+        logger.error(f"Workflow failed: {str(e)}")
         sys.exit(1)

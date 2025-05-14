@@ -55,11 +55,7 @@ build-image-agents: $(DOCKER_COMPOSE_PATH)
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
 
 run-agentics: build-image-agents
-	@if [ -z "$(ISSUE_URL)" ]; then \
-			echo "Error: ISSUE_URL is not set. Usage: make run-agentics ISSUE_URL=<url>"; \
-			exit 1; \
-	fi
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics python /app/src/agentics.py $(ISSUE_URL)
+	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics
 
 test-agents-unit: build-image-agents
 	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents

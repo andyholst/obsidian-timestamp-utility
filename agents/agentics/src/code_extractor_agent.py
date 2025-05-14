@@ -1,7 +1,9 @@
 import os
+import logging
 import json
 import re
 from .base_agent import BaseAgent
+from .utils import remove_thinking_tags
 
 class CodeExtractorAgent(BaseAgent):
     project_root = '/project'
@@ -9,19 +11,31 @@ class CodeExtractorAgent(BaseAgent):
     def __init__(self, llm_client):
         super().__init__("CodeExtractor")
         self.llm = llm_client
+        self.logger.setLevel(logging.INFO)
+
+    def is_test_file(self, file_path):
+        """Determine if a file is a test file based on its path."""
+        parts = file_path.split('/')
+        if '__tests__' in parts:
+            return True
+        if parts[-1].endswith('.test.ts'):
+            return True
+        return False
 
     def extract_identifiers(self, ticket):
         """Extract potential identifiers (e.g., function/class names, keywords) from the ticket."""
+        self.logger.info("Extracting identifiers from ticket")
         identifiers = set()
         # Combine all ticket fields into a single string
         text = " ".join(
             str(ticket.get(key, "")) 
             for key in ["title", "description", "requirements", "acceptance_criteria"]
         )
-        # Simple regex to find potential TypeScript identifiers (alphanumeric with underscores)
+        self.logger.info(f"Ticket text for identifier extraction: {text}")
+        # Improved regex to capture more potential identifiers (e.g., camelCase, PascalCase)
         identifier_pattern = r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'
         identifiers.update(re.findall(identifier_pattern, text))
-        # Expanded stop words to filter out common English words
+        # Expanded stop words to filter out common English words and include task-specific terms
         stop_words = {
             'a', 'an', 'the', 'and', 'or', 'but', 'if', 'while', 'for', 'in', 'on', 'at', 'by', 'with', 'about', 
             'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 
@@ -35,30 +49,35 @@ class CodeExtractorAgent(BaseAgent):
             'installation', 'section', 'reflects', 'changes', 'new', 'steps'
         }
         # Filter out stop words and short identifiers
-        return [id for id in identifiers if id.lower() not in stop_words and len(id) > 2]
+        filtered_identifiers = [id for id in identifiers if id.lower() not in stop_words and len(id) > 2]
+        self.logger.info(f"Extracted and filtered identifiers: {filtered_identifiers}")
+        return filtered_identifiers
 
     def is_content_relevant(self, content, identifiers):
         """Check if file content contains any of the ticket identifiers."""
+        self.logger.info("Checking content relevance")
+        self.logger.info(f"Content to check: {content}")
+        self.logger.info(f"Identifiers to match: {identifiers}")
         if not identifiers:
-            return False  # No identifiers, so no relevance
+            self.logger.info("No identifiers provided; content deemed not relevant")
+            return False
         content_lower = content.lower()
-        return any(identifier.lower() in content_lower for identifier in identifiers)
+        is_relevant = any(identifier.lower() in content_lower for identifier in identifiers)
+        self.logger.info(f"Content relevance result: {is_relevant}")
+        return is_relevant
 
     def process(self, state):
         """
         Process the refined ticket to extract relevant TypeScript files from /project/src.
-        Updates state['relevant_files'] with a list of dictionaries containing file_path and content.
-
-        Logic:
-        - Collect all .ts files from /project/src with their contents.
-        - Extract identifiers from the ticket.
-        - If no identifiers are found, set relevant_files to empty list.
-        - Otherwise, filter files by content relevance and enhance with LLM reasoning.
-        - Ensure no duplicates and update state accordingly.
+        Updates state with separate relevant_code_files and relevant_test_files.
         """
+        self.logger.info(f"Before processing in {self.name}: {json.dumps(state, indent=2)}")
+        self.logger.info("Starting code extraction process")
         refined_ticket = state['refined_ticket']
+        self.logger.info(f"Refined ticket received: {json.dumps(refined_ticket, indent=2)}")
 
         # Step 1: Collect all .ts files and their contents
+        self.logger.info("Collecting TypeScript files from project/src")
         src_dir = os.path.join(self.project_root, 'src')
         all_ts_files = []
         file_contents = {}
@@ -72,68 +91,91 @@ class CodeExtractorAgent(BaseAgent):
                             content = f.read()
                         all_ts_files.append(rel_path)
                         file_contents[rel_path] = content
+                        self.logger.info(f"Collected file: {rel_path}: {content}")
                     except Exception as e:
-                        self.logger.error(f"Failed to read file {rel_path}: {e}")
+                        self.logger.error(f"Failed to read file {rel_path}: {str(e)}")
                         continue
-        self.logger.debug(f"All .ts files found: {all_ts_files}")
+        self.logger.info(f"Total .ts files found: {len(all_ts_files)}")
 
         if not all_ts_files:
-            state['relevant_files'] = []
-            self.logger.info("No TypeScript files found in project/src")
+            state['relevant_code_files'] = []
+            state['relevant_test_files'] = []
+            self.logger.info("No TypeScript files found in project/src; setting relevant files to empty lists")
             return state
 
         # Step 2: Extract identifiers from the ticket
+        self.logger.info("Extracting identifiers from refined ticket")
         identifiers = self.extract_identifiers(refined_ticket)
-        self.logger.debug(f"Extracted identifiers: {identifiers}")
-
         if not identifiers:
-            state['relevant_files'] = []
-            self.logger.info("No relevant identifiers found in the ticket")
+            state['relevant_code_files'] = []
+            state['relevant_test_files'] = []
+            self.logger.info("No relevant identifiers found in the ticket; setting relevant files to empty lists")
             return state
 
-        # Step 3: Pre-filter files based on content relevance
+        # Step 3: Pre-filter files based on content relevance or file name
+        self.logger.info("Pre-filtering files based on content relevance or file name")
         candidate_files = {
             path: content for path, content in file_contents.items()
             if self.is_content_relevant(content, identifiers) or any(id.lower() in path.lower() for id in identifiers)
         }
+        self.logger.info(f"Candidate files identified: {list(candidate_files.keys())}")
 
-        # Step 4: Create prompt for LLM with file contents
+        # Step 4: Create prompt for LLM with file contents and enable thinking mode
+        self.logger.info("Preparing LLM prompt for file relevance determination")
         file_summaries = "\n".join(
-            f"- {path}: {content[:100]}..." 
+            f"- {path}: {content}" 
             for path, content in candidate_files.items()
         ) or "No candidate files found based on initial filtering."
         prompt = (
+            "/think\n"
             f"Given the following TypeScript files in project/src and their content previews:\n\n"
             f"{file_summaries}\n\n"
             f"And the following ticket:\n\n"
             f"{json.dumps(refined_ticket, indent=2)}\n\n"
             f"Please select which of these files are most relevant to the task described in the ticket. "
             f"Consider file names and content (e.g., functions, classes, or keywords mentioned in the ticket). "
-            f"Return only a JSON array of the relevant file paths, like [\"src/main.ts\", \"src/utils.ts\"]. "
+            f"For tasks involving commands or plugins (e.g., adding a new command to an Obsidian plugin), "
+            f"prioritize updating existing files like 'src/main.ts' and 'src/__tests__/main.test.ts' if they exist and are relevant. "
+            f"Return only a JSON array of the relevant file paths, like [\"src/main.ts\", \"src/__tests__/main.test.ts\"]. "
             f"If no files are relevant, return an empty array []."
         )
+        self.logger.info(f"LLM prompt prepared: {prompt}")
 
-        # Step 5: Invoke LLM
+        # Step 5: Invoke LLM and clean response
+        self.logger.info("Invoking LLM to determine relevant files")
         try:
             response = self.llm.invoke(prompt)
-            relevant_files = json.loads(response.strip())
+            clean_response = remove_thinking_tags(response)
+            self.logger.info(f"LLM response: {clean_response}")
+            relevant_files = json.loads(clean_response.strip())
             if not isinstance(relevant_files, list):
                 raise ValueError("LLM response is not a list")
             # Filter to existing files and remove duplicates while preserving order
             relevant_files = list(dict.fromkeys(
                 file for file in relevant_files if file in all_ts_files
             ))
+            self.logger.info(f"Relevant files from LLM: {relevant_files}")
         except (json.JSONDecodeError, ValueError) as e:
-            self.logger.warning(f"Failed to parse LLM response: {e}. Using content-based filtering only.")
+            self.logger.warning(f"Failed to parse LLM response: {str(e)}. Using content-based filtering only.")
             relevant_files = list(candidate_files.keys())
+            self.logger.info(f"Fallback relevant files: {relevant_files}")
 
-        # Step 6: Prepare output with file contents
-        relevant_files_data = []
+        # Step 6: Prepare output with file contents and separate into code and test files
+        self.logger.info("Preparing relevant files data for state update")
+        relevant_code_files = []
+        relevant_test_files = []
         for file in relevant_files:
             content = file_contents.get(file, "")
-            relevant_files_data.append({"file_path": file, "content": content})
+            file_data = {"file_path": file, "content": content}
+            if self.is_test_file(file):
+                relevant_test_files.append(file_data)
+            else:
+                relevant_code_files.append(file_data)
+            self.logger.info(f"Added file: {file} as {'test' if self.is_test_file(file) else 'code'} file")
 
-        # Step 7: Update state and log
-        state['relevant_files'] = relevant_files_data
-        self.logger.info(f"Found {len(relevant_files_data)} relevant files: {[f['file_path'] for f in relevant_files_data]}")
+        # Step 7: Update state with separated lists and log
+        state['relevant_code_files'] = relevant_code_files
+        state['relevant_test_files'] = relevant_test_files
+        self.logger.info(f"Code extraction completed. Relevant code files: {[f['file_path'] for f in relevant_code_files]}, Relevant test files: {[f['file_path'] for f in relevant_test_files]}")
+        self.logger.info(f"After processing in {self.name}: {json.dumps(state, indent=2)}")
         return state
