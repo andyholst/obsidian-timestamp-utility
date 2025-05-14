@@ -5,8 +5,9 @@ from .base_agent import BaseAgent
 from .state import State
 
 class PreTestRunnerAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, project_root="/project"):
         super().__init__("PreTestRunner")
+        self.project_root = project_root
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -26,7 +27,7 @@ class PreTestRunnerAgent(BaseAgent):
             # Run npm install to ensure dependencies are available
             install_result = subprocess.run(
                 ["npm", "install", "--loglevel=silly"],
-                cwd="/project",
+                cwd=self.project_root,
                 capture_output=True,
                 text=True
             )
@@ -37,7 +38,7 @@ class PreTestRunnerAgent(BaseAgent):
             # Run npm test
             test_result = subprocess.run(
                 ["npm", "test"],
-                cwd="/project",
+                cwd=self.project_root,
                 capture_output=True,
                 text=True
             )

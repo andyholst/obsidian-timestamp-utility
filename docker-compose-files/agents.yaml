@@ -23,9 +23,10 @@ services:
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:14b}
+      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
       - PYTHONPATH=/app
-    command: pytest /app/tests/unit
+    command: pytest -vv /app/tests/unit
     network_mode: host
 
   integration-test-agents:
