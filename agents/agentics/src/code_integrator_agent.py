@@ -101,15 +101,14 @@ class CodeIntegratorAgent(BaseAgent):
 
     def generate_updated_test_file(self, existing_content: str, new_tests: str, task_details: dict) -> str:
         """
-        Append new tests to the existing TypeScript test file with a separator comment (old way).
+        Use LLM to integrate new tests into the existing TypeScript test file, handling imports and describe blocks.
         """
-        separator = f"// New tests for task: {task_details['title']}\n"
-        updated_content = existing_content + "\n" + separator + new_tests
-        return updated_content
+        task_title = task_details['title']
+        return self.integrate_tests_with_llm(existing_content, new_tests, task_title)
 
     def integrate_code_with_llm(self, existing_content: str, new_code: str) -> str:
         """
-        Use LLM to generate updated code by integrating new code into the existing TimestampPlugin class (new way).
+        Use LLM to generate updated code by integrating new code into the existing TimestampPlugin class.
         """
         prompt = (
             "Here is the existing TypeScript code for an Obsidian plugin:\n\n"
@@ -128,6 +127,44 @@ class CodeIntegratorAgent(BaseAgent):
         clean_response = remove_thinking_tags(response)
         updated_content = clean_response.strip()
         self.logger.info(f"LLM response for code integration: {updated_content}")
+        return updated_content
+
+    def integrate_tests_with_llm(self, existing_content: str, new_tests: str, task_title: str) -> str:
+        """
+        Use LLM to integrate new tests into the existing TypeScript test file, ensuring imports are consolidated
+        and new describe blocks are appended at the end of the existing TimestampPlugin suite without modifying existing code.
+        """
+        prompt = (
+            f"Here is the existing TypeScript test file for the Obsidian TimestampPlugin:\n\n"
+            f"{existing_content}\n\n"
+            f"And here are the new tests to integrate for the task: {task_title}\n\n"
+            f"{new_tests}\n\n"
+            "Integrate the new tests into the existing test file according to these strict instructions:\n\n"
+            "1. **Preserve Existing Code Completely**: Do not modify, remove, reorder, or reformat any part of the existing test file. "
+            "This includes all imports, mock definitions, utility functions (e.g., `parseDateString`, `generateDateRange`), "
+            "the `beforeEach` block, and all existing `describe` and `test` blocks within `describe('TimestampPlugin', ...)`.\n\n"
+            "2. **Add New Imports Only**: At the top of the file, append only the import statements from the new tests that are not already present. "
+            "Do not duplicate existing imports (e.g., `import TimestampPlugin from '../main';` or `import * as obsidian from 'obsidian';`). "
+            "If an import already exists, use it as is and do not add it again.\n\n"
+            "3. **Append New Describe Blocks**: Inside the existing `describe('TimestampPlugin', () => {{ ... }})` block, "
+            "append only the new `describe` blocks (e.g., `describe('Some New Feature', () => {{ ... }})`) from the new tests. "
+            "Place them immediately before the closing brace `}}` of the `describe('TimestampPlugin', ...)` block, "
+            "after all existing `describe` and `test` blocks. Do not add any other code from the new tests (e.g., no new `beforeEach` blocks).\n\n"
+            "4. **Do Not Add Redundant Structures**: Do not include additional `describe('TimestampPlugin', ...)` blocks, `beforeEach` blocks, "
+            "or any other test setup code from the new tests. Only the inner `describe` blocks are to be appended.\n\n"
+            "5. **Maintain Exact Structure**: Ensure the output retains the exact structure of the existing file, with only the new imports "
+            "at the top and new `describe` blocks appended as specified. Do not alter indentation, spacing, or formatting of existing code.\n\n"
+            "6. **Handle Missing Describe Block**: If the existing file lacks a `describe('TimestampPlugin', ...)` block (which it does not in this case), "
+            "create one containing all existing tests followed by the new `describe` blocks. This is unlikely here but included for completeness.\n\n"
+            "7. **Ensure Valid Jest Syntax**: The resulting file must be a valid Jest test file with correct TypeScript syntax.\n\n"
+            "8. **No Extra Text**: Do not add comments, explanations, or any text outside the updated test code itself.\n\n"
+            "Return only the updated TypeScript test code."
+        )
+        self.logger.info(f"Test integration prompt: {prompt}")
+        response = self.llm.invoke(prompt)
+        clean_response = remove_thinking_tags(response)
+        updated_content = clean_response.strip()
+        self.logger.info(f"LLM response for test integration: {updated_content}")
         return updated_content
 
     def generate_filename(self, task_description: str, task_title: str) -> str:
