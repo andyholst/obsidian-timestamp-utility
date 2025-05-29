@@ -11,7 +11,3 @@ RUN apt-get update && apt-get install -y curl && \
 COPY requirements.txt .
 
 RUN pip install -r requirements.txt
-
-COPY src/agentics.py .
-
-CMD ["python", "agentics.py"]

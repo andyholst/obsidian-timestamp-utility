@@ -4,13 +4,15 @@ services:
       context: ../agents/agentics
       dockerfile: Dockerfile
     volumes:
-      - ../agents/agentics/src:/app/src
+      - ../agents/agentics/src:/app/prod
       - ..:/project
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:14b}
+      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
     network_mode: host
+    command: python -m prod.agentics https://github.com/andyholst/obsidian-timestamp-utility/issues/20
 
   unit-test-agents:
     build:
@@ -23,9 +25,10 @@ services:
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:14b}
+      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
       - PYTHONPATH=/app
-    command: pytest /app/tests/unit
+    command: pytest -vv /app/tests/unit
     network_mode: host
 
   integration-test-agents:
@@ -39,7 +42,7 @@ services:
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:14b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:14b}
       - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
       - PYTHONPATH=/app
     command: pytest -vv /app/tests/integration
