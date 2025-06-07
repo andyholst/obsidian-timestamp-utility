@@ -2,6 +2,22 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.8
+
+### ✨ New Features
+
+- **refactored Makefile to run containerd**
+- **Added Bash script to make system containerd migration enabled.**
+
+### 🔧 Refactor Improvements
+
+- **removed Docker Compose dependency since new Docker/NerdCtl has it integrated.**
+- **Makefile uses containerd cmd to run and build images.**
+
+### 📝 Documentation
+
+- **updated README.md file based on the new containerd bash wrapper script.**
+
 ## 0.4.7
 
 ### ✨ New Features

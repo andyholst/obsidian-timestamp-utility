@@ -10,7 +10,7 @@ This plugin enhances your Obsidian experience by adding five convenient commands
 
 ## Installation
 
-You can install the plugin either by downloading a pre-built release or by building it from source. Most users should use the **From Release** method, which does not require any additional tools. Developers who want to modify or contribute to the plugin can use the **From Source** method, which requires Docker, Make, and Git.
+You can install the plugin either by downloading a pre-built release or by building it from source. Most users should use the **From Release** method, which does not require any additional tools. Developers who want to modify or contribute to the plugin can use the **From Source** method, which requires a container runtime (Docker or nerdctl), Make, and Git.
 
 ### From Release
 
@@ -26,7 +26,7 @@ You can install the plugin either by downloading a pre-built release or by build
 
 To build the plugin from source, you will need:
 
-- **[Docker](https://www.docker.com/)**: Required for building and running the plugin in a containerized environment.
+- A container runtime: Either **[Docker](https://www.docker.com/)** or **[nerdctl](https://github.com/containerd/nerdctl)**. The build process will automatically use whichever is available.
 - **[Make](https://www.gnu.org/software/make/)**: Required for building and running the Makefile to manage the plugin’s build process.
 - A Git repository initialized in the project directory: Required for automatic versioning and tagging.
 
@@ -94,8 +94,8 @@ The ticket interpreter agent is an AI-powered tool designed to process GitHub is
 
 Before running the ticket interpreter agent, ensure you have the following:
 
-- [Docker](https://www.docker.com/): Required to run the agent in a containerized environment.
-- [Make](https://www.gnu.org/software/make/): Required to execute the Makefile commands.
+- A container runtime: Either **[Docker](https://www.docker.com/)** or **[nerdctl](https://github.com/containerd/nerdctl)**.
+- **[Make](https://www.gnu.org/software/make/)**: Required to execute the Makefile commands.
 - Environment Variables:
   - GITHUB_TOKEN: A GitHub personal access token with repository access. Obtain one from [GitHub Settings](https://github.com/settings/tokens).
   - OLLAMA_HOST: The URL of your Ollama LLM service (default: http://localhost:11434).
@@ -130,8 +130,8 @@ The ticket interpreter agent includes unit and integration tests to verify its f
 
 ### Prerequisites
 
-- Docker: Required to run the tests in a containerized environment.
-- Make: Required to execute the Makefile commands.
+- A container runtime: Either **[Docker](https://www.docker.com/)** or **[nerdctl](https://github.com/containerd/nerdctl)**.
+- **[Make](https://www.gnu.org/software/make/)**: Required to execute the Makefile commands.
 - Environment Variables: Same as for running the agent (GITHUB_TOKEN, OLLAMA_HOST, OLLAMA_MODEL), plus:
   - TEST_ISSUE_URL: A base GitHub repository URL (e.g., https://github.com/andyholst/obsidian-timestamp-utility) used by integration tests.
 
@@ -164,7 +164,7 @@ For those interested in contributing:
 
 1. Clone the Repository: git clone https://github.com/andyholst/obsidian-timestamp-utility.git
 2. Install Dependencies:
-   - Ensure you have Docker and Make installed.
+   - Ensure you have a container runtime (either Docker or nerdctl) and Make installed.
 3. Build and Test:
    - Use the Makefile commands to build, test, and run the plugin and agent as described above.
 4. Contribute:
