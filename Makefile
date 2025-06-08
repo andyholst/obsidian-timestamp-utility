@@ -1,67 +1,65 @@
-DOCKER_COMPOSE_VERSION := v2.32.0
-DOCKER_COMPOSE_PATH := .tools/docker-compose
+# Variables
+CONTAINER_RUNTIME := $(shell command -v nerdctl || command -v docker)
+ifeq ($(CONTAINER_RUNTIME),)
+$(error "Neither nerdctl nor docker is installed")
+endif
+CONTAINERD_CMD := ./containerd_wrapper.sh
 DOCKER_COMPOSE_FILE := docker-compose-files/tools.yaml
 REPO_NAME := obsidian-timestamp-utility
 VERSION := $(shell node -p "require('./package.json').version")
 TAG := $(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
-
 DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yaml
 
 .PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-agentics generate-requirements
 
 all: build-app test-app release
 
-$(DOCKER_COMPOSE_PATH):
-	mkdir -p .tools
-	curl -L "https://github.com/docker/compose/releases/download/$(DOCKER_COMPOSE_VERSION)/docker-compose-$(shell uname -s | tr '[:upper:]' '[:lower:]')-$(shell uname -m)" -o $(DOCKER_COMPOSE_PATH)
-	chmod +x $(DOCKER_COMPOSE_PATH)
-
-build-image: $(DOCKER_COMPOSE_PATH)
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) build --build-arg REPO_NAME=$(REPO_NAME)
+build-image:
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE) build --build-arg REPO_NAME=$(REPO_NAME)
 
 build-app: build-image
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
-			npm install --loglevel=silly && \
-			npm run build-package"
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
+						npm install --loglevel=silly && \
+						npm run build-package"
 
 test-app: build-app
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
-			npm install --loglevel=silly && \
-			npm test"
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
+						npm install --loglevel=silly && \
+						npm test"
 
 changelog: build-image
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
-			chmod +x /app/changelog.sh && \
-			/app/changelog.sh"
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
+						chmod +x /app/changelog.sh && \
+						/app/changelog.sh"
 
 release: clean build-app
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
-			chmod +x /app/release.sh && \
-			find /app -name '*.sh' -exec dos2unix {} \; || { echo 'Error: dos2unix failed on some .sh files'; exit 1; } && \
-			/app/release.sh"
-	test -f release/release-timestamp-utility-$(TAG).zip || { echo "Release zip not created"; exit 1; }
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE) run --rm -e TAG=$(TAG) -e REPO_NAME=$(REPO_NAME) app /bin/bash -c "\
+						chmod +x /app/release.sh && \
+						find /app -name '*.sh' -exec dos2unix {} \; || { echo 'Error: dos2unix failed on some .sh files'; exit 1; } && \
+						/app/release.sh"
+		test -f release/release-timestamp-utility-$(TAG).zip || { echo "Release zip not created"; exit 1; }
 
 clean:
-	rm -rf .tools release dist
+		rm -rf release dist
 
-build-generate-requirements: $(DOCKER_COMPOSE_PATH)
-	docker build -t pip-requirements -f docker-files/pip-requirements/Dockerfile .
+build-generate-requirements:
+		$(CONTAINERD_CMD) build -t pip-requirements -f docker-files/pip-requirements/Dockerfile .
 
 generate-requirements: build-generate-requirements
-	docker run --rm -v $(PWD)/agents/agentics:/app pip-requirements
+		$(CONTAINERD_CMD) run --rm -v $(PWD)/agents/agentics:/app pip-requirements
 
-build-image-agents: $(DOCKER_COMPOSE_PATH)
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
+build-image-agents:
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
 
 run-agentics: build-image-agents
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics
 
 test-agents-unit: build-image-agents
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents
 
 test-agents-integration: build-image-agents
-	$(DOCKER_COMPOSE_PATH) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm integration-test-agents
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm integration-test-agents
 
 test-agents: test-agents-unit test-agents-integration
 
