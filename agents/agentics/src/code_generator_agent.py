@@ -101,6 +101,10 @@ class CodeGeneratorAgent(BaseAgent):
             generated_code = clean_code_response.strip()
             log_info(self.logger, f"Generated code length: {len(generated_code)}")
             log_info(self.logger, f"Generated code: {generated_code}")
+            # TODO: We should add a new LLM prompt or integrate with the existing one that add the new imports of modules if they are being are used
+            # If the imports are not being used, be sure to remove the accordingly, the new imports of the modules
+            # Should be added to the state class with list of modules to be used later by the
+            # package manager agent to update the dependencies accordingly
 
             method_match = re.search(r'(public|private|protected)?\s*(\w+)\s*\(', generated_code)
             if method_match:
