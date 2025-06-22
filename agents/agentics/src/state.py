@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Dict
+from typing import TypedDict, List, Dict, Optional
 
 class State(TypedDict):
     url: str
@@ -11,3 +11,4 @@ class State(TypedDict):
     existing_coverage_all_files: float
     relevant_code_files: List[Dict[str, str]]
     relevant_test_files: List[Dict[str, str]]
+    new_modules: Optional[List[str]]

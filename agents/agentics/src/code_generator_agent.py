@@ -6,6 +6,7 @@ import os
 from .base_agent import BaseAgent
 from .state import State
 from .utils import remove_thinking_tags, log_info
+from .import_utils import filter_imports
 
 class CodeGeneratorAgent(BaseAgent):
     def __init__(self, llm_client):
@@ -15,57 +16,6 @@ class CodeGeneratorAgent(BaseAgent):
         self.test_file = os.getenv('TEST_FILE', 'main.test.ts')
         self.logger.setLevel(logging.INFO)
         log_info(self.logger, f"Initialized with main file: {self.main_file}, test file: {self.test_file}")
-
-    def parse_import(self, line: str) -> dict | None:
-        """Parse a TypeScript import statement."""
-        # Default import: e.g., import Plugin from 'obsidian';
-        match = re.match(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];", line)
-        if match:
-            return {'type': 'default', 'module': match.group(2), 'symbol': match.group(1)}
-        
-        # Named import: e.g., import { App, Plugin as MyPlugin } from 'obsidian';
-        match = re.match(r"import\s+\{\s*([\w,\s]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"];", line)
-        if match:
-            symbols_str = match.group(1)
-            module = match.group(2)
-            symbols = []
-            for sym in re.finditer(r"(\w+)(?:\s+as\s+(\w+))?", symbols_str):
-                original = sym.group(1)
-                alias = sym.group(2)
-                symbols.append({'original': original, 'alias': alias})
-            return {'type': 'named', 'module': module, 'symbols': symbols}
-        
-        # Namespace import: e.g., import * as obsidian from 'obsidian';
-        match = re.match(r"import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];", line)
-        if match:
-            return {'type': 'namespace', 'module': match.group(2), 'symbol': match.group(1)}
-        
-        # Side-effect import: e.g., import 'module';
-        match = re.match(r"import\s+['\"]([^'\"]+)['\"];", line)
-        if match:
-            return {'type': 'side-effect', 'module': match.group(1)}
-        
-        return None
-
-    def is_symbol_used(self, symbol: str, code_body: str, is_namespace: bool = False) -> bool:
-        """Check if a symbol is used in the code body."""
-        pattern = r"\b" + re.escape(symbol) + r"\.\w+" if is_namespace else r"\b" + re.escape(symbol) + r"\b"
-        return bool(re.search(pattern, code_body))
-
-    def reconstruct_import(self, imp: dict) -> str:
-        """Reconstruct an import statement."""
-        if imp['type'] == 'side-effect':
-            return f"import '{imp['module']}';"
-        elif imp['type'] == 'default':
-            return f"import {imp['symbol']} from '{imp['module']}';"
-        elif imp['type'] == 'namespace':
-            return f"import * as {imp['symbol']} from '{imp['module']}';"
-        elif imp['type'] == 'named':
-            symbols_str = ', '.join(
-                f"{sym['original']} as {sym['alias']}" if sym['alias'] else sym['original']
-                for sym in imp['symbols']
-            )
-            return f"import {{ {symbols_str} }} from '{imp['module']}';"
 
     def process(self, state: State) -> State:
         log_info(self.logger, f"Before processing in {self.name}: {json.dumps(state, indent=2)}")
@@ -153,37 +103,14 @@ class CodeGeneratorAgent(BaseAgent):
             log_info(self.logger, f"Generated code length: {len(generated_code)}")
             log_info(self.logger, f"Generated code: {generated_code}")
 
-            # Filter unused imports
-            lines = generated_code.split('\n')
-            import_lines = [line for line in lines if line.strip().startswith('import')]
-            code_body_lines = [line for line in lines if not line.strip().startswith('import')]
-            code_body = '\n'.join(code_body_lines)
+            # Filter unused imports and track new modules
+            filtered_code, new_modules = filter_imports(generated_code)
+            state['generated_code'] = filtered_code
+            state['new_modules'] = new_modules
+            log_info(self.logger, f"Filtered code: {filtered_code}")
+            log_info(self.logger, f"New modules: {new_modules}")
 
-            imports = [self.parse_import(line) for line in import_lines if self.parse_import(line)]
-            filtered_imports = []
-            for imp in imports:
-                if imp['type'] == 'side-effect':
-                    filtered_imports.append(imp)
-                elif imp['type'] == 'default':
-                    if self.is_symbol_used(imp['symbol'], code_body):
-                        filtered_imports.append(imp)
-                elif imp['type'] == 'namespace':
-                    if self.is_symbol_used(imp['symbol'], code_body, is_namespace=True):
-                        filtered_imports.append(imp)
-                elif imp['type'] == 'named':
-                    used_symbols = [
-                        sym for sym in imp['symbols']
-                        if self.is_symbol_used(sym['alias'] or sym['original'], code_body)
-                    ]
-                    if used_symbols:
-                        filtered_imports.append({'type': 'named', 'module': imp['module'], 'symbols': used_symbols})
-
-            filtered_import_lines = [self.reconstruct_import(imp) for imp in filtered_imports]
-            generated_code = '\n'.join(filtered_import_lines + code_body_lines)
-            log_info(self.logger, f"Filtered imports: {filtered_import_lines}")
-            log_info(self.logger, f"Final generated code: {generated_code}")
-
-            method_match = re.search(r'(public|private|protected)?\s*(\w+)\s*\(', generated_code)
+            method_match = re.search(r'(public|private|protected)?\s*(\w+)\s*\(', filtered_code)
             if method_match:
                 method_name = method_match.group(2)
                 log_info(self.logger, f"Extracted method name: {method_name}")
@@ -191,7 +118,7 @@ class CodeGeneratorAgent(BaseAgent):
                 self.logger.error("Could not find method name in generated code")
                 raise ValueError("Could not find method name in generated code")
 
-            command_match = re.search(r'this\.addCommand\(\{\s*id:\s*["\']([^"\']+)["\']', generated_code)
+            command_match = re.search(r'this\.addCommand\(\{\s*id:\s*["\']([^"\']+)["\']', filtered_code)
             if command_match:
                 command_id = command_match.group(1)
                 log_info(self.logger, f"Extracted command ID: {command_id}")
@@ -236,7 +163,7 @@ class CodeGeneratorAgent(BaseAgent):
                 "3. **Task Details:**\n"
                 f"{task_details_str}\n\n"
                 "4. **Generated Code:**\n"
-                f"{generated_code}\n\n"
+                f"{filtered_code}\n\n"
                 f"5. **Existing Test File ({self.test_file}):**\n"
                 f"{existing_test_content}\n\n"
                 "6. **Output Instructions:**\n"
@@ -263,7 +190,7 @@ class CodeGeneratorAgent(BaseAgent):
                 "2. **Task Details:**\n"
                 f"{task_details_str}\n\n"
                 "3. **Generated Code:**\n"
-                f"{generated_code}\n\n"
+                f"{filtered_code}\n\n"
                 "4. **Output Instructions:**\n"
                 f"   - Return only the two `describe` blocks.\n"
                 f"   - The first block must start with `describe('TimestampPlugin: {method_name}', () => {{`.\n"
@@ -283,7 +210,7 @@ class CodeGeneratorAgent(BaseAgent):
             log_info(self.logger, f"Generated tests length: {len(generated_tests)}")
             log_info(self.logger, f"Generated tests: {generated_tests}")
 
-            state['generated_code'] = generated_code
+            state['generated_code'] = filtered_code
             state['generated_tests'] = generated_tests
             log_info(self.logger, "Code and tests generated and stored in state successfully")
             log_info(self.logger, f"After processing in {self.name}: {json.dumps(state, indent=2)}")
