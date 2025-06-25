@@ -1,5 +1,5 @@
 import pytest
-from import_utils import filter_imports, parse_import, is_symbol_used, reconstruct_import
+from src.import_utils import filter_imports, parse_import, is_symbol_used, reconstruct_import
 
 # Fixture to normalize code strings by stripping whitespace and ensuring consistent newlines
 @pytest.fixture
@@ -272,6 +272,3 @@ def test_reconstruct_named_import():
         'symbols': [{'original': 'App', 'alias': None}, {'original': 'Plugin', 'alias': 'MyPlugin'}]
     }
     assert reconstruct_import(imp) == "import { App, Plugin as MyPlugin } from 'obsidian';"
-
-# Note: Current implementation may incorrectly retain imports when symbols appear in strings or comments
-# This is a known limitation that could be addressed with a more sophisticated parser
