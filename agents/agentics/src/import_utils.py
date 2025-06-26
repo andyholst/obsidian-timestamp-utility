@@ -13,14 +13,15 @@ def clean_code_body(code: str) -> str:
     return code
 
 def parse_import(line: str) -> Optional[Dict]:
-    """Parse a TypeScript import statement, allowing leading whitespace."""
+    """Parse a TypeScript import statement, normalizing whitespace."""
+    line = line.strip()  # Remove leading/trailing whitespace
     # Default import: e.g., import Plugin from 'obsidian';
-    match = re.match(r"^\s*import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];", line)
+    match = re.match(r"import\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];", line)
     if match:
         return {'type': 'default', 'module': match.group(2), 'symbol': match.group(1)}
     
     # Named import: e.g., import { App, Plugin as MyPlugin } from 'obsidian';
-    match = re.match(r"^\s*import\s+\{\s*([\w,\s]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"];", line)
+    match = re.match(r"import\s+\{\s*([\w,\s]+)\s*\}\s+from\s+['\"]([^'\"]+)['\"];", line)
     if match:
         symbols_str = match.group(1)
         module = match.group(2)
@@ -32,12 +33,12 @@ def parse_import(line: str) -> Optional[Dict]:
         return {'type': 'named', 'module': module, 'symbols': symbols}
     
     # Namespace import: e.g., import * as obsidian from 'obsidian';
-    match = re.match(r"^\s*import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];", line)
+    match = re.match(r"import\s+\*\s+as\s+(\w+)\s+from\s+['\"]([^'\"]+)['\"];", line)
     if match:
         return {'type': 'namespace', 'module': match.group(2), 'symbol': match.group(1)}
     
     # Side-effect import: e.g., import 'module';
-    match = re.match(r"^\s*import\s+['\"]([^'\"]+)['\"];", line)
+    match = re.match(r"import\s+['\"]([^'\"]+)['\"];", line)
     if match:
         return {'type': 'side-effect', 'module': match.group(1)}
     
@@ -50,7 +51,7 @@ def is_symbol_used(symbol: str, code_body: str, is_namespace: bool = False) -> b
     return bool(re.search(pattern, cleaned_code))
 
 def reconstruct_import(imp: Dict) -> str:
-    """Reconstruct an import statement."""
+    """Reconstruct an import statement with standardized spacing."""
     if imp['type'] == 'side-effect':
         return f"import '{imp['module']}';"
     elif imp['type'] == 'default':
@@ -65,7 +66,7 @@ def reconstruct_import(imp: Dict) -> str:
         return f"import {{ {symbols_str} }} from '{imp['module']}';"
 
 def filter_imports(code: str) -> Tuple[str, List[str]]:
-    """Filter unused imports from the code and track new modules."""
+    """Filter unused imports from the code and track new modules, excluding comments from code body."""
     lines = code.split('\n')
     import_lines = []
     code_body_lines = []
@@ -77,7 +78,7 @@ def filter_imports(code: str) -> Tuple[str, List[str]]:
                 import_lines.append(line)
             else:
                 code_body_lines.append(line)
-        else:
+        elif not stripped.startswith('//'):  # Exclude standalone comment lines
             code_body_lines.append(line)
     code_body = '\n'.join(code_body_lines)
 
