@@ -1,7 +1,9 @@
-PyGitHub==2.*
-langchain-ollama==0.*
-langchain-community==0.*
-pytest
-pytest-mock
-langgraph==0.*
-sentence-transformers
+PyGitHub==2.*  # GitHub API; ~2.4.0 for 2025 OAuth fixes
+langchain-community==0.*  # Tools/RAG; ~0.2.5 stable
+langchain-ollama==0.*  # Ollama LLM; ~0.1.0 for local
+langgraph==0.*  # Agents/graphs; ~0.1.0
+sentence-transformers  # Embeddings; ~3.0.1 HF compat
+
+# Testing/Dev (added section; use --extra=dev)
+pytest  # ~8.2.2
+pytest-mock  # ~3.14.0

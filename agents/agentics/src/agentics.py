@@ -1,11 +1,15 @@
+# agentics.py
 import os
 import sys
 import logging
+import json
+from typing import Dict, Any
 
 from github import Github, Auth
 from langchain_ollama import OllamaLLM
 from langchain.prompts import PromptTemplate
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
 from .state import State
 from .fetch_issue_agent import FetchIssueAgent
 from .ticket_clarity_agent import TicketClarityAgent
@@ -46,6 +50,12 @@ log_info(logger, f"Using GITHUB_TOKEN: {'set' if GITHUB_TOKEN else 'not set'}")
 log_info(logger, f"OLLAMA_HOST: {OLLAMA_HOST}")
 log_info(logger, f"OLLAMA_MODEL: {OLLAMA_MODEL}")
 
+# Load knowledge base for pseudo-RAG
+knowledge_path = os.path.join(os.path.dirname(__file__), 'knowledge.json')
+with open(knowledge_path, 'r') as f:
+    knowledge = json.load(f)
+log_info(logger, "Knowledge base loaded successfully")
+
 # Initialize clients
 log_info(logger, "Initializing GitHub client")
 auth = Auth.Token(GITHUB_TOKEN)
@@ -56,56 +66,49 @@ log_info(logger, "Initializing Ollama LLM client")
 llm = OllamaLLM(
     model=OLLAMA_MODEL,
     base_url=OLLAMA_HOST,
-    temperature=0.7,  # Lowered to reduce hallucinations
-    top_p=0.7,        # Adjusted for more focused output
-    top_k=20,
+    temperature=0.3,  # Lowered for less hallucinations
+    top_p=0.5,
+    top_k=10,
     min_p=0,
     extra_params={
-        "presence_penalty": 1.5,
-        "num_ctx": 32768,
-        "num_predict": 32768
+        "presence_penalty": 1.5,  # Added to reduce repetition/hallucinations
+        "num_ctx": 8192,  # Balanced context
+        "num_predict": 8192
     }
 )
 log_info(logger, "Ollama LLM client initialized successfully")
 
-# Define the prompt template with generic instructions and thinking mode enabled
+# Define the prompt template with optimized instructions
 log_info(logger, "Defining prompt template")
 prompt_template = PromptTemplate(
     input_variables=["ticket_content"],
     template=(
         "/think\n"
-        "You are an AI assistant analyzing GitHub tickets for software applications. Your task is to extract or infer the following fields from the ticket content and return them in a structured JSON format:\n\n"
-        "- **Title**: Use the first line of the ticket content as the title. If the ticket is empty or lacks a clear title, generate a default title like 'Untitled Task'.\n"
-        "- **Description**: Identify or infer a concise description. If the ticket is empty, provide a default description like 'No description provided'.\n"
-        "- **Requirements**: List specific tasks or conditions. If none are provided, return an empty list.\n"
-        "- **Acceptance Criteria**: List verifiable conditions. If none are provided, return an empty list.\n\n"
-        "Return only a JSON object with the fields title, description, requirements, and acceptance_criteria. Ensure your response is a valid JSON object with no additional text or code blocks.\n\n"
-        "Ticket content:\n{ticket_content}\n\n"
-        "Expected JSON format:\n"
-        "{{\n"
-        "  \"title\": \"string\",\n"
-        "  \"description\": \"string\",\n"
-        "  \"requirements\": [\"string\", ...],\n"
-        "  \"acceptance_criteria\": [\"string\", ...]\n"
-        "}}"
+        "Extract or infer from the ticket: title (first line or 'Untitled Task'), "
+        "description (concise summary or 'No description provided'), "
+        "requirements (list or empty), acceptance_criteria (list or empty). "
+        "Stick to ticket facts; no assumptions. Return only JSON object.\n\n"
+        "Ticket: {ticket_content}\n\n"
+        "Format: {{\"title\": \"str\", \"description\": \"str\", \"requirements\": [\"str\"], \"acceptance_criteria\": [\"str\"]}}"
     )
 )
 log_info(logger, "Prompt template defined successfully")
 
-# Instantiate agents
+# Instantiate agents (pass knowledge to relevant ones)
 log_info(logger, "Instantiating agents")
 fetch_issue_agent = FetchIssueAgent(github)
 ticket_clarity_agent = TicketClarityAgent(llm, github)
 code_extractor_agent = CodeExtractorAgent(llm)
 process_llm_agent = ProcessLLMAgent(llm, prompt_template)
-code_generator_agent = CodeGeneratorAgent(llm)
+code_generator_agent = CodeGeneratorAgent(llm, knowledge)
 pre_test_runner_agent = PreTestRunnerAgent()
 code_integrator_agent = CodeIntegratorAgent(llm)
 output_result_agent = OutputResultAgent()
 log_info(logger, "Agents instantiated successfully")
 
-# Define the LangGraph workflow
+# Define the LangGraph workflow with checkpointing for efficiency
 log_info(logger, "Defining LangGraph workflow")
+memory = SqliteSaver.from_conn_string(":memory:")  # In-memory checkpointing
 graph = StateGraph(State)
 graph.add_node("pre_test_runner", pre_test_runner_agent)
 graph.add_node("fetch_issue", fetch_issue_agent)
@@ -116,7 +119,14 @@ graph.add_node("generate_code", code_generator_agent)
 graph.add_node("integrate_code", code_integrator_agent)
 graph.add_node("output_result", output_result_agent)
 
-# Define the flow
+# Define the flow with error handling
+def should_continue(state: State) -> str:
+    if 'error' in state:
+        return END
+    return "next_node"
+
+graph.add_conditional_edges("fetch_issue", should_continue, {"next_node": "ticket_clarity", END: END})
+
 log_info(logger, "Defining workflow edges")
 graph.add_edge("pre_test_runner", "fetch_issue")
 graph.add_edge("fetch_issue", "ticket_clarity")
@@ -128,7 +138,7 @@ graph.add_edge("integrate_code", "output_result")
 graph.add_edge("output_result", END)
 
 graph.set_entry_point("pre_test_runner")
-app = graph.compile()
+app = graph.compile(checkpointer=memory)  # Enable checkpointing
 log_info(logger, "Workflow defined and compiled successfully")
 
 # Main execution
@@ -139,7 +149,7 @@ if __name__ == "__main__":
         sys.exit(1)
     issue_url = sys.argv[1]
     log_info(logger, f"Processing issue URL: {issue_url}")
-    initial_state = {"url": issue_url}
+    initial_state: Dict[str, Any] = {"url": issue_url}
     try:
         log_info(logger, "Invoking workflow")
         app.invoke(initial_state)

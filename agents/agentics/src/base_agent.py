@@ -1,4 +1,6 @@
+# base_agent.py
 import logging
+from typing import Any
 from .state import State
 from .config import LOGGER_LEVEL
 
@@ -16,7 +18,8 @@ class BaseAgent:
             return state
         except Exception as e:
             self.logger.error(f"Error in agent {self.name}: {str(e)}")
-            raise
+            state['error'] = str(e)  # Add error to state
+            return state
 
     def process(self, state: State) -> State:
         raise NotImplementedError("Subclasses must implement this method")

@@ -1,0 +1,4 @@
+{
+  "uuid_v7_spec": "UUIDv7 bit layout: 48-bit Unix timestamp in ms (bits 0-47), 4-bit version=0111 (bits 48-51), 12-bit rand_a (bits 52-63), 2-bit variant=10 (bits 64-65), 62-bit rand_b (bits 66-127). Use crypto.getRandomValues for secure random. Format: xxxxxxxx-xxxx-7xxx-yxxx-xxxxxxxxxxxx (y=8- b for variant). Example JS impl: Use timestamp = BigInt(Date.now()), set version/variant bits, fill random with Uint8Array.",
+  "obsidian_add_command_example": "In Obsidian TypeScript plugin: this.addCommand({ id: 'insert-uuid', name: 'Insert UUID', editorCallback: (editor, view) => { if (!view) { new Notice('No active note'); return; } const uuid = generateUUIDv7(); editor.replaceSelection(uuid); } }); To insert at cursor: editor.replaceRange(text, editor.getCursor()); Secure random: crypto.getRandomValues(new Uint8Array(16));"
+}
