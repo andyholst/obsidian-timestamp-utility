@@ -2,6 +2,24 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.9
+
+### ✨ New Features
+
+- **add task command to convert reminders to calendar tasks**
+- **add new "Convert Reminders to Date Time-Blocked Tasks" command**
+- **implement folder selection modal with fuzzy search interface**
+- **Create taskProcessor.ts with reminder parsing and time-blocking**
+- **add comprehensive unit tests for task processing functionality**
+- **process reminders in format "- [ ] Task (@YYYY-MM-DD HH:MM)" to time-blocked tasks**
+- **Organize tasks by date in daily files (YYYY-MM-DD.md)**
+- **Preserve existing checked tasks and merge with new ones**
+- **Use Obsidian's file system API for folder and file operations**
+
+### 📝 Documentation
+
+- **update README.md with new command documentation**
+
 ## 0.4.8
 
 ### ✨ New Features

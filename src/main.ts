@@ -1,4 +1,5 @@
 import * as obsidian from 'obsidian';
+import { FolderSelectorModal } from './folderSelectorModal';
 
 // Parses a date string in YYYYMMDD format and validates it
 function parseDateString(dateStr: string): Date | null {
@@ -144,6 +145,15 @@ export default class TimestampPlugin extends obsidian.Plugin {
                 const modal = new DateRangeModal(this.app, (rangeText) => {
                     editor.replaceSelection(rangeText);
                 });
+                modal.open();
+            },
+        });
+
+        this.addCommand({
+            id: 'process-tasks',
+            name: 'Convert Reminders to Date Time-Blocked Tasks',
+            callback: () => {
+                const modal = new FolderSelectorModal(this.app);
                 modal.open();
             },
         });

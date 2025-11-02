@@ -1,12 +1,13 @@
 # Timestamp Plugin for Obsidian
 
-This plugin enhances your Obsidian experience by adding five convenient commands for working with timestamps and date ranges to support the Zettelkasten method:
+This plugin enhances your Obsidian experience by adding six convenient commands for working with timestamps, date ranges, and task processing to support the Zettelkasten notes and effecient planning:
 
 - **Insert Current Timestamp (YYYYMMDDHHMMSS)**: Inserts a timestamp at the cursor position in the format `YYYYMMDDHHMMSS` (e.g., `20250221134527` for February 21, 2025, 1:45:27 PM).
 - **Rename Current File with Timestamp Prefix (YYYYMMDDHHMMSS)**: Renames the active file by adding a timestamp prefix in the format `YYYYMMDDHHMMSS_filename` (e.g., `20250221134527_notes.md`).
 - **Rename Current File with Timestamp as Prefix and First Heading Title as Filename**: Renames the active file using a timestamp prefix and the first heading title from the file content in the format `YYYYMMDDHHMMSS_title` (e.g., `20250221134527_my_awesome_title.md`). If no heading is found, it uses "untitled" (e.g., `20250221134527_untitled.md`).
 - **Rename Current File with the First Heading Title as Filename**: Renames the active file using the first level 1 heading (e.g., `# My Awesome Title`) as the filename (e.g., `my_awesome_title.md`). If no heading is found, it uses "untitled" (e.g., `untitled.md`).
 - **Insert Dates in Range (YYYY-MM-DD, one per line)**: Opens a modal where you can input a start and end date in `YYYYMMDD` format. It then inserts a list of dates from the start to the end date (inclusive) in `YYYY-MM-DD` format, each on a new line.
+- **Convert Reminders to Date-Time-Blocked Tasks**: Processes reminders in notes in a selected source folder and converts them into time-blocked tasks organized by date in a selected output folder. Reminders in the format `- [ ] Task description (@YYYY-MM-DD HH:MM)` are transformed into tasks like `- [ ] HH:MM - HH:MM Task description` and grouped into daily files to be synced with ICAL services (like `2025-01-01.md`).
 
 ## Installation
 
@@ -81,10 +82,27 @@ To insert a list of dates in `YYYY-MM-DD` format between a start and end date:
 5. Enter the end date in `YYYYMMDD` format (e.g., `20250105` for January 5, 2025).
 6. Click "Insert Dates" to insert the list of dates, each on a new line, at the cursor position. The output will be a list of dates in `YYYY-MM-DD` format from the start date to the end date, inclusive.
 
-**Note**: 
+**Note**:
 - The start date must be before or equal to the end date.
 - Both dates must be valid and entered in `YYYYMMDD` format (e.g., `20250230` is invalid and will trigger an error message).
-- If the input is invalid, a notice will appear in Obsidian (e.g., "Invalid start date. Please use YYYYMMDD and ensure it’s a valid date.").
+- If the input is invalid, a notice will appear in Obsidian (e.g., "Invalid start date. Please use YYYYMMDD and ensure it's a valid date.").
+
+### Convert Reminders to Date-Time-Blocked Tasks
+
+To process reminder files and convert them into organized time-blocked tasks:
+
+1. Open the command palette (Ctrl+P or Cmd+P).
+2. Search for "Convert Reminders to Date Time-Blocked Tasks".
+3. Press Enter to open a folder selection modal.
+4. Select the source folder containing your reminder files using the fuzzy search interface.
+5. Select the output folder where processed tasks will be saved.
+6. The plugin will scan all Markdown files in the source folder (recursively), extract reminders in the format `- [ ] Task description (@YYYY-MM-DD HH:MM)`, convert them to time-blocked tasks like `- [ ] HH:MM - HH:MM Task description`, and organize them into daily files (e.g., `2025-01-01.md`) in the output folder.
+
+**Note**:
+- The source and output folders must be different.
+- Existing checked tasks (`- [x]`) in output files are preserved.
+- Unchecked tasks are updated if they match current reminders.
+- New tasks are added to existing files or new files are created as needed.
 
 ## Running the Ticket Interpreter Agent
 
