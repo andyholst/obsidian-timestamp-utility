@@ -45,8 +45,8 @@ def test_code_extractor_agent_relevant_files(temp_project_dir):
     assert "src/utils.ts" not in code_paths, "utils.ts should not be included in code files"
     assert "src/utils.ts" not in test_paths, "utils.ts should not be included in test files"
 
-def test_code_extractor_agent_no_relevant_files(temp_project_dir):
-    # Given: A ticket with no specific file mentions
+def test_code_extractor_agent_always_returns_main_files(temp_project_dir):
+    # Given: Any ticket (even vague ones)
     agent = CodeExtractorAgent(llm)
     agent.project_root = str(temp_project_dir)
     state = State(refined_ticket={
@@ -55,20 +55,22 @@ def test_code_extractor_agent_no_relevant_files(temp_project_dir):
         "requirements": [],
         "acceptance_criteria": []
     })
-    
-    # When: Processing the ticket with real LLM
+
+    # When: Processing the ticket
     result = agent.process(state)
-    
-    # Then: Verify no relevant files are found
+
+    # Then: Always returns main.ts and main.test.ts for this Obsidian plugin
     relevant_code_files = result["relevant_code_files"]
     relevant_test_files = result["relevant_test_files"]
     assert isinstance(relevant_code_files, list), "Relevant code files should be a list"
     assert isinstance(relevant_test_files, list), "Relevant test files should be a list"
-    assert len(relevant_code_files) == 0 or all("main.ts" not in f["file_path"] for f in relevant_code_files), "No relevant code files expected"
-    assert len(relevant_test_files) == 0 or all("main.test.ts" not in f["file_path"] for f in relevant_test_files), "No relevant test files expected"
+    assert len(relevant_code_files) == 1, "Should always return exactly one code file"
+    assert len(relevant_test_files) == 1, "Should always return exactly one test file"
+    assert relevant_code_files[0]["file_path"] == "src/main.ts", "Should always return src/main.ts"
+    assert relevant_test_files[0]["file_path"] == "src/__tests__/main.test.ts", "Should always return src/__tests__/main.test.ts"
 
-def test_code_extractor_agent_no_ts_files(tmp_path):
-    # Given: An empty project directory
+def test_code_extractor_agent_returns_main_files_even_if_not_exist(tmp_path):
+    # Given: An empty project directory with no .ts files
     agent = CodeExtractorAgent(llm)
     agent.project_root = str(tmp_path)
     state = State(refined_ticket={
@@ -77,13 +79,18 @@ def test_code_extractor_agent_no_ts_files(tmp_path):
         "requirements": [],
         "acceptance_criteria": []
     })
-    
-    # When: Processing the ticket with real LLM
+
+    # When: Processing the ticket
     result = agent.process(state)
-    
-    # Then: Verify no files are found
-    assert result["relevant_code_files"] == [], "Expected empty relevant code files list"
-    assert result["relevant_test_files"] == [], "Expected empty relevant test files list"
+
+    # Then: Still returns main.ts and main.test.ts (with empty content if files don't exist)
+    assert len(result["relevant_code_files"]) == 1, "Should always return exactly one code file"
+    assert len(result["relevant_test_files"]) == 1, "Should always return exactly one test file"
+    assert result["relevant_code_files"][0]["file_path"] == "src/main.ts", "Should always return src/main.ts"
+    assert result["relevant_test_files"][0]["file_path"] == "src/__tests__/main.test.ts", "Should always return src/__tests__/main.test.ts"
+    # Content will be empty string if file doesn't exist
+    assert result["relevant_code_files"][0]["content"] == "", "Content should be empty if file doesn't exist"
+    assert result["relevant_test_files"][0]["content"] == "", "Content should be empty if file doesn't exist"
 
 def test_code_extractor_agent_non_existent_files(temp_project_dir):
     # Given: A ticket mentioning non-existent files
@@ -161,8 +168,8 @@ def test_code_extractor_agent_stop_words_failure(temp_project_dir):
     assert "relevant_code_files" in result, "Should have relevant_code_files key"
     assert "relevant_test_files" in result, "Should have relevant_test_files key"
 
-def test_code_extractor_agent_empty_identifiers_with_files(temp_project_dir):
-    # Given: A ticket yielding no identifiers but files exist
+def test_code_extractor_agent_always_returns_main_files_regardless_of_ticket(temp_project_dir):
+    # Given: Any ticket content (even completely empty/vague)
     agent = CodeExtractorAgent(llm)
     agent.project_root = str(temp_project_dir)
     state = State(refined_ticket={
@@ -171,10 +178,12 @@ def test_code_extractor_agent_empty_identifiers_with_files(temp_project_dir):
         "requirements": [],
         "acceptance_criteria": []
     })
-    
-    # When: Processing the ticket with real LLM
+
+    # When: Processing the ticket
     result = agent.process(state)
-    
-    # Then: Verify no relevant files when identifiers are empty
-    assert result["relevant_code_files"] == [], "Expected empty relevant_code_files"
-    assert result["relevant_test_files"] == [], "Expected empty relevant_test_files"
+
+    # Then: Always returns main.ts and main.test.ts regardless of ticket content
+    assert len(result["relevant_code_files"]) == 1, "Should always return exactly one code file"
+    assert len(result["relevant_test_files"]) == 1, "Should always return exactly one test file"
+    assert result["relevant_code_files"][0]["file_path"] == "src/main.ts", "Should always return src/main.ts"
+    assert result["relevant_test_files"][0]["file_path"] == "src/__tests__/main.test.ts", "Should always return src/__tests__/main.test.ts"

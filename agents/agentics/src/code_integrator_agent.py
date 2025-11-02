@@ -29,6 +29,12 @@ class CodeIntegratorAgent(BaseAgent):
             task_details = state['result']
             relevant_code_files = state.get('relevant_code_files', [])
             relevant_test_files = state.get('relevant_test_files', [])
+
+            # If no relevant files or no generated code/tests, skip integration
+            if (not relevant_code_files and not relevant_test_files) or \
+               not state.get('generated_code') or not state.get('generated_tests'):
+                log_info(self.logger, "No relevant files or no generated code/tests; skipping integration")
+                return state
             log_info(self.logger, f"Task details received: {json.dumps(task_details, indent=2)}")
             log_info(self.logger, f"Relevant code files: {[file['file_path'] for file in relevant_code_files]}")
             log_info(self.logger, f"Relevant test files: {[file['file_path'] for file in relevant_test_files]}")
@@ -195,7 +201,7 @@ class CodeIntegratorAgent(BaseAgent):
         # Find the start of the top-level describe block
         describe_start_idx = -1
         for i, line in enumerate(existing_lines):
-            if line.strip().startswith("describe('TimestampPlugin',"):
+            if line.strip().startswith("describe('TimestampPlugin', "):
                 describe_start_idx = i
                 break
         if describe_start_idx == -1:

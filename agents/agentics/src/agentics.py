@@ -21,7 +21,8 @@ from .utils import log_info, validate_github_url
 # Environment variables
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
-OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'qwen2.5-coder:14b')
+OLLAMA_REASONING_MODEL = os.getenv('OLLAMA_REASONING_MODEL', 'qwen2.5:14b')
+OLLAMA_CODE_MODEL = os.getenv('OLLAMA_CODE_MODEL', 'qwen2.5-coder:14b')
 
 # Set up logging for prod.agentics
 logger = logging.getLogger(__name__)
@@ -44,7 +45,8 @@ root_logger.addHandler(root_console_handler)
 log_info(logger, "Initializing agentics application")
 log_info(logger, f"Using GITHUB_TOKEN: {'set' if GITHUB_TOKEN else 'not set'}")
 log_info(logger, f"OLLAMA_HOST: {OLLAMA_HOST}")
-log_info(logger, f"OLLAMA_MODEL: {OLLAMA_MODEL}")
+log_info(logger, f"OLLAMA_REASONING_MODEL: {OLLAMA_REASONING_MODEL}")
+log_info(logger, f"OLLAMA_CODE_MODEL: {OLLAMA_CODE_MODEL}")
 
 # Initialize clients
 log_info(logger, "Initializing GitHub client")
@@ -52,9 +54,9 @@ auth = Auth.Token(GITHUB_TOKEN)
 github = Github(auth=auth)
 log_info(logger, "GitHub client initialized successfully")
 
-log_info(logger, "Initializing Ollama LLM client")
-llm = OllamaLLM(
-    model=OLLAMA_MODEL,
+log_info(logger, "Initializing Ollama LLM clients")
+llm_reasoning = OllamaLLM(
+    model=OLLAMA_REASONING_MODEL,
     base_url=OLLAMA_HOST,
     temperature=0.7,  # Lowered to reduce hallucinations
     top_p=0.7,        # Adjusted for more focused output
@@ -66,7 +68,23 @@ llm = OllamaLLM(
         "num_predict": 32768
     }
 )
-log_info(logger, "Ollama LLM client initialized successfully")
+llm_code = OllamaLLM(
+    model=OLLAMA_CODE_MODEL,
+    base_url=OLLAMA_HOST,
+    temperature=0.7,  # Lowered to reduce hallucinations
+    top_p=0.7,        # Adjusted for more focused output
+    top_k=20,
+    min_p=0,
+    extra_params={
+        "presence_penalty": 1.5,
+        "num_ctx": 32768,
+        "num_predict": 32768
+    }
+)
+log_info(logger, "Ollama LLM clients initialized successfully")
+
+# Export LLM clients for testing
+llm = llm_code  # Default for backward compatibility
 
 # Define the prompt template with generic instructions and thinking mode enabled
 log_info(logger, "Defining prompt template")
@@ -95,12 +113,12 @@ log_info(logger, "Prompt template defined successfully")
 # Instantiate agents
 log_info(logger, "Instantiating agents")
 fetch_issue_agent = FetchIssueAgent(github)
-ticket_clarity_agent = TicketClarityAgent(llm, github)
-code_extractor_agent = CodeExtractorAgent(llm)
-process_llm_agent = ProcessLLMAgent(llm, prompt_template)
-code_generator_agent = CodeGeneratorAgent(llm)
+ticket_clarity_agent = TicketClarityAgent(llm_reasoning, github)
+code_extractor_agent = CodeExtractorAgent(llm_reasoning)
+process_llm_agent = ProcessLLMAgent(llm_reasoning, prompt_template)
+code_generator_agent = CodeGeneratorAgent(llm_code)
 pre_test_runner_agent = PreTestRunnerAgent()
-code_integrator_agent = CodeIntegratorAgent(llm)
+code_integrator_agent = CodeIntegratorAgent(llm_code)
 output_result_agent = OutputResultAgent()
 log_info(logger, "Agents instantiated successfully")
 

@@ -117,12 +117,14 @@ Before running the ticket interpreter agent, ensure you have the following:
 - Environment Variables:
   - GITHUB_TOKEN: A GitHub personal access token with repository access. Obtain one from [GitHub Settings](https://github.com/settings/tokens).
   - OLLAMA_HOST: The URL of your Ollama LLM service (default: http://localhost:11434).
-  - OLLAMA_MODEL: The LLM model to use (default: llama3).
+  - OLLAMA_REASONING_MODEL: The LLM model for reasoning tasks (default: qwen2.5:14b).
+  - OLLAMA_CODE_MODEL: The LLM model for code generation (default: qwen2.5-coder:14b).
 
 Set these environment variables in your terminal:
 export GITHUB_TOKEN=your_token_here
 export OLLAMA_HOST=http://localhost:11434
-export OLLAMA_MODEL=llama3
+export OLLAMA_REASONING_MODEL=qwen2.5:14b
+export OLLAMA_CODE_MODEL=qwen2.5-coder:14b
 
 ### Steps to Run the Agent
 
@@ -150,7 +152,7 @@ The ticket interpreter agent includes unit and integration tests to verify its f
 
 - A container runtime: Either **[Docker](https://www.docker.com/)** or **[nerdctl](https://github.com/containerd/nerdctl)**.
 - **[Make](https://www.gnu.org/software/make/)**: Required to execute the Makefile commands.
-- Environment Variables: Same as for running the agent (GITHUB_TOKEN, OLLAMA_HOST, OLLAMA_MODEL), plus:
+- Environment Variables: Same as for running the agent (GITHUB_TOKEN, OLLAMA_HOST, OLLAMA_REASONING_MODEL, OLLAMA_CODE_MODEL), plus:
   - TEST_ISSUE_URL: A base GitHub repository URL (e.g., https://github.com/andyholst/obsidian-timestamp-utility) used by integration tests.
 
 Set the additional variable:
