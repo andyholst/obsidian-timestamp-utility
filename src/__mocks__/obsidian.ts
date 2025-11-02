@@ -91,3 +91,35 @@ export class Modal {
 export class Notice {
   constructor() {}
 }
+
+export class FuzzySuggestModal<T> {
+  app: any;
+  constructor(app: any) {
+      this.app = app;
+  }
+  setPlaceholder(_placeholder: string) {}
+  getItems(): T[] {
+      return [];
+  }
+  getItemText(_item: T): string {
+      return '';
+  }
+  onChooseItem(_item: T): void {}
+  open() {}
+}
+
+export class TFolder {
+  path: string = '';
+  name: string = '';
+  parent: any = null;
+  children: any[] = [];
+  isRoot: boolean = false;
+  vault: any = {};
+}
+
+export class Vault {
+  adapter: any = {};
+  static recurseChildren(_root: any, _callback: (child: any) => void) {
+      // Mock implementation
+  }
+}
