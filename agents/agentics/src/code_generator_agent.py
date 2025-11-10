@@ -23,6 +23,18 @@ class CodeGeneratorAgent(BaseAgent):
             task_details = state['result']
             relevant_code_files = state.get('relevant_code_files', [])
             relevant_test_files = state.get('relevant_test_files', [])
+
+            # Check if ticket is vague (empty requirements and acceptance criteria)
+            requirements = task_details.get('requirements', [])
+            acceptance_criteria = task_details.get('acceptance_criteria', [])
+            is_vague_ticket = not requirements and not acceptance_criteria
+
+            # If ticket is vague, skip code generation
+            if is_vague_ticket:
+                log_info(self.logger, "Ticket is vague (empty requirements/acceptance criteria); skipping code generation")
+                state['generated_code'] = ""
+                state['generated_tests'] = ""
+                return state
             log_info(self.logger, f"Task details: {json.dumps(task_details, indent=2)}")
             title = task_details['title']
             description = task_details['description']
@@ -159,13 +171,19 @@ class CodeGeneratorAgent(BaseAgent):
                 f"5. **Existing Test File ({self.test_file}):**\n"
                 f"{existing_test_content}\n\n"
                 "6. **Output Instructions:**\n"
-                f"   - Return only the two `describe` blocks for `{method_name}` and `{command_id}`.\n"
+                f"   - Return only the two inner `describe` blocks for `{method_name}` and `{command_id}`.\n"
                 f"   - The first block must start with `describe('TimestampPlugin: {method_name}', () => {{`.\n"
                 f"   - The second block must start with `describe('TimestampPlugin: {command_id} command', () => {{`.\n"
                 "   - Each block must end with `});`.\n"
-                "   - Do not include any code outside these `describe` blocks, such as imports, `beforeEach`, or other setup code.\n"
-                "   - Ensure each `describe` block is indented with 4 spaces per level to match the existing file.\n"
-                "   - Your response must start with the first `describe` line and end with the last `});`, with no additional text, comments, or explanations."
+                "   - Do not include the top-level `describe('TimestampPlugin', ...)` block.\n"
+                "   - Do not include any imports, `beforeEach`, or other setup code.\n"
+                "   - Do not indent the describe blocks; they will be indented during integration.\n"
+                "   - Do not generate the complete test file; only the new inner describe blocks.\n"
+                "   - Your response must start with the first `describe` line and end with the last `});`, with no additional text, comments, or explanations.\n"
+                "   - Ensure the generated code is valid Jest syntax.\n"
+                "   - The tests should use the existing mocks (mockEditor, mockApp, mockFile, mockCommands) that are set up in the test file's beforeEach block.\n"
+                "   - For method tests, call the method on the plugin instance.\n"
+                "   - For command tests, access the command via mockCommands['{command_id}'] and call its callback."
             ) if existing_test_content else (
                 "/think\n"
                 "Generate TypeScript Jest tests for the new functionality added to the `TimestampPlugin` class in an Obsidian plugin. "

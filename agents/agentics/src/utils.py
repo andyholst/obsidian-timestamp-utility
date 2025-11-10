@@ -33,3 +33,48 @@ def log_info(logger, msg):
         logger.debug(msg)
     else:
         logger.info(msg)
+
+def parse_json_response(response: str):
+    """Parse JSON from LLM response, handling extra text after JSON."""
+    import json
+    logger.info(f"Parsing JSON response: {response}")
+    try:
+        result = json.loads(response.strip())
+        logger.info(f"Parsed JSON directly: {result}")
+        return result
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSONDecodeError: {str(e)}")
+        # Try to extract JSON from the response by finding the first valid JSON object
+        match = re.search(r'\{.*\}', response, re.DOTALL)
+        if match:
+            try:
+                result = json.loads(match.group(0))
+                logger.info(f"Recovered JSON from regex: {result}")
+                return result
+            except json.JSONDecodeError:
+                pass
+        # If regex fails, try to clean the response further
+        # Remove any extra text after the JSON
+        json_start = response.find('{')
+        if json_start != -1:
+            json_content = response[json_start:]
+            # Find the end of the JSON object by counting braces
+            brace_count = 0
+            end_pos = 0
+            for i, char in enumerate(json_content):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_pos = i + 1
+                        break
+            if brace_count == 0 and end_pos > 0:
+                try:
+                    result = json.loads(json_content[:end_pos])
+                    logger.info(f"Recovered JSON by brace counting: {result}")
+                    return result
+                except json.JSONDecodeError:
+                    pass
+        logger.error("Failed to parse JSON from response")
+        raise ValueError("LLM did not return a valid JSON object")

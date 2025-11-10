@@ -8,7 +8,7 @@ from .state import State
 from langchain_ollama import OllamaLLM
 from langchain.prompts import PromptTemplate
 from github import Github
-from .utils import remove_thinking_tags, log_info
+from .utils import remove_thinking_tags, log_info, parse_json_response
 
 class TicketClarityAgent(BaseAgent):
     def __init__(self, llm_client, github_client):
@@ -80,22 +80,9 @@ class TicketClarityAgent(BaseAgent):
         response = self.llm.invoke(prompt)
         clean_response = remove_thinking_tags(response)
         log_info(self.logger, f"LLM response for evaluate_clarity: {clean_response}")
-        try:
-            result = json.loads(clean_response.strip())
-            log_info(self.logger, f"Parsed evaluation: {result}")
-            return result
-        except json.JSONDecodeError as e:
-            self.logger.error(f"JSONDecodeError: {str(e)}")
-            match = re.search(r'\{.*\}', clean_response, re.DOTALL)
-            if match:
-                try:
-                    result = json.loads(match.group(0))
-                    log_info(self.logger, f"Recovered evaluation from regex: {result}")
-                    return result
-                except json.JSONDecodeError:
-                    pass
-            self.logger.error("LLM did not return a valid JSON object")
-            raise ValueError("LLM did not return a valid JSON object")
+        result = parse_json_response(clean_response)
+        log_info(self.logger, f"Parsed evaluation: {result}")
+        return result
 
     def generate_improvements(self, ticket_content, evaluation):
         log_info(self.logger, "Generating ticket improvements")
@@ -116,22 +103,9 @@ class TicketClarityAgent(BaseAgent):
         response = self.llm.invoke(prompt)
         clean_response = remove_thinking_tags(response)
         log_info(self.logger, f"LLM response for generate_improvements: {clean_response}")
-        try:
-            result = json.loads(clean_response.strip())
-            log_info(self.logger, f"Parsed improvements: {result}")
-            return result
-        except json.JSONDecodeError as e:
-            self.logger.error(f"JSONDecodeError: {str(e)}")
-            match = re.search(r'\{.*\}', clean_response, re.DOTALL)
-            if match:
-                try:
-                    result = json.loads(match.group(0))
-                    log_info(self.logger, f"Recovered improvements from regex: {result}")
-                    return result
-                except json.JSONDecodeError:
-                    pass
-            self.logger.error("LLM did not return a valid JSON object")
-            raise ValueError("LLM did not return a valid JSON object")
+        result = parse_json_response(clean_response)
+        log_info(self.logger, f"Parsed improvements: {result}")
+        return result
 
     def post_final_ticket(self, state):
         log_info(self.logger, "Posting final refined ticket to GitHub")

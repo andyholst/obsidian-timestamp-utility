@@ -11,7 +11,7 @@ TAG := $(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
 DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yaml
 
-.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-integration test-agents build-image-agents run-agentics generate-requirements
+.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-unit-last-failed test-agents-integration test-agents build-image-agents run-agentics generate-requirements
 
 all: build-app test-app release
 
@@ -56,7 +56,10 @@ run-agentics: build-image-agents
 		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics
 
 test-agents-unit: build-image-agents
-		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm -e TEST_FILTER="$(TEST_FILTER)" unit-test-agents
+
+test-agents-unit-last-failed: build-image-agents
+		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm -e TEST_FILTER="--last-failed" unit-test-agents
 
 test-agents-integration: build-image-agents
 		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm integration-test-agents

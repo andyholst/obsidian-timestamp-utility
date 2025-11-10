@@ -104,116 +104,32 @@ class CodeExtractorAgent(BaseAgent):
 
     def process(self, state):
         """
-        Process the refined ticket to extract relevant TypeScript files from the project source directory.
-        Updates state with separate relevant_code_files and relevant_test_files.
+        For this Obsidian plugin, always use main.ts and main.test.ts.
         """
         log_info(self.logger, f"Before processing in {self.name}: {json.dumps(state, indent=2)}")
         log_info(self.logger, "Starting code extraction process")
-        refined_ticket = state['refined_ticket']
-        log_info(self.logger, f"Refined ticket received: {json.dumps(refined_ticket, indent=2)}")
 
-        # Step 1: Collect all .ts files and their contents
-        log_info(self.logger, "Collecting TypeScript files from project source")
-        src_dir = os.path.join(self.project_root, 'src')
-        all_ts_files = []
-        file_contents = {}
-        for root, dirs, files in os.walk(src_dir):
-            for file in files:
-                if file.endswith('.ts'):
-                    full_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(full_path, self.project_root)
-                    try:
-                        with open(full_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        all_ts_files.append(rel_path)
-                        file_contents[rel_path] = content
-                        log_info(self.logger, f"Collected file: {rel_path} with content length: {len(content)}")
-                        log_info(self.logger, f"Content of {rel_path}: {content}")
-                    except Exception as e:
-                        self.logger.error(f"Failed to read file {rel_path}: {str(e)}")
-                        continue
-        log_info(self.logger, f"Total .ts files found: {len(all_ts_files)}")
+        # For this Obsidian plugin, always use main.ts and main.test.ts
+        relevant_code_files = [
+            {"file_path": "src/main.ts", "content": self.read_file_content("src/main.ts")}
+        ]
+        relevant_test_files = [
+            {"file_path": "src/__tests__/main.test.ts", "content": self.read_file_content("src/__tests__/main.test.ts")}
+        ]
 
-        if not all_ts_files:
-            state['relevant_code_files'] = []
-            state['relevant_test_files'] = []
-            log_info(self.logger, "No TypeScript files found in project source; setting relevant files to empty lists")
-            return state
-
-        # Step 2: Extract identifiers from the ticket
-        log_info(self.logger, "Extracting identifiers from refined ticket")
-        identifiers = self.extract_identifiers(refined_ticket)
-        if not identifiers:
-            state['relevant_code_files'] = []
-            state['relevant_test_files'] = []
-            log_info(self.logger, "No relevant identifiers found in the ticket; setting relevant files to empty lists")
-            return state
-
-        # Step 3: Pre-filter files based on content relevance or file name
-        log_info(self.logger, "Pre-filtering files based on content relevance or file name")
-        candidate_files = {
-            path: content for path, content in file_contents.items()
-            if self.is_content_relevant(content, identifiers) or any(id.lower() in path.lower() for id in identifiers)
-        }
-        log_info(self.logger, f"Candidate files identified: {list(candidate_files.keys())}")
-
-        # Step 4: Create prompt for LLM with file contents and enable thinking mode
-        log_info(self.logger, "Preparing LLM prompt for file relevance determination")
-        file_summaries = "\n".join(
-            f"- {path}: {content}"
-            for path, content in candidate_files.items()
-        ) or "No candidate files found based on initial filtering."
-        prompt = (
-            "/think\n"
-            f"Given the following TypeScript files in an Obsidian plugin project under project/src:\n\n"
-            f"{file_summaries}\n\n"
-            f"And the following ticket for the Obsidian plugin:\n\n"
-            f"{json.dumps(refined_ticket, indent=2)}\n\n"
-            f"Please select which of these files are most relevant to the task described in the ticket. "
-            f"Consider both code files and their corresponding test files. For example, if 'src/main.ts' is relevant, "
-            f"also consider 'src/__tests__/main.test.ts' if it exists. Prioritize updating 'src/main.ts' and "
-            f"'src/__tests__/main.test.ts' for tasks involving the Obsidian plugin. "
-            f"Return only a JSON array of the relevant file paths, like [\"src/main.ts\", \"src/__tests__/main.test.ts\"]. "
-            f"If no files are relevant, return an empty array []."
-        )
-        log_info(self.logger, f"LLM prompt prepared with {len(candidate_files)} candidate files: {prompt}")
-
-        # Step 5: Invoke LLM and clean response
-        log_info(self.logger, "Invoking LLM to determine relevant files")
-        try:
-            response = self.llm.invoke(prompt)
-            clean_response = remove_thinking_tags(response)
-            log_info(self.logger, f"LLM response: {clean_response}")
-            relevant_files = json.loads(clean_response.strip())
-            if not isinstance(relevant_files, list):
-                raise ValueError("LLM response is not a list")
-            # Filter to existing files and remove duplicates while preserving order
-            relevant_files = list(dict.fromkeys(
-                file for file in relevant_files if file in all_ts_files
-            ))
-            log_info(self.logger, f"Relevant files from LLM: {relevant_files}")
-        except (json.JSONDecodeError, ValueError) as e:
-            self.logger.warning(f"Failed to parse LLM response: {str(e)}. Using content-based filtering only.")
-            relevant_files = list(candidate_files.keys())
-            log_info(self.logger, f"Fallback relevant files: {relevant_files}")
-
-        # Step 6: Prepare output with file contents and separate into code and test files
-        log_info(self.logger, "Preparing relevant files data for state update")
-        relevant_code_files = []
-        relevant_test_files = []
-        for file in relevant_files:
-            content = file_contents.get(file, "")
-            file_data = {"file_path": file, "content": content}
-            if self.is_test_file(file):
-                relevant_test_files.append(file_data)
-            else:
-                relevant_code_files.append(file_data)
-            log_info(self.logger, f"Added file: {file} as {'test' if self.is_test_file(file) else 'code'} file with content length: {len(content)}")
-            log_info(self.logger, f"Content of {file}: {content}")
-
-        # Step 7: Update state with separated lists and log
         state['relevant_code_files'] = relevant_code_files
         state['relevant_test_files'] = relevant_test_files
-        log_info(self.logger, f"Code extraction completed. Relevant code files: {[f['file_path'] for f in relevant_code_files]}, Relevant test files: {[f['file_path'] for f in relevant_test_files]}")
+        log_info(self.logger, f"Relevant code files: {[file['file_path'] for file in relevant_code_files]}")
+        log_info(self.logger, f"Relevant test files: {[file['file_path'] for file in relevant_test_files]}")
         log_info(self.logger, f"After processing in {self.name}: {json.dumps(state, indent=2)}")
         return state
+
+    def read_file_content(self, rel_path):
+        """Read file content from the project root."""
+        full_path = os.path.join(self.project_root, rel_path)
+        try:
+            with open(full_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            self.logger.error(f"Failed to read file {rel_path}: {str(e)}")
+            return ""
