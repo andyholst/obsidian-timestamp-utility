@@ -52,10 +52,5 @@ services:
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     command: pytest -vv --tb=short /app/tests/integration ${TEST_FILTER}
     network_mode: host
