@@ -42,12 +42,20 @@ services:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
       - ..:/project
+      - ./logs:/app/logs
     environment:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
       - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
       - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
-      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
+      - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
       - PYTHONPATH=/app
-    command: pytest -vv /app/tests/integration
+      - TEST_FILTER=${TEST_FILTER}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: pytest -vv --tb=short /app/tests/integration ${TEST_FILTER}
     network_mode: host

@@ -11,7 +11,7 @@ TAG := $(VERSION)
 IMAGE_NAME := $(REPO_NAME):$(TAG)
 DOCKER_COMPOSE_FILE_PYTHON := docker-compose-files/agents.yaml
 
-.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-unit-last-failed test-agents-integration test-agents build-image-agents run-agentics generate-requirements
+.PHONY: all build-image build-app test-app release changelog clean test-agents-unit test-agents-unit-last-failed test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements
 
 all: build-app test-app release
 
@@ -52,17 +52,28 @@ generate-requirements: build-generate-requirements
 build-image-agents:
 		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) build
 
-run-agentics: build-image-agents
-		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics
+run-agentics: build-image-agents check-deps
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm agentics
 
 test-agents-unit: build-image-agents
-		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm -e TEST_FILTER="$(TEST_FILTER)" unit-test-agents
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm -e TEST_FILTER="$(TEST_FILTER)" unit-test-agents
 
 test-agents-unit-last-failed: build-image-agents
-		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm -e TEST_FILTER="--last-failed" unit-test-agents
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm -e TEST_FILTER="--last-failed" unit-test-agents
 
-test-agents-integration: build-image-agents
-		$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm integration-test-agents
+check-deps:
+	@if [ -z "${GITHUB_TOKEN}" ]; then echo "GITHUB_TOKEN not set. Export it with: export GITHUB_TOKEN=your_token"; exit 1; fi
+	@curl -f http://localhost:11434/api/tags > /dev/null || (echo "Ollama not running"; exit 1)
+	@curl -f -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/user > /dev/null 2>&1 || (echo "GitHub token invalid or API unreachable"; exit 1)
+
+test-agents-integration: build-image-agents check-deps
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm \
+		-e TEST_FILTER="$(INTEGRATION_TEST_FILTER)" \
+		-e OLLAMA_TIMEOUT="$(OLLAMA_TIMEOUT)" \
+		integration-test-agents
+
+test-agents-integration-fast: INTEGRATION_TEST_FILTER=--maxfail=1 -k "not slow"
+test-agents-integration-fast: test-agents-integration
 
 test-agents: test-agents-unit test-agents-integration
 
