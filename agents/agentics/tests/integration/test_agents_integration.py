@@ -3,6 +3,7 @@ import os
 import json
 import re
 import shutil
+import subprocess
 from unittest.mock import patch
 from sentence_transformers import SentenceTransformer, util
 from src.agentics import app, pre_test_runner_agent, code_extractor_agent, code_integrator_agent
@@ -21,6 +22,19 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Regex pattern to match function definitions (traditional, class, or arrow functions)
 FUNCTION_PATTERN = re.compile(r'\bfunction\b|\bclass\b|=>')
+
+def run_tests_and_get_coverage():
+    """Run npm test and extract coverage percentage."""
+    try:
+        result = subprocess.run(['npm', 'test'], cwd='/project', capture_output=True, text=True, timeout=60)
+        output = result.stdout + result.stderr
+        # Extract coverage from output
+        match = re.search(r'All files\s+\|\s+(\d+\.\d+)', output)
+        if match:
+            return float(match.group(1))
+        return 0.0
+    except Exception:
+        return 0.0
 
 def calculate_semantic_similarity(expected_text, actual_text):
     """
