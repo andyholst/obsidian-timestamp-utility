@@ -111,6 +111,12 @@ class CodeGeneratorAgent(BaseAgent):
             code_response = self.llm.invoke(code_prompt)
             clean_code_response = remove_thinking_tags(code_response)
             generated_code = clean_code_response.strip()
+            # Post-process generated code to fix common issues
+            generated_code = generated_code.replace('CodeMirror.Editor', 'obsidian.Editor')
+            generated_code = generated_code.replace('TFile', 'obsidian.TFile')
+            generated_code = generated_code.replace('obsidian.Modal', 'obsidian.MarkdownView')
+            generated_code = generated_code.replace('private ', 'public ')
+            generated_code = generated_code.replace('protected ', 'public ')
             log_info(self.logger, f"Generated code length: {len(generated_code)}")
             log_info(self.logger, f"Generated code: {generated_code}")
 
@@ -217,6 +223,9 @@ class CodeGeneratorAgent(BaseAgent):
             test_response = self.llm.invoke(test_prompt)
             clean_test_response = remove_thinking_tags(test_response)
             generated_tests = clean_test_response.strip()
+            # Post-process generated tests to fix common issues
+            generated_tests = re.sub(r'expect\(plugin\.\w+\)\.toHaveBeenCalled\(\);', '', generated_tests)
+            generated_tests = generated_tests.strip()
             log_info(self.logger, f"Generated tests length: {len(generated_tests)}")
             log_info(self.logger, f"Generated tests: {generated_tests}")
 

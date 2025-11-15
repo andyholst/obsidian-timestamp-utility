@@ -13,6 +13,7 @@ from .process_llm_agent import ProcessLLMAgent
 from .code_generator_agent import CodeGeneratorAgent
 from .output_result_agent import OutputResultAgent
 from .pre_test_runner_agent import PreTestRunnerAgent
+from .post_test_runner_agent import PostTestRunnerAgent
 from .code_extractor_agent import CodeExtractorAgent
 from .code_integrator_agent import CodeIntegratorAgent
 from .config import LOGGER_LEVEL, INFO_AS_DEBUG
@@ -118,6 +119,7 @@ code_extractor_agent = CodeExtractorAgent(llm_reasoning)
 process_llm_agent = ProcessLLMAgent(llm_reasoning, prompt_template)
 code_generator_agent = CodeGeneratorAgent(llm_code)
 pre_test_runner_agent = PreTestRunnerAgent()
+post_test_runner_agent = PostTestRunnerAgent()
 code_integrator_agent = CodeIntegratorAgent(llm_code)
 output_result_agent = OutputResultAgent()
 log_info(logger, "Agents instantiated successfully")
@@ -132,6 +134,7 @@ graph.add_node("code_extractor", code_extractor_agent)
 graph.add_node("process_with_llm", process_llm_agent)
 graph.add_node("generate_code", code_generator_agent)
 graph.add_node("integrate_code", code_integrator_agent)
+graph.add_node("post_test_runner", post_test_runner_agent)
 graph.add_node("output_result", output_result_agent)
 
 # Define the flow
@@ -142,7 +145,8 @@ graph.add_edge("ticket_clarity", "code_extractor")
 graph.add_edge("code_extractor", "process_with_llm")
 graph.add_edge("process_with_llm", "generate_code")
 graph.add_edge("generate_code", "integrate_code")
-graph.add_edge("integrate_code", "output_result")
+graph.add_edge("integrate_code", "post_test_runner")
+graph.add_edge("post_test_runner", "output_result")
 graph.add_edge("output_result", END)
 
 graph.set_entry_point("pre_test_runner")

@@ -4,9 +4,11 @@ import json
 import re
 import shutil
 import subprocess
-from unittest.mock import patch
+import logging
+from unittest.mock import patch, MagicMock
 from sentence_transformers import SentenceTransformer, util
-from src.agentics import app, pre_test_runner_agent, code_extractor_agent, code_integrator_agent
+from src.agentics import app, fetch_issue_agent, ticket_clarity_agent, pre_test_runner_agent, code_extractor_agent, code_integrator_agent
+from src.utils import validate_github_url
 from github import GithubException
 
 # Define paths to the fixtures directory and JSON file
@@ -177,6 +179,18 @@ def test_full_workflow_well_structured():
     assert result["existing_tests_passed"] == 58, "Expected 58 tests to pass based on current test output"
     assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
     assert result["existing_coverage_all_files"] == 52.44, "Expected 52.44% line coverage based on current test output"
+
+    # Validate post-integration test metrics from PostTestRunnerAgent
+    assert "post_integration_tests_passed" in result, "Post-integration tests passed missing from result"
+    assert "post_integration_coverage_all_files" in result, "Post-integration coverage missing from result"
+    assert "coverage_improvement" in result, "Coverage improvement metric missing"
+    assert "tests_improvement" in result, "Tests improvement metric missing"
+
+    # Coverage should improve after code generation and integration
+    assert result["post_integration_coverage_all_files"] > result["existing_coverage_all_files"], \
+        f"Coverage should increase after integration: {result['post_integration_coverage_all_files']:.2f}% vs {result['existing_coverage_all_files']:.2f}%"
+    assert result["coverage_improvement"] > 0, f"Coverage improvement should be positive: {result['coverage_improvement']:.2f}%"
+    assert result["tests_improvement"] > 0, f"Tests improvement should be positive: {result['tests_improvement']}"
     
     # Validate relevant code and test files from CodeExtractorAgent
     assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
@@ -303,6 +317,18 @@ def test_full_workflow_sloppy():
     assert result["existing_tests_passed"] == 58, "Expected 58 tests to pass based on current test output"
     assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
     assert result["existing_coverage_all_files"] == 52.44, "Expected 52.44% line coverage based on current test output"
+
+    # Validate post-integration test metrics from PostTestRunnerAgent
+    assert "post_integration_tests_passed" in result, "Post-integration tests passed missing from result"
+    assert "post_integration_coverage_all_files" in result, "Post-integration coverage missing from result"
+    assert "coverage_improvement" in result, "Coverage improvement metric missing"
+    assert "tests_improvement" in result, "Tests improvement metric missing"
+
+    # Coverage should improve after code generation and integration
+    assert result["post_integration_coverage_all_files"] > result["existing_coverage_all_files"], \
+        f"Coverage should increase after integration: {result['post_integration_coverage_all_files']:.2f}% vs {result['existing_coverage_all_files']:.2f}%"
+    assert result["coverage_improvement"] > 0, f"Coverage improvement should be positive: {result['coverage_improvement']:.2f}%"
+    assert result["tests_improvement"] > 0, f"Tests improvement should be positive: {result['tests_improvement']}"
 
     # Validate relevant code and test files from CodeExtractorAgent
     assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
