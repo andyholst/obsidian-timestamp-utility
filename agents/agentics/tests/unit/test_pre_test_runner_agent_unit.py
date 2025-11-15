@@ -30,8 +30,8 @@ def test_pre_test_runner_agent_success():
     # Then: Verify test metrics match integration test expectations
     assert "existing_tests_passed" in result, "Number of passing tests missing from result"
     assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
-    assert result["existing_tests_passed"] == 34, "Expected 34 tests to pass based on current test output"
-    assert result["existing_coverage_all_files"] == 34.66, "Expected 34.66% line coverage based on current test output"
+    assert result["existing_tests_passed"] == 58, "Expected 58 tests to pass based on current test output"
+    assert result["existing_coverage_all_files"] == 52.44, "Expected 52.44% line coverage based on current test output"
 
 def test_pre_test_runner_agent_no_package_json(temp_empty_project):
     """

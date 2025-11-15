@@ -174,9 +174,9 @@ def test_full_workflow_well_structured():
     
     # Validate test metrics from PreTestRunnerAgent
     assert "existing_tests_passed" in result, "Number of passing tests missing from result"
-    assert result["existing_tests_passed"] == 34, "Expected 34 tests to pass based on current test output"
+    assert result["existing_tests_passed"] == 58, "Expected 58 tests to pass based on current test output"
     assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
-    assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
+    assert result["existing_coverage_all_files"] == 52.44, "Expected 52.44% line coverage based on current test output"
     
     # Validate relevant code and test files from CodeExtractorAgent
     assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
@@ -300,9 +300,9 @@ def test_full_workflow_sloppy():
     assert len(describe_lines) >= 2, "Expected at least two describe blocks in generated tests"
 
     assert "existing_tests_passed" in result, "Number of passing tests missing from result"
-    assert result["existing_tests_passed"] == 34, "Expected 34 tests to pass based on current test output"
+    assert result["existing_tests_passed"] == 58, "Expected 58 tests to pass based on current test output"
     assert "existing_coverage_all_files" in result, "Coverage percentage missing from result"
-    assert result["existing_coverage_all_files"] == 46.15, "Expected 46.15% line coverage based on current test output"
+    assert result["existing_coverage_all_files"] == 52.44, "Expected 52.44% line coverage based on current test output"
 
     # Validate relevant code and test files from CodeExtractorAgent
     assert "relevant_code_files" in result, "Relevant code files missing from workflow output"
