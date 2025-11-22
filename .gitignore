@@ -23,9 +23,13 @@ TODO.md
 release_notes.md
 .idea
 data.json
+logs
 
 __pycache__
 .pytest_cache
 agentics_output.txt
 agentics_unit_tests_output.txt
 agentics_integration_tests_output.txt
+*.xml
+*.log
+*.txt
