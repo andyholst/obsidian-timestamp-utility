@@ -87,7 +87,7 @@ class ComposableWorkflows:
         integrator_agent = AgentAdapter(CodeIntegratorAgent(self.llm_code))
         self.composer.register_agent("code_integrator", integrator_agent)
 
-        post_test_agent = AgentAdapter(PostTestRunnerAgent())
+        post_test_agent = AgentAdapter(PostTestRunnerAgent(self.llm_code))
         self.composer.register_agent("post_test_runner", post_test_agent)
 
         reviewer_agent = AgentAdapter(CodeReviewerAgent(self.llm_reasoning))

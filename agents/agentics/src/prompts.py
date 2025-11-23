@@ -149,3 +149,20 @@ class ModularPrompts:
             "- Filter generated code imports to only include packages that are actually available in the project.\n"
             "- When generating code, consider the available dependencies and avoid suggesting packages that aren't installed.\n\n"
         )
+
+    @staticmethod
+    def get_tool_instructions_for_post_test_runner_agent():
+        return (
+            "7. **Available Tools:**\n"
+            "You have access to the following tools to help with testing and project management:\n\n"
+            "- **npm_install_tool**: Install npm packages or run npm install. Use this to ensure all dependencies are installed before running tests.\n"
+            "- **npm_run_tool**: Run npm scripts. Use this to execute test commands and other npm scripts.\n"
+            "- **check_file_exists_tool**: Check if a file exists. Use this to verify the presence of package.json and other configuration files.\n"
+            "- **write_file_tool**: Write content to a file. Use this to create log files for test failures.\n\n"
+            "**Tool Usage Guidelines:**\n"
+            "- Use check_file_exists_tool to verify package.json exists before attempting npm operations.\n"
+            "- Use npm_install_tool to install dependencies before running tests.\n"
+            "- Use npm_run_tool to execute the test script and capture output for analysis.\n"
+            "- Use write_file_tool to save detailed test failure logs when tests fail.\n"
+            "- Always handle tool failures gracefully and provide meaningful error messages.\n\n"
+        )

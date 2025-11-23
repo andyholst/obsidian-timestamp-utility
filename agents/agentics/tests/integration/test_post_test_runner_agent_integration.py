@@ -1,5 +1,6 @@
 import pytest
 import os
+from unittest.mock import Mock
 from src.post_test_runner_agent import PostTestRunnerAgent
 from src.state import State
 
@@ -13,7 +14,8 @@ def test_post_test_runner_agent_success():
     Assumes /project contains a valid Node.js project with package.json and tests.
     """
     # Given: A PostTestRunnerAgent instance using the real /project directory
-    agent = PostTestRunnerAgent()
+    mock_llm = Mock()
+    agent = PostTestRunnerAgent(mock_llm)
     agent.project_root = REAL_PROJECT_ROOT  # Use the real /project directory
     state = State()
     # Simulate pre-test results
@@ -41,7 +43,8 @@ def test_strip_ansi_codes():
     This test does not involve npm commands and remains unchanged.
     """
     # Given: Text with and without ANSI codes
-    agent = PostTestRunnerAgent()
+    mock_llm = Mock()
+    agent = PostTestRunnerAgent(mock_llm)
     text_with_ansi = "\033[31mRed text\033[0m"
     plain_text = "Plain text"
 

@@ -507,8 +507,9 @@ def test_full_workflow_npm_install_fail(tmp_path):
         from src.agentics import AgenticsApp
         app = AgenticsApp()
         initial_state = {"url": "https://github.com/user/repo/issues/1"}
-        # Then: raises RuntimeError with "Install command failed"
-        with pytest.raises(RuntimeError, match="Install command failed"):
+        # Then: raises AgenticsError with "Install command failed"
+        from src.exceptions import AgenticsError
+        with pytest.raises(AgenticsError, match="Install command failed"):
             asyncio.run(app.process_issue(initial_state["url"]))
 
 def test_full_workflow_no_ts_files(src_backup):
@@ -517,7 +518,7 @@ def test_full_workflow_no_ts_files(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory with empty src folder and mocked GitHub
     project_dir = src_backup
@@ -538,15 +539,18 @@ def test_full_workflow_no_ts_files(src_backup):
 
     # When: invoking the app with no TypeScript files
     with patch.object(GitHubClient, '__init__', mock_github_init), \
+          patch.dict(os.environ, {'PROJECT_ROOT': str(project_dir)}), \
           patch.object(code_extractor_agent, 'project_root', str(project_dir)), \
           patch.object(pre_test_runner_agent, 'project_root', str(project_dir)), \
-          patch.object(code_integrator_agent, 'project_root', str(project_dir)):
+          patch.object(code_integrator_agent, 'project_root', str(project_dir)), \
+          patch.object(post_test_runner_agent, 'project_root', str(project_dir)):
 
         from src.agentics import AgenticsApp
         app = AgenticsApp()
         initial_state = {"url": "https://github.com/user/repo/issues/1"}
-        # Then: raises RuntimeError with "Existing tests failed"
-        with pytest.raises(RuntimeError, match="Existing tests failed"):
+        # Then: raises AgenticsError with "Install command failed"
+        from src.exceptions import AgenticsError
+        with pytest.raises(AgenticsError, match="Install command failed"):
             asyncio.run(app.process_issue(initial_state["url"]))
 
 def test_full_workflow_multiple_relevant_files(src_backup):
