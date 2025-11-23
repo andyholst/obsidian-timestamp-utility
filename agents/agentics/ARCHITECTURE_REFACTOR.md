@@ -17,6 +17,8 @@
 3. **Error Recovery**: Robust error recovery with fallback strategies
 4. **Tool Integration**: Tools should be first-class citizens in agent workflows
 5. **Collaborative Generation**: Code and test generation should be collaborative processes
+6. **Persistence & Checkpointing**: LangGraph checkpointers for durable workflow state across restarts and failures (use in-memory for local development)
+7. **Human-in-the-Loop (HITL)**: Strategic pauses for human intervention on critical decisions and low-confidence outputs
 
 ### New Architecture Components
 
@@ -150,6 +152,32 @@ class ErrorRecoveryAgent:
         return execute_recovery()
 ```
 
+#### 6. Checkpointer Integration (LangGraph)
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+
+# Local dev: in-memory persistence
+checkpointer = MemorySaver()
+
+app = workflow.compile(checkpointer=checkpointer)
+```
+
+#### 7. Human-in-the-Loop (HITL) Node
+
+```python
+class HITLNode:
+    """Conditional human review node"""
+
+    def __call__(self, state):
+        score = state.get("validation_score", 0)
+        if score < 80:  # Threshold from LLM_CODE_VALIDATION.md
+            print("HITL Review Needed! State:", state)
+            feedback = input("Enter feedback: ")  # Console-based pause for local use
+            state["human_feedback"] = feedback
+        return state
+```
+
 ### Workflow Refactor
 
 #### Current: Monolithic Sequential Workflow
@@ -157,35 +185,31 @@ class ErrorRecoveryAgent:
 Fetch → Clarify → Plan → Extract → Process → Generate → Review → Integrate → Test
 ```
 
-#### Proposed: Modular Collaborative Workflow
+#### Proposed: Modular Collaborative Workflow with Local Enhancements
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    ISSUE PROCESSING                             │
 ├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │   Fetch     │ -> │  Clarify    │ -> │    Plan     │         │
-│  │   Issue     │    │   Ticket    │    │ Implementation│         │
-│  └─────────────┘    └─────────────┘    └─────────────┘         │
+│  Fetch ──▶ Clarify ──▶ Plan ──▶ Extract                         │
 └─────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                 CODE GENERATION (COLLABORATIVE)                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │   Extract   │ -> │ Collaborative│ -> │   Validate  │         │
-│  │   Context   │    │ Code & Test  │    │  & Refine   │         │
-│  └─────────────┘    │  Generation │    └─────────────┘         │
-└─────────────────────┘    └─────────────┘                        │
+│  Collaborative Code/Test Gen ──▶ Validate ──?                   │
+│                       │                │       HITL (if score<80)│
+│                       ▼                │                        │
+│                 [LLM_CODE_VALIDATION] ──┘                        │
+└─────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     INTEGRATION & TESTING                       │
 ├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
-│  │  Integrate  │ -> │    Test     │ -> │   Review     │         │
-│  │    Code     │    │  Execution  │    │   & Fix      │         │
-│  └─────────────┘    └─────────────┘    └─────────────┘         │
+│  Integrate ──▶ Test Exec ──▶ Review ──▶ Output                  │
+│         │                                                       │
+│    [TEST_SUITE]                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -214,7 +238,54 @@ Fetch → Clarify → Plan → Extract → Process → Generate → Review → I
 #### Phase 5: Workflow Orchestration
 1. Replace monolithic LangGraph with composable workflows
 2. Implement parallel processing where appropriate
-3. Add monitoring and observability
+3. Add basic logging for observability
+
+## Local Development Enhancements
+
+### Purpose of Generating Code and Tests
+Generating concrete code and tests transforms the abstract architecture into executable prototypes that reveal real-world constraints. Key benefits:
+
+- **Validation Loop**: Tests expose architectural gaps, driving targeted refinements
+- **Stakeholder Alignment**: Working prototypes provide tangible demonstrations
+- **Performance Insights**: Early benchmarking identifies bottlenecks
+- **Iterative Improvement**: Failed tests become precise feedback for architecture evolution
+
+In short, it's not about the architecture being insufficient in isolation—it's about using code/tests to make it actionable and improvable. This process elevates a conceptual refactor into a working prototype, revealing real-world needs (e.g., via failed tests) that feed back into design improvements.
+
+### 1. Persistence and Checkpointing
+**Why Missing**: No durable state; workflow progress lost on failures/restarts.
+
+**Best Practices**: LangGraph checkpointers (MemorySaver for local dev).
+
+**What's Needed**:
+```python
+from langgraph.checkpoint.memory import MemorySaver
+checkpointer = MemorySaver()
+app = StateGraph(State).compile(checkpointer=checkpointer)
+```
+
+**Impact**: Workflows resume within a session; suitable for local testing.
+
+### 2. Human-in-the-Loop (HITL)
+**Why Missing**: Fully autonomous; lacks oversight for ambiguous/high-risk cases.
+
+**Best Practices**: Conditional edges to HITL nodes based on confidence thresholds.
+
+**What's Needed**:
+```python
+def route_hitl(state):
+    return "hitl" if state["validation_score"] < 80 else "continue"
+
+graph.add_conditional_edges("validate", route_hitl, {"hitl": "human_review", "continue": "integrate"})
+```
+(See [LLM_CODE_VALIDATION.md](LLM_CODE_VALIDATION.md) for score calculation.)
+
+**Impact**: AI efficiency + human safety net via console input.
+
+### Next Steps for Local Setup
+1. Install free dependencies (e.g., langchain, langgraph via pip)
+2. Prototype core components in a local script
+3. Run validation and tests locally using provided frameworks
 
 ### LangChain Best Practices Applied
 

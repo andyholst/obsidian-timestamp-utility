@@ -359,9 +359,10 @@ def get_monitor() -> PerformanceMonitor:
     return _monitor
 
 def structured_log(name) -> StructuredLogger:
-    """Get a structured logger for a component"""
     if isinstance(name, logging.Logger):
         name = name.name
+    if not isinstance(name, str):
+        name = str(name) if name is not None else "unknown"
     return StructuredLogger(name)
 
 # Convenience functions

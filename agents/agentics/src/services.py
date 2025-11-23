@@ -98,6 +98,7 @@ class GitHubClient(ServiceClient):
     """Client for GitHub API services."""
 
     def __init__(self, token: str):
+        print(f"GitHubClient __init__ called, token: {token}")
         super().__init__("github")
         self.token = token
         self._client: Optional[Github] = None
@@ -105,6 +106,10 @@ class GitHubClient(ServiceClient):
 
     def _initialize_client(self) -> None:
         """Initialize the GitHub client."""
+        if not self.token:
+            self._client = None
+            return
+        print(f"GitHub _initialize_client called, token: {self.token}")
         try:
             auth = Auth.Token(self.token)
             self._client = Github(auth=auth)
@@ -112,10 +117,10 @@ class GitHubClient(ServiceClient):
         except Exception as e:
             log_info(__name__, f"Failed to initialize GitHub client: {str(e)}")
             self._client = None
+        log_info(__name__, f"GitHub client initialization complete: _client is {self._client}")
 
     async def health_check(self) -> bool:
-        """Check if GitHub API is accessible."""
-        if not self._client:
+        if not self.token or not self._client:
             return False
 
         try:
@@ -159,31 +164,27 @@ class MCPClient(ServiceClient):
     def __init__(self):
         super().__init__("mcp")
         self._initialized = False
+        self._client: Optional[Any] = None
         self._tools: list = []
 
     async def initialize(self) -> None:
         """Initialize MCP client."""
         try:
-            await asyncio.get_event_loop().run_in_executor(None, init_mcp_client)
+            await init_mcp_client()
             self._initialized = True
+            self._client = get_mcp_client()
             log_info(__name__, "Initialized MCP client")
         except Exception as e:
             log_info(__name__, f"Failed to initialize MCP client: {str(e)}")
             self._initialized = False
+            self._client = None
 
     async def health_check(self) -> bool:
-        """Check if MCP service is healthy."""
-        if not self._initialized:
-            return False
-        try:
-            client = get_mcp_client()
-            return True
-        except Exception:
-            return False
+        return self._initialized and self._client is not None
 
     def is_available(self) -> bool:
         """Check if MCP client is available."""
-        return self._initialized and self.health_monitor.is_service_healthy("mcp")
+        return self._initialized and self._client is not None
 
     async def get_context(self, query: str, max_tokens: int = 4096) -> str:
         """Get context from MCP."""
@@ -192,7 +193,7 @@ class MCPClient(ServiceClient):
 
         @self.circuit_breaker.call
         def _get_context():
-            return get_mcp_client().get_context(query, max_tokens)
+            return self._client.get_context(query, max_tokens)
 
         return await asyncio.get_event_loop().run_in_executor(None, _get_context)
 
@@ -203,7 +204,7 @@ class MCPClient(ServiceClient):
 
         @self.circuit_breaker.call
         def _store_memory():
-            return get_mcp_client().store_memory(key, value)
+            return self._client.store_memory(key, value)
 
         await asyncio.get_event_loop().run_in_executor(None, _store_memory)
 
@@ -214,31 +215,43 @@ class MCPClient(ServiceClient):
 
         @self.circuit_breaker.call
         def _retrieve_memory():
-            return get_mcp_client().retrieve_memory(key)
+            return self._client.retrieve_memory(key)
 
         return await asyncio.get_event_loop().run_in_executor(None, _retrieve_memory)
 
-    def get_tools(self) -> list:
+    async def get_tools(self) -> list:
         """Get MCP tools for LangChain integration."""
+        if not self._initialized:
+            await self.initialize()
+
         if not self.is_available():
             return []
 
         if not self._tools:
             try:
-                client = get_mcp_client()
+                async def mcp_context_search(query):
+                    return await self.get_context(query, max_tokens=4096)
+
+                async def mcp_memory_store(key, value):
+                    await self.store_memory(key, value)
+                    return "Stored"
+
+                async def mcp_memory_retrieve(key):
+                    return await self.retrieve_memory(key)
+
                 self._tools = [
                     Tool.from_function(
-                        func=lambda query: asyncio.run(self.get_context(query, max_tokens=4096)),
+                        func=mcp_context_search,
                         name="mcp_context_search",
                         description="Search for contextual information using MCP context server"
                     ),
                     Tool.from_function(
-                        func=lambda key, value: asyncio.run(self.store_memory(key, value)),
+                        func=mcp_memory_store,
                         name="mcp_memory_store",
                         description="Store key-value pairs in MCP memory server"
                     ),
                     Tool.from_function(
-                        func=lambda key: asyncio.run(self.retrieve_memory(key)),
+                        func=mcp_memory_retrieve,
                         name="mcp_memory_retrieve",
                         description="Retrieve stored values from MCP memory server"
                     )
@@ -253,10 +266,12 @@ class MCPClient(ServiceClient):
         """Close MCP client."""
         if self._initialized:
             try:
-                await asyncio.get_event_loop().run_in_executor(None, close_mcp_client)
+                await close_mcp_client()
                 self._initialized = False
+                self._client = None
                 log_info(__name__, "Closed MCP client")
             except Exception as e:
+                self._initialized = False
                 log_info(__name__, f"Failed to close MCP client: {str(e)}")
 
 
@@ -314,10 +329,7 @@ class ServiceManager:
 
         for name, service in services_to_check:
             if service:
-                try:
-                    results[name] = await service.health_check()
-                except Exception:
-                    results[name] = False
+                results[name] = self.health_monitor.is_service_healthy(name)
             else:
                 results[name] = False
 

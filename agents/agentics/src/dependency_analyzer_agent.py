@@ -8,7 +8,7 @@ from .utils import safe_json_dumps, log_info
 
 class DependencyAnalyzerAgent(ToolIntegratedAgent):
     def __init__(self, llm_client=None):
-        super().__init__(llm_client, [read_file_tool, check_file_exists_tool, npm_search_tool, npm_install_tool, npm_list_tool])
+        super().__init__(llm_client, [read_file_tool, check_file_exists_tool, npm_search_tool, npm_install_tool, npm_list_tool], "DependencyAnalyzer")
 
     def process(self, state: State) -> State:
         log_info(self.name, f"Before processing in {self.name}: {safe_json_dumps(state, indent=2)}")

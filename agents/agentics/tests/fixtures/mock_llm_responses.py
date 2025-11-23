@@ -223,8 +223,24 @@ export class TimestampPlugin extends obsidian.Plugin {
     }
 }"""
 
+    # Create a mock LLM that returns different responses for code and test generation
+    def mock_invoke(input_state):
+        if isinstance(input_state, str) and "Jest tests" in input_state:
+            # This is test generation for Jest tests
+            return test_response
+        elif isinstance(input_state, dict) and "generated_code" in input_state:
+            # This is test generation
+            return test_response
+        else:
+            # This is code generation
+            return code_response
+
+    mock_llm = MagicMock()
+    mock_llm.invoke.side_effect = mock_invoke
+    mock_llm.return_value = code_response  # fallback
+
     return {
-        "code_generation": create_mock_llm_response(code_response),
+        "code_generation": mock_llm,
         "test_generation": create_mock_llm_response(test_response),
         "vague": create_mock_llm_response(vague_response),
         "feedback": create_mock_llm_response(feedback_response)

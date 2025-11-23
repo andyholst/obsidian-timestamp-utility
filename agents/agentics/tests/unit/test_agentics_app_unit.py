@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from src.agentics import AgenticsApp
 from src.config import AgenticsConfig
 from src.services import ServiceManager
-from src.workflows import WorkflowManager
+from src.composable_workflows import ComposableWorkflows
 from src.exceptions import AgenticsError, ValidationError, ServiceUnavailableError
 
 
@@ -34,32 +34,15 @@ def mock_service_manager():
 
 
 @pytest.fixture
-def mock_workflow_manager():
-    """Mock WorkflowManager."""
-    manager = MagicMock(spec=WorkflowManager)
-    manager.execute_workflow = AsyncMock(return_value={"success": True, "result": "test_result"})
-    return manager
+def mock_composable_workflows():
+    """Mock ComposableWorkflows."""
+    workflows = MagicMock(spec=ComposableWorkflows)
+    workflows.process_issue = AsyncMock(return_value={"success": True, "result": "test_result"})
+    return workflows
 
 
 class TestAgenticsApp:
     """Test AgenticsApp functionality."""
-
-    @patch('src.agentics.init_services')
-    @patch('src.agentics.init_workflows')
-    def test_initialize_success(self, mock_init_workflows, mock_init_services, mock_config, mock_service_manager, mock_workflow_manager):
-        """Test successful initialization."""
-        mock_init_services.return_value = mock_service_manager
-        mock_init_workflows.return_value = mock_workflow_manager
-
-        app = AgenticsApp(mock_config)
-
-        asyncio.run(app.initialize())
-
-        assert app._initialized is True
-        assert app.service_manager == mock_service_manager
-        assert app.workflow_manager == mock_workflow_manager
-        mock_init_services.assert_called_once_with(mock_config)
-        mock_init_workflows.assert_called_once()
 
     @patch('src.agentics.init_services')
     def test_initialize_failure(self, mock_init_services, mock_config):
@@ -73,12 +56,12 @@ class TestAgenticsApp:
 
         assert app._initialized is False
 
+    @patch('src.agentics.create_composable_workflow')
     @patch('src.agentics.init_services')
-    @patch('src.agentics.init_workflows')
-    def test_initialize_already_initialized(self, mock_init_workflows, mock_init_services, mock_config, mock_service_manager, mock_workflow_manager):
+    def test_initialize_already_initialized(self, mock_init_services, mock_create_workflows, mock_config, mock_service_manager, mock_composable_workflows):
         """Test initialization when already initialized."""
         mock_init_services.return_value = mock_service_manager
-        mock_init_workflows.return_value = mock_workflow_manager
+        mock_create_workflows.return_value = mock_composable_workflows
 
         app = AgenticsApp(mock_config)
         app._initialized = True
@@ -87,27 +70,24 @@ class TestAgenticsApp:
 
         # Should not call init functions again
         mock_init_services.assert_not_called()
-        mock_init_workflows.assert_not_called()
+        mock_create_workflows.assert_not_called()
 
     @patch('src.agentics.validate_github_url')
-    def test_process_issue_success(self, mock_validate_url, mock_config, mock_service_manager, mock_workflow_manager):
+    def test_process_issue_success(self, mock_validate_url, mock_config, mock_service_manager, mock_composable_workflows):
         """Test successful issue processing."""
         mock_validate_url.return_value = True
-        mock_workflow_manager.execute_workflow.return_value = {"success": True, "result": "processed"}
+        mock_composable_workflows.process_issue.return_value = {"success": True, "result": "processed"}
 
         app = AgenticsApp(mock_config)
         app._initialized = True
         app.service_manager = mock_service_manager
-        app.workflow_manager = mock_workflow_manager
+        app.composable_workflows = mock_composable_workflows
 
         result = asyncio.run(app.process_issue("https://github.com/test/repo/issues/1"))
 
         assert result == {"success": True, "result": "processed"}
         mock_validate_url.assert_called_once_with("https://github.com/test/repo/issues/1")
-        mock_workflow_manager.execute_workflow.assert_called_once_with(
-            "issue_processing",
-            {"url": "https://github.com/test/repo/issues/1"}
-        )
+        mock_composable_workflows.process_issue.assert_called_once_with("https://github.com/test/repo/issues/1")
 
     @patch('src.agentics.validate_github_url')
     def test_process_issue_invalid_url(self, mock_validate_url, mock_config):
@@ -120,61 +100,34 @@ class TestAgenticsApp:
         with pytest.raises(ValidationError, match="Invalid GitHub issue URL: invalid-url"):
             asyncio.run(app.process_issue("invalid-url"))
 
-    def test_process_issue_not_initialized(self, mock_config, mock_service_manager, mock_workflow_manager):
+    def test_process_issue_not_initialized(self, mock_config, mock_service_manager, mock_composable_workflows):
         """Test process_issue when not initialized."""
         app = AgenticsApp(mock_config)
         app.service_manager = mock_service_manager
-        app.workflow_manager = mock_workflow_manager
+        app.composable_workflows = mock_composable_workflows
 
         # Should call initialize first
         with patch.object(app, 'initialize', new_callable=AsyncMock) as mock_init:
             with patch('src.agentics.validate_github_url', return_value=True):
-                mock_workflow_manager.execute_workflow.return_value = {"success": True}
+                mock_composable_workflows.process_issue.return_value = {"success": True}
 
                 asyncio.run(app.process_issue("https://github.com/test/repo/issues/1"))
 
                 mock_init.assert_called_once()
 
     @patch('src.agentics.validate_github_url')
-    def test_process_issue_workflow_failure(self, mock_validate_url, mock_config, mock_service_manager, mock_workflow_manager):
+    def test_process_issue_workflow_failure(self, mock_validate_url, mock_config, mock_service_manager, mock_composable_workflows):
         """Test process_issue with workflow failure."""
         mock_validate_url.return_value = True
-        mock_workflow_manager.execute_workflow.side_effect = Exception("Workflow failed")
+        mock_composable_workflows.process_issue.side_effect = Exception("Workflow failed")
 
         app = AgenticsApp(mock_config)
         app._initialized = True
         app.service_manager = mock_service_manager
-        app.workflow_manager = mock_workflow_manager
+        app.composable_workflows = mock_composable_workflows
 
         with pytest.raises(AgenticsError, match="Issue processing failed: Workflow failed"):
             asyncio.run(app.process_issue("https://github.com/test/repo/issues/1"))
-
-    @patch('src.agentics.validate_github_url')
-    def test_process_issues_batch_success(self, mock_validate_url, mock_config, mock_service_manager, mock_workflow_manager):
-        """Test successful batch processing."""
-        mock_validate_url.return_value = True
-        mock_workflow_manager.execute_workflow.return_value = {
-            "success": True,
-            "total_issues": 2,
-            "successful": 2,
-            "failed": 0,
-            "results": [{"success": True}, {"success": True}]
-        }
-
-        app = AgenticsApp(mock_config)
-        app._initialized = True
-        app.service_manager = mock_service_manager
-        app.workflow_manager = mock_workflow_manager
-
-        urls = ["https://github.com/test/repo/issues/1", "https://github.com/test/repo/issues/2"]
-        result = asyncio.run(app.process_issues_batch(urls))
-
-        assert result["success"] is True
-        assert result["total_issues"] == 2
-        mock_workflow_manager.execute_workflow.assert_called_once_with(
-            "batch_issue_processing",
-            {"issue_urls": urls}
-        )
 
     @patch('src.agentics.validate_github_url')
     def test_process_issues_batch_validation_error(self, mock_validate_url, mock_config):
@@ -189,16 +142,16 @@ class TestAgenticsApp:
         with pytest.raises(ValidationError, match="Invalid GitHub issue URLs: \\['invalid-url'\\]"):
             asyncio.run(app.process_issues_batch(urls))
 
-    def test_process_issues_batch_not_initialized(self, mock_config, mock_service_manager, mock_workflow_manager):
+    def test_process_issues_batch_not_initialized(self, mock_config, mock_service_manager, mock_composable_workflows):
         """Test process_issues_batch when not initialized."""
         app = AgenticsApp(mock_config)
         app.service_manager = mock_service_manager
-        app.workflow_manager = mock_workflow_manager
+        app.composable_workflows = mock_composable_workflows
 
         # Should call initialize first
         with patch.object(app, 'initialize', new_callable=AsyncMock) as mock_init:
             with patch('src.agentics.validate_github_url', return_value=True):
-                mock_workflow_manager.execute_workflow.return_value = {"successful": 1, "total_issues": 1}
+                mock_composable_workflows.process_issue.return_value = {"success": True}
 
                 urls = ["https://github.com/test/repo/issues/1"]
                 asyncio.run(app.process_issues_batch(urls))

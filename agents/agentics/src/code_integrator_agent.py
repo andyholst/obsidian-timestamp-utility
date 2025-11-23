@@ -3,13 +3,14 @@ import logging
 import re
 import json
 from .tool_integrated_agent import ToolIntegratedAgent
-from .tools import read_file_tool, check_file_exists_tool
+from .tools import read_file_tool, check_file_exists_tool, write_file_tool
 from .state import State
 from .utils import safe_json_dumps, remove_thinking_tags, log_info
+from .prompts import ModularPrompts
 
 class CodeIntegratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__(llm_client, [read_file_tool, check_file_exists_tool])
+        super().__init__(llm_client, [read_file_tool, check_file_exists_tool, write_file_tool], "CodeIntegrator")
         # Configurable project root and file extensions
         self.project_root = os.getenv('PROJECT_ROOT')
         if not self.project_root:
@@ -128,6 +129,35 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         """
         Use LLM to generate updated code by integrating new code into the existing TimestampPlugin class.
         """
+        tool_instructions = ModularPrompts.get_tool_instructions_for_code_integrator_agent()
+        prompt = (
+            "/think\n"
+            f"You are integrating new TypeScript code into an existing Obsidian plugin file (`main{self.code_ext}`). "
+            "The new code must be added to the `TimestampPlugin` class without modifying any existing code. "
+            "Follow these instructions carefully:\n\n"
+            "1. **Existing Code:**\n"
+            f"{existing_content}\n\n"
+            "2. **New Code to Integrate:**\n"
+            f"{new_code}\n\n"
+            "3. **Integration Rules:**\n"
+            "   - Add new methods or properties to the `TimestampPlugin` class.\n"
+            "   - Add new commands within the `onload` method using `this.addCommand`.\n"
+            "   - Preserve all existing imports, methods, and commands.\n"
+            "   - Add only necessary new imports that are not already present.\n"
+            "   - Ensure the code is properly formatted and uses TypeScript syntax.\n"
+            "   - Do not remove or alter any existing code.\n\n"
+            f"{tool_instructions}\n\n"
+            "4. **Output Instructions:**\n"
+            f"   - Your response must contain only the updated TypeScript code for `main{self.code_ext}`.\n"
+            "   - The code should start with the import statements and end with the closing brace of the class.\n"
+            "   - Do not include any comments, explanations, or additional text outside the code itself.\n"
+            "   - Do not add any markers or comments indicating the start or end of the updated code.\n"
+            "   - Do not include any lines containing the word 'typescript'.\n"
+            "   - The response must consist solely of the code, with no additional lines or text before or after.\n"
+            "   - The first line of your response should be a TypeScript import statement or the beginning of the class.\n\n"
+            "5. **Output:**\n"
+            f"   - Provide the complete updated TypeScript code for `main{self.code_ext}` with the new code integrated."
+        )
         prompt = (
             "/think\n"
             f"You are integrating new TypeScript code into an existing Obsidian plugin file (`main{self.code_ext}`). "

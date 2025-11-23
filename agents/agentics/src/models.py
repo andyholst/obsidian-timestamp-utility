@@ -23,6 +23,7 @@ class TestSpec:
 class ValidationResults:
     """Results of validation process"""
     success: bool
+    score: int = 0
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 

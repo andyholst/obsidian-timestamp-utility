@@ -160,12 +160,12 @@ def npm_search_tool(package_name: str, limit: int = 5) -> str:
 
 
 @tool
-def npm_install_tool(package_name: str, is_dev: bool = False, save_exact: bool = False) -> str:
+def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: bool = False) -> str:
     """
-    Install an npm package.
+    Install an npm package or all dependencies if no package specified.
 
     Args:
-        package_name: Name of the package to install
+        package_name: Name of the package to install (empty string to install all dependencies)
         is_dev: Whether to install as dev dependency (default: False)
         save_exact: Whether to save exact version (default: False)
 
@@ -179,14 +179,21 @@ def npm_install_tool(package_name: str, is_dev: bool = False, save_exact: bool =
             cmd.append('--save-dev')
         if save_exact:
             cmd.append('--save-exact')
-        cmd.append(package_name)
+        if package_name:
+            cmd.append(package_name)
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
         if result.returncode == 0:
-            return f"Successfully installed {package_name}"
+            if package_name:
+                return f"Successfully installed {package_name}"
+            else:
+                return "Successfully installed all dependencies"
         else:
-            return f"Failed to install {package_name}: {result.stderr}"
+            if package_name:
+                return f"Failed to install {package_name}: {result.stderr}"
+            else:
+                return f"Failed to install dependencies: {result.stderr}"
     except Exception as e:
         return f"Error installing npm package: {str(e)}"
 
@@ -221,7 +228,57 @@ def npm_list_tool(depth: int = 0) -> str:
             return f"Failed to list packages: {result.stderr}"
     except Exception as e:
         return f"Error listing npm packages: {str(e)}"
+@tool
+def write_file_tool(file_path: str, content: str) -> str:
+    """
+    Write content to a file from the project root.
+
+    Args:
+        file_path: Relative path to the file from project root
+        content: Content to write to the file
+
+    Returns:
+        Success message or error details
+    """
+    import os
+    project_root = os.getenv('PROJECT_ROOT', '/project')
+    full_path = os.path.join(project_root, file_path)
+    try:
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return f"Successfully wrote to {file_path}"
+    except Exception as e:
+        return f"Error writing to file {file_path}: {str(e)}"
+
+
+@tool
+def npm_run_tool(script: str, args: str = "") -> str:
+    """
+    Run an npm script.
+
+    Args:
+        script: The npm script to run (e.g., 'test', 'build')
+        args: Additional arguments for the script
+
+    Returns:
+        Output of the npm run command or error details
+    """
+    import subprocess
+    try:
+        cmd = ['npm', 'run', script]
+        if args:
+            cmd.extend(args.split())
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            return f"npm run {script} failed: {result.stderr}"
+    except Exception as e:
+        return f"Error running npm script {script}: {str(e)}"
 
 
 # Export tools for use by agents
-__all__ = ['ToolExecutor', 'read_file_tool', 'list_files_tool', 'check_file_exists_tool', 'npm_search_tool', 'npm_install_tool', 'npm_list_tool']
+__all__ = ['ToolExecutor', 'read_file_tool', 'list_files_tool', 'check_file_exists_tool', 'npm_search_tool', 'npm_install_tool', 'npm_list_tool', 'write_file_tool', 'npm_run_tool']
+
+

@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.tools import tool
 from langchain_core.output_parsers import PydanticOutputParser
 from .tool_integrated_agent import ToolIntegratedAgent
-from .tools import npm_search_tool, npm_install_tool, npm_list_tool
+from .tools import npm_search_tool, npm_install_tool, npm_list_tool, read_file_tool, list_files_tool, check_file_exists_tool
 from .state import State, CodeGenerationState
 from .utils import safe_json_dumps, remove_thinking_tags, log_info
 from .models import CodeGenerationOutput, TestGenerationOutput
@@ -19,7 +19,7 @@ from .prompts import ModularPrompts
 
 class CodeGeneratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__(llm_client, [npm_search_tool, npm_install_tool])
+        super().__init__(llm_client, [npm_search_tool, npm_install_tool, npm_list_tool, read_file_tool, list_files_tool, check_file_exists_tool], name="CodeGenerator")
         self.main_file = os.getenv('MAIN_FILE', 'main.ts')
         self.test_file = os.getenv('TEST_FILE', 'main.test.ts')
         self.project_root = os.getenv('PROJECT_ROOT')
@@ -58,6 +58,8 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         """Create LCEL chain for code generation with modular prompts and output validation."""
         def build_code_prompt(inputs):
             code_structure = json.dumps(inputs.get('code_structure', {}))
+            tool_context = self._gather_tool_context(inputs)
+            tool_instructions = ModularPrompts.get_tool_instructions_for_code_generator_agent()
             return (
                 ModularPrompts.get_base_instruction() + "\n"
                 "You are tasked with generating TypeScript code for an Obsidian plugin. The plugin is defined in `{main_file}`, and you must integrate the new functionality into the existing structure without altering any existing code. Follow these instructions carefully:\n\n"
@@ -66,6 +68,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 + "3. **Task Details:**\n{task_details_str}\n\n"
                 + "4. **Existing Code ({main_file}):**\n{existing_code_content}\n\n"
                 + "5. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
+                + tool_instructions
                 + ModularPrompts.get_output_instructions_code()
             )
 
@@ -91,6 +94,8 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         """Create LCEL chain for test generation with modular prompts and output validation."""
         def build_test_prompt(inputs):
             test_structure = json.dumps(inputs.get('test_structure', {}))
+            tool_context = self._gather_tool_context(inputs)
+            tool_instructions = ModularPrompts.get_tool_instructions_for_code_generator_agent()
             return (
                 ModularPrompts.get_base_instruction() + "\n"
                 "You are tasked with generating Jest tests for the new functionality added to the plugin class in an Obsidian plugin. "
@@ -102,6 +107,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 + "4. **Generated Code:**\n{generated_code}\n\n"
                 + "5. **Existing Test File ({test_file}):**\n{existing_test_content}\n\n"
                 + "6. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
+                + tool_instructions
                 + ModularPrompts.get_output_instructions_tests()
             )
 
@@ -229,6 +235,12 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
 
         # Post-process the generated code
         generated_code = self._post_process_code(generated_code)
+
+        # Keyword validation for code output
+        code_keywords = ['import', 'export', 'class', 'interface', 'function', 'public']
+        if not any(keyword in generated_code for keyword in code_keywords):
+            raise ValueError("Generated code must include at least one of: import, export, class, interface, or function")
+
         return generated_code
 
     def _post_process_code(self, generated_code):
@@ -264,6 +276,13 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
 
         # Post-process the generated tests
         generated_tests = self._post_process_tests(generated_tests)
+
+        # Keyword validation for test output
+        if not (generated_tests.strip().startswith('describe(') and generated_tests.strip().endswith('});')):
+            raise ValueError("Generated tests must start with 'describe(' and end with '});'")
+        if 'describe(' not in generated_tests or ('it(' not in generated_tests and 'test(' not in generated_tests):
+            raise ValueError("Generated tests must include 'describe(' and 'it(' or 'test(' keywords")
+
         return generated_tests
 
     def _post_process_tests(self, generated_tests):
@@ -324,7 +343,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             # Check if ticket is vague (empty requirements and acceptance criteria)
             requirements = task_details.get('requirements', [])
             acceptance_criteria = task_details.get('acceptance_criteria', [])
-            is_vague_ticket = not requirements and not acceptance_criteria
+            is_vague_ticket = not requirements
             # If ticket is vague, skip code generation
             if is_vague_ticket:
                 log_info(self.name, "Ticket is vague (empty requirements/acceptance criteria); skipping code generation")
@@ -486,7 +505,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             # Check if ticket is vague (empty requirements and acceptance criteria)
             requirements = (state.result or {}).get('requirements', [])
             acceptance_criteria = (state.result or {}).get('acceptance_criteria', [])
-            is_vague_ticket = not requirements and not acceptance_criteria
+            is_vague_ticket = not requirements
 
             if is_vague_ticket:
                 log_info(self.name, "Ticket is vague (empty requirements/acceptance criteria); skipping code generation")
