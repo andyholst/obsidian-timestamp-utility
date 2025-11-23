@@ -1,9 +1,10 @@
 import pytest
 import json
 import os
+from unittest.mock import patch
 from src.process_llm_agent import ProcessLLMAgent
 from src.state import State
-from src.agentics import llm, prompt_template
+from tests.fixtures.mock_llm_responses import create_process_llm_mock_responses, create_mock_prompt_template
 
 # Well-structured ticket content
 WELL_STRUCTURED_TICKET = """
@@ -63,14 +64,25 @@ def expected_ticket_json():
     with open(expected_json_path, 'r') as f:
         return json.load(f)
 
-def test_process_llm_agent_well_structured(expected_ticket_json):
-    """Test processing a well-structured ticket with real LLM."""
-    agent = ProcessLLMAgent(llm, prompt_template)
+# Fixtures for mock LLM responses
+@pytest.fixture
+def mock_llm_responses():
+    """Provide mock LLM responses for different test scenarios."""
+    return create_process_llm_mock_responses()
+
+@pytest.fixture
+def mock_prompt_template():
+    """Provide a mock prompt template."""
+    return create_mock_prompt_template()
+
+def test_process_llm_agent_well_structured(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+    """Test processing a well-structured ticket with mock LLM."""
+    agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
-    
-    # When: Processing the ticket with the real LLM
+
+    # When: Processing the ticket with the mock LLM
     result = agent(state)
-    
+
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
@@ -81,14 +93,14 @@ def test_process_llm_agent_well_structured(expected_ticket_json):
     assert len(result["result"]["requirements"]) >= 1, "Should have at least one requirement"
     assert len(result["result"]["acceptance_criteria"]) >= 1, "Should have at least one criterion"
 
-def test_process_llm_agent_sloppy(expected_ticket_json):
-    """Test processing a sloppy ticket with real LLM."""
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_sloppy(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+    """Test processing a sloppy ticket with mock LLM."""
+    agent = ProcessLLMAgent(mock_llm_responses["sloppy"], mock_prompt_template)
     state = State(ticket_content=SLOPPY_TICKET)
-    
-    # When: Processing the ticket with the real LLM
+
+    # When: Processing the ticket with the mock LLM
     result = agent(state)
-    
+
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
@@ -99,14 +111,14 @@ def test_process_llm_agent_sloppy(expected_ticket_json):
     assert len(result["result"]["requirements"]) >= 3, "Should have at least three requirements based on ticket"
     assert len(result["result"]["acceptance_criteria"]) >= 3, "Should have at least three criteria based on ticket"
 
-def test_process_llm_agent_long_ticket():
-    """Test processing a long ticket with real LLM."""
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_long_ticket(mock_llm_responses, mock_prompt_template):
+    """Test processing a long ticket with mock LLM."""
+    agent = ProcessLLMAgent(mock_llm_responses["long"], mock_prompt_template)
     state = State(ticket_content=LONG_TICKET)
-    
-    # When: Processing the ticket with the real LLM
+
+    # When: Processing the ticket with the mock LLM
     result = agent(state)
-    
+
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
@@ -118,33 +130,33 @@ def test_process_llm_agent_long_ticket():
     assert len(result["result"]["requirements"]) >= 2, "Should have at least two requirements"
     assert len(result["result"]["acceptance_criteria"]) >= 2, "Should have at least two criteria"
 
-def test_process_llm_agent_invalid_json(expected_ticket_json):
-    """Test handling of invalid JSON response from real LLM (assuming it could happen)."""
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_invalid_json(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+    """Test handling of invalid JSON response from mock LLM (assuming it could happen)."""
+    agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
-    
+
     # When/Then: Process normally, assuming retries handle invalid JSON
     result = agent(state)
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
     assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
 
-def test_process_llm_agent_invalid_structure(expected_ticket_json):
-    """Test handling of invalid structure from real LLM."""
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_invalid_structure(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+    """Test handling of invalid structure from mock LLM."""
+    agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
-    
+
     # When/Then: Process normally, assuming retries handle invalid structure
     result = agent(state)
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
     assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
 
-def test_process_llm_agent_invalid_types(expected_ticket_json):
-    """Test handling of invalid types from real LLM."""
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_invalid_types(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+    """Test handling of invalid types from mock LLM."""
+    agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
-    
+
     # When/Then: Process normally, assuming retries handle invalid types
     result = agent(state)
     assert "result" in result, "Result key missing"
@@ -153,14 +165,14 @@ def test_process_llm_agent_invalid_types(expected_ticket_json):
     assert isinstance(result["result"]["requirements"], list), "Requirements should be a list"
     assert isinstance(result["result"]["acceptance_criteria"], list), "Acceptance criteria should be a list"
 
-def test_process_llm_agent_retry_success(expected_ticket_json):
-    """Test that the agent succeeds after potential retries with real LLM."""
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_retry_success(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+    """Test that the agent succeeds after potential retries with mock LLM."""
+    agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
-    
-    # When: Processing the ticket with the real LLM
+
+    # When: Processing the ticket with the mock LLM
     result = agent(state)
-    
+
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
@@ -171,19 +183,19 @@ def test_process_llm_agent_retry_success(expected_ticket_json):
     assert len(result["result"]["requirements"]) >= 1, "Should have at least one requirement"
     assert len(result["result"]["acceptance_criteria"]) >= 1, "Should have at least one criterion"
 
-def test_process_llm_agent_dict_input():
+def test_process_llm_agent_dict_input(mock_llm_responses, mock_prompt_template):
     # Given: A state with refined_ticket as a dict
-    agent = ProcessLLMAgent(llm, prompt_template)
+    agent = ProcessLLMAgent(mock_llm_responses["dict"], mock_prompt_template)
     state = State(refined_ticket={
         "title": "Test Ticket",
         "description": "Test description",
         "requirements": ["Req1"],
         "acceptance_criteria": ["AC1"]
     })
-    
-    # When: Processing the ticket with real LLM
+
+    # When: Processing the ticket with mock LLM
     result = agent(state)
-    
+
     # Then: Verify dict is processed correctly
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
@@ -191,13 +203,13 @@ def test_process_llm_agent_dict_input():
     assert result["result"]["title"] == "Test Ticket", "Title should match input"
 
 # New test: Empty ticket content
-def test_process_llm_agent_empty_ticket():
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_empty_ticket(mock_llm_responses, mock_prompt_template):
+    agent = ProcessLLMAgent(mock_llm_responses["empty"], mock_prompt_template)
     state = State(ticket_content="")
-    
-    # When: Processing the ticket with real LLM
+
+    # When: Processing the ticket with mock LLM
     result = agent(state)
-    
+
     # Then: Verify minimal valid output
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
@@ -207,13 +219,13 @@ def test_process_llm_agent_empty_ticket():
     assert len(result["result"]["title"]) > 0, "Title should be generated"
 
 # New test: Malformed ticket causing potential invalid JSON
-def test_process_llm_agent_malformed_ticket():
-    agent = ProcessLLMAgent(llm, prompt_template)
+def test_process_llm_agent_malformed_ticket(mock_llm_responses, mock_prompt_template):
+    agent = ProcessLLMAgent(mock_llm_responses["malformed"], mock_prompt_template)
     state = State(ticket_content="# Title\n{unclosed bracket\n- Req1")
-    
-    # When: Processing the ticket with real LLM
+
+    # When: Processing the ticket with mock LLM
     result = agent(state)
-    
+
     # Then: Verify agent handles it gracefully
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"

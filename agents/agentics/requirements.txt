@@ -7,19 +7,30 @@
 aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp==3.11.18
-    # via langchain-community
+    # via
+    #   -r requirements.in
+    #   langchain-community
 aiosignal==1.3.2
     # via aiohttp
 annotated-types==0.7.0
     # via pydantic
 anyio==4.9.0
-    # via httpx
+    # via
+    #   httpx
+    #   mcp
+    #   sse-starlette
+    #   starlette
 async-timeout==4.0.3
     # via
     #   aiohttp
     #   langchain
 attrs==25.3.0
-    # via aiohttp
+    # via
+    #   aiohttp
+    #   jsonschema
+    #   referencing
+backports-asyncio-runner==1.2.0
+    # via pytest-asyncio
 certifi==2025.4.26
     # via
     #   httpcore
@@ -31,6 +42,8 @@ cffi==1.17.1
     #   pynacl
 charset-normalizer==3.4.2
     # via requests
+click==8.3.1
+    # via uvicorn
 cryptography==44.0.3
     # via pyjwt
 dataclasses-json==0.6.7
@@ -57,7 +70,9 @@ fsspec==2025.3.2
 greenlet==3.2.2
     # via sqlalchemy
 h11==0.16.0
-    # via httpcore
+    # via
+    #   httpcore
+    #   uvicorn
 hf-xet==1.1.0
     # via huggingface-hub
 httpcore==1.0.9
@@ -66,9 +81,12 @@ httpx==0.28.1
     # via
     #   langgraph-sdk
     #   langsmith
+    #   mcp
     #   ollama
 httpx-sse==0.4.0
-    # via langchain-community
+    # via
+    #   langchain-community
+    #   mcp
 huggingface-hub==0.31.1
     # via
     #   sentence-transformers
@@ -90,12 +108,17 @@ jsonpatch==1.33
     # via langchain-core
 jsonpointer==3.0.0
     # via jsonpatch
+jsonschema==4.25.1
+    # via mcp
+jsonschema-specifications==2025.9.1
+    # via jsonschema
 langchain==0.3.25
     # via langchain-community
 langchain-community==0.3.23
     # via -r requirements.in
 langchain-core==0.3.59
     # via
+    #   -r requirements.in
     #   langchain
     #   langchain-community
     #   langchain-ollama
@@ -126,6 +149,8 @@ markupsafe==3.0.2
     # via jinja2
 marshmallow==3.26.1
     # via dataclasses-json
+mcp==1.21.0
+    # via -r requirements.in
 mpmath==1.3.0
     # via sympy
 multidict==6.4.3
@@ -207,30 +232,41 @@ pycparser==2.22
     # via cffi
 pydantic==2.11.4
     # via
+    #   -r requirements.in
     #   langchain
     #   langchain-core
     #   langgraph
     #   langsmith
+    #   mcp
     #   ollama
     #   pydantic-settings
 pydantic-core==2.33.2
     # via pydantic
 pydantic-settings==2.9.1
-    # via langchain-community
+    # via
+    #   langchain-community
+    #   mcp
 pygithub==2.6.1
     # via -r requirements.in
 pyjwt[crypto]==2.10.1
-    # via pygithub
+    # via
+    #   mcp
+    #   pygithub
 pynacl==1.5.0
     # via pygithub
 pytest==8.3.5
     # via
     #   -r requirements.in
+    #   pytest-asyncio
     #   pytest-mock
+pytest-asyncio==1.3.0
+    # via -r requirements.in
 pytest-mock==3.14.0
     # via -r requirements.in
 python-dotenv==1.1.0
     # via pydantic-settings
+python-multipart==0.0.20
+    # via mcp
 pyyaml==6.0.2
     # via
     #   huggingface-hub
@@ -238,6 +274,10 @@ pyyaml==6.0.2
     #   langchain-community
     #   langchain-core
     #   transformers
+referencing==0.37.0
+    # via
+    #   jsonschema
+    #   jsonschema-specifications
 regex==2024.11.6
     # via transformers
 requests==2.32.3
@@ -251,6 +291,10 @@ requests==2.32.3
     #   transformers
 requests-toolbelt==1.0.0
     # via langsmith
+rpds-py==0.29.0
+    # via
+    #   jsonschema
+    #   referencing
 safetensors==0.5.3
     # via transformers
 scikit-learn==1.6.1
@@ -267,10 +311,15 @@ sqlalchemy==2.0.40
     # via
     #   langchain
     #   langchain-community
+sse-starlette==3.0.3
+    # via mcp
+starlette==0.50.0
+    # via mcp
 sympy==1.14.0
     # via torch
 tenacity==9.1.2
     # via
+    #   -r requirements.in
     #   langchain-community
     #   langchain-core
 threadpoolctl==3.6.0
@@ -299,11 +348,15 @@ typing-extensions==4.13.2
     #   pydantic
     #   pydantic-core
     #   pygithub
+    #   pytest-asyncio
+    #   referencing
     #   sentence-transformers
     #   sqlalchemy
+    #   starlette
     #   torch
     #   typing-inspect
     #   typing-inspection
+    #   uvicorn
 typing-inspect==0.9.0
     # via dataclasses-json
 typing-inspection==0.4.0
@@ -314,6 +367,10 @@ urllib3==2.4.0
     # via
     #   pygithub
     #   requests
+uvicorn==0.38.0
+    # via mcp
+watchdog==6.0.0
+    # via -r requirements.in
 wrapt==1.17.2
     # via deprecated
 xxhash==3.5.0

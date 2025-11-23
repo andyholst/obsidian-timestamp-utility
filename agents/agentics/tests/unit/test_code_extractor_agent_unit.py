@@ -2,7 +2,7 @@ import pytest
 import os
 from src.code_extractor_agent import CodeExtractorAgent
 from src.state import State
-from src.agentics import llm
+from src.clients import llm_reasoning as llm
 from unittest.mock import patch
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def temp_project_dir(tmp_path):
     return project_dir
 
 def test_code_extractor_agent_relevant_files(temp_project_dir):
-    # Given: A ticket mentioning specific files
+    # Given: A ticket mentioning specific files and project directory
     agent = CodeExtractorAgent(llm)
     agent.project_root = str(temp_project_dir)
     state = State(refined_ticket={
@@ -29,11 +29,11 @@ def test_code_extractor_agent_relevant_files(temp_project_dir):
         "requirements": ["Change main.ts"],
         "acceptance_criteria": ["Verify with main.test.ts"]
     })
-    
+
     # When: Processing the ticket with real LLM
     result = agent.process(state)
-    
-    # Then: Verify relevant files are identified
+
+    # Then: Verify relevant files are identified correctly
     relevant_code_files = result["relevant_code_files"]
     relevant_test_files = result["relevant_test_files"]
     assert isinstance(relevant_code_files, list), "Relevant code files should be a list"
@@ -46,7 +46,7 @@ def test_code_extractor_agent_relevant_files(temp_project_dir):
     assert "src/utils.ts" not in test_paths, "utils.ts should not be included in test files"
 
 def test_code_extractor_agent_always_returns_main_files(temp_project_dir):
-    # Given: Any ticket (even vague ones)
+    # Given: Any ticket (even vague ones) and project directory
     agent = CodeExtractorAgent(llm)
     agent.project_root = str(temp_project_dir)
     state = State(refined_ticket={
@@ -93,7 +93,7 @@ def test_code_extractor_agent_returns_main_files_even_if_not_exist(tmp_path):
     assert result["relevant_test_files"][0]["content"] == "", "Content should be empty if file doesn't exist"
 
 def test_code_extractor_agent_non_existent_files(temp_project_dir):
-    # Given: A ticket mentioning non-existent files
+    # Given: A ticket mentioning non-existent files and project directory
     agent = CodeExtractorAgent(llm)
     agent.project_root = str(temp_project_dir)
     state = State(refined_ticket={
@@ -102,10 +102,10 @@ def test_code_extractor_agent_non_existent_files(temp_project_dir):
         "requirements": [],
         "acceptance_criteria": []
     })
-    
+
     # When: Processing the ticket with real LLM
     result = agent.process(state)
-    
+
     # Then: Verify no non-existent files are included
     relevant_code_files = result["relevant_code_files"]
     relevant_test_files = result["relevant_test_files"]
@@ -123,11 +123,11 @@ def test_extract_identifiers():
         "requirements": ["Add logging"],
         "acceptance_criteria": ["Logs output"]
     }
-    
-    # When: Extracting identifiers
+
+    # When: Extracting identifiers from the ticket
     identifiers = agent.extract_identifiers(ticket)
-    
-    # Then: Verify extracted identifiers
+
+    # Then: Verify extracted identifiers are correct
     assert "main" in identifiers, "Expected 'main' identifier"
     assert "TypeScript" in identifiers, "Expected 'TypeScript' identifier"
     assert "logging" in identifiers, "Expected 'logging' identifier"
@@ -138,13 +138,13 @@ def test_is_content_relevant():
     agent = CodeExtractorAgent(llm)
     content = "function main() { console.log('Hello'); }"
     identifiers = ["main", "console"]
-    
-    # When: Checking content relevance
+
+    # When: Checking content relevance against identifiers
     relevant = agent.is_content_relevant(content, identifiers)
     not_relevant = agent.is_content_relevant("function util() {}", ["main"])
     empty_identifiers = agent.is_content_relevant(content, [])
-    
-    # Then: Verify relevance outcomes
+
+    # Then: Verify relevance outcomes are correct
     assert relevant == True, "Content should be relevant"
     assert not_relevant == False, "Content should not be relevant"
     assert empty_identifiers == False, "Empty identifiers should return False"
@@ -159,17 +159,17 @@ def test_code_extractor_agent_stop_words_failure(temp_project_dir):
         "requirements": [],
         "acceptance_criteria": []
     })
-    
+
     with patch.object(agent, 'load_stop_words', side_effect=Exception("File corrupted")):
-        # When: Processing the ticket with real LLM
+        # When: Processing the ticket with real LLM despite stop words failure
         result = agent.process(state)
-    
+
     # Then: Verify default stop words are used and process continues
     assert "relevant_code_files" in result, "Should have relevant_code_files key"
     assert "relevant_test_files" in result, "Should have relevant_test_files key"
 
 def test_code_extractor_agent_always_returns_main_files_regardless_of_ticket(temp_project_dir):
-    # Given: Any ticket content (even completely empty/vague)
+    # Given: Any ticket content (even completely empty/vague) and project directory
     agent = CodeExtractorAgent(llm)
     agent.project_root = str(temp_project_dir)
     state = State(refined_ticket={

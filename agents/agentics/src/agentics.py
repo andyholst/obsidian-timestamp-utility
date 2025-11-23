@@ -1,167 +1,348 @@
-import os
-import sys
-import logging
+"""
+Agentics Application - Refactored for modularity, async patterns, and dependency injection.
 
-from github import Github, Auth
-from langchain_ollama import OllamaLLM
-from langchain.prompts import PromptTemplate
-from langgraph.graph import StateGraph, END
-from .state import State
+This module provides the main entry point for the agentics application with improved
+architecture following LangChain best practices and modern Python patterns.
+"""
+
+import asyncio
+import sys
+from typing import List, Dict, Any, Optional
+
+from .config import init_config, get_config, AgenticsConfig
+from .services import init_services, get_service_manager
+from .workflows import init_workflows, get_workflow_manager
+from .exceptions import AgenticsError, ServiceUnavailableError, ValidationError
+from .utils import log_info, validate_github_url
+from .monitoring import structured_log
+
+# Agent imports
 from .fetch_issue_agent import FetchIssueAgent
 from .ticket_clarity_agent import TicketClarityAgent
-from .process_llm_agent import ProcessLLMAgent
-from .code_generator_agent import CodeGeneratorAgent
-from .output_result_agent import OutputResultAgent
-from .pre_test_runner_agent import PreTestRunnerAgent
+from .implementation_planner_agent import ImplementationPlannerAgent
 from .code_extractor_agent import CodeExtractorAgent
+from .code_generator_agent import CodeGeneratorAgent
+from .test_generator_agent import TestGeneratorAgent
 from .code_integrator_agent import CodeIntegratorAgent
-from .config import LOGGER_LEVEL, INFO_AS_DEBUG
-from .utils import log_info, validate_github_url
+from .post_test_runner_agent import PostTestRunnerAgent
+from .code_reviewer_agent import CodeReviewerAgent
+from .output_result_agent import OutputResultAgent
+from .error_recovery_agent import ErrorRecoveryAgent
+from .feedback_agent import FeedbackAgent
+from .dependency_analyzer_agent import DependencyAnalyzerAgent
+from .pre_test_runner_agent import PreTestRunnerAgent
+from .process_llm_agent import ProcessLLMAgent
+from .tool_integrated_agent import ToolIntegratedAgent
 
-# Environment variables
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
-OLLAMA_REASONING_MODEL = os.getenv('OLLAMA_REASONING_MODEL', 'qwen2.5:14b')
-OLLAMA_CODE_MODEL = os.getenv('OLLAMA_CODE_MODEL', 'qwen2.5-coder:14b')
+# Workflow and composition imports
+from .composable_workflows import ComposableWorkflows
+from .collaborative_generator import CollaborativeGenerator
+from .agent_composer import AgentComposer
 
-# Set up logging for prod.agentics
-logger = logging.getLogger(__name__)
-logger.setLevel(LOGGER_LEVEL)
-file_handler = logging.FileHandler('agentics.log')
-console_handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler.setFormatter(formatter)
-console_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
+# Circuit breaker and monitoring
+from .circuit_breaker import get_circuit_breaker, CircuitBreaker, ServiceHealthMonitor
+from .monitoring import structured_log
 
-# Configure root logger to ensure all agent logs are output to console
-root_logger = logging.getLogger()
-root_logger.setLevel(LOGGER_LEVEL)
-root_console_handler = logging.StreamHandler()
-root_console_handler.setFormatter(formatter)
-root_logger.addHandler(root_console_handler)
+# MCP and tools
+from .mcp_client import get_mcp_client, init_mcp_client
+from .tools import read_file_tool, list_files_tool, check_file_exists_tool, npm_search_tool, npm_install_tool, npm_list_tool
 
-log_info(logger, "Initializing agentics application")
-log_info(logger, f"Using GITHUB_TOKEN: {'set' if GITHUB_TOKEN else 'not set'}")
-log_info(logger, f"OLLAMA_HOST: {OLLAMA_HOST}")
-log_info(logger, f"OLLAMA_REASONING_MODEL: {OLLAMA_REASONING_MODEL}")
-log_info(logger, f"OLLAMA_CODE_MODEL: {OLLAMA_CODE_MODEL}")
+# MCP tools list for agent integration
+mcp_tools = [read_file_tool, list_files_tool, check_file_exists_tool, npm_search_tool, npm_install_tool, npm_list_tool]
 
-# Initialize clients
-log_info(logger, "Initializing GitHub client")
-auth = Auth.Token(GITHUB_TOKEN)
-github = Github(auth=auth)
-log_info(logger, "GitHub client initialized successfully")
+# Prompts
+from .prompts import ModularPrompts
 
-log_info(logger, "Initializing Ollama LLM clients")
-llm_reasoning = OllamaLLM(
-    model=OLLAMA_REASONING_MODEL,
-    base_url=OLLAMA_HOST,
-    temperature=0.7,  # Lowered to reduce hallucinations
-    top_p=0.7,        # Adjusted for more focused output
-    top_k=20,
-    min_p=0,
-    extra_params={
-        "presence_penalty": 1.5,
-        "num_ctx": 32768,
-        "num_predict": 32768
-    }
-)
-llm_code = OllamaLLM(
-    model=OLLAMA_CODE_MODEL,
-    base_url=OLLAMA_HOST,
-    temperature=0.7,  # Lowered to reduce hallucinations
-    top_p=0.7,        # Adjusted for more focused output
-    top_k=20,
-    min_p=0,
-    extra_params={
-        "presence_penalty": 1.5,
-        "num_ctx": 32768,
-        "num_predict": 32768
-    }
-)
-log_info(logger, "Ollama LLM clients initialized successfully")
 
-# Export LLM clients for testing
-llm = llm_code  # Default for backward compatibility
+# Global configuration and services initialization
+_config = init_config()
+_service_manager = None
+_workflow_manager = None
+_monitor = structured_log(__name__)
 
-# Define the prompt template with generic instructions and thinking mode enabled
-log_info(logger, "Defining prompt template")
-prompt_template = PromptTemplate(
-    input_variables=["ticket_content"],
-    template=(
-        "/think\n"
-        "You are an AI assistant analyzing GitHub tickets for software applications. Your task is to extract or infer the following fields from the ticket content and return them in a structured JSON format:\n\n"
-        "- **Title**: Use the first line of the ticket content as the title. If the ticket is empty or lacks a clear title, generate a default title like 'Untitled Task'.\n"
-        "- **Description**: Identify or infer a concise description. If the ticket is empty, provide a default description like 'No description provided'.\n"
-        "- **Requirements**: List specific tasks or conditions. If none are provided, return an empty list.\n"
-        "- **Acceptance Criteria**: List verifiable conditions. If none are provided, return an empty list.\n\n"
-        "Return only a JSON object with the fields title, description, requirements, and acceptance_criteria. Ensure your response is a valid JSON object with no additional text or code blocks.\n\n"
-        "Ticket content:\n{ticket_content}\n\n"
-        "Expected JSON format:\n"
-        "{{\n"
-        "  \"title\": \"string\",\n"
-        "  \"description\": \"string\",\n"
-        "  \"requirements\": [\"string\", ...],\n"
-        "  \"acceptance_criteria\": [\"string\", ...]\n"
-        "}}"
+# MCP client
+_mcp_client = None
+
+
+def _init_global_services():
+    """Initialize global services and clients."""
+    global _service_manager, _mcp_client
+
+    if _service_manager is None:
+        _service_manager = init_services(_config)
+
+    if _mcp_client is None:
+        _mcp_client = init_mcp_client()
+
+
+def check_services() -> Dict[str, bool]:
+    """
+    Check the health status of all services.
+
+    Returns:
+        Dictionary mapping service names to health status.
+    """
+    if _service_manager is None:
+        _init_global_services()
+
+    return _service_manager.check_services_health()
+
+
+def create_composable_workflow(github_client=None, llm_reasoning=None, llm_code=None, mcp_tools=None) -> ComposableWorkflows:
+    """
+    Create and return a ComposableWorkflows instance with all components initialized.
+
+    Args:
+        github_client: Optional GitHub client override
+        llm_reasoning: Optional reasoning LLM override
+        llm_code: Optional code LLM override
+        mcp_tools: Optional MCP tools override
+
+    Returns:
+        Initialized ComposableWorkflows instance.
+    """
+    # Use provided overrides or defaults
+    ollama_reasoning = llm_reasoning or (_service_manager.ollama_reasoning if _service_manager and hasattr(_service_manager, 'ollama_reasoning') else None)
+    ollama_code = llm_code or (_service_manager.ollama_code if _service_manager and hasattr(_service_manager, 'ollama_code') else None)
+    github_client = github_client or (_service_manager.github if _service_manager and hasattr(_service_manager, 'github') else None)
+
+    # Get MCP tools if available and not overridden
+    if mcp_tools is None and _mcp_client:
+        try:
+            mcp_tools = _mcp_client.get_tools()
+        except Exception:
+            mcp_tools = []
+    elif mcp_tools is None:
+        mcp_tools = []
+
+    return ComposableWorkflows(
+        llm_reasoning=ollama_reasoning,
+        llm_code=ollama_code,
+        github_client=github_client,
+        mcp_tools=mcp_tools
     )
-)
-log_info(logger, "Prompt template defined successfully")
 
-# Instantiate agents
-log_info(logger, "Instantiating agents")
-fetch_issue_agent = FetchIssueAgent(github)
-ticket_clarity_agent = TicketClarityAgent(llm_reasoning, github)
-code_extractor_agent = CodeExtractorAgent(llm_reasoning)
-process_llm_agent = ProcessLLMAgent(llm_reasoning, prompt_template)
-code_generator_agent = CodeGeneratorAgent(llm_code)
-pre_test_runner_agent = PreTestRunnerAgent()
-code_integrator_agent = CodeIntegratorAgent(llm_code)
-output_result_agent = OutputResultAgent()
-log_info(logger, "Agents instantiated successfully")
 
-# Define the LangGraph workflow
-log_info(logger, "Defining LangGraph workflow")
-graph = StateGraph(State)
-graph.add_node("pre_test_runner", pre_test_runner_agent)
-graph.add_node("fetch_issue", fetch_issue_agent)
-graph.add_node("ticket_clarity", ticket_clarity_agent)
-graph.add_node("code_extractor", code_extractor_agent)
-graph.add_node("process_with_llm", process_llm_agent)
-graph.add_node("generate_code", code_generator_agent)
-graph.add_node("integrate_code", code_integrator_agent)
-graph.add_node("output_result", output_result_agent)
+class AgenticsApp:
+    """
+    Main application class for the agentics system.
 
-# Define the flow
-log_info(logger, "Defining workflow edges")
-graph.add_edge("pre_test_runner", "fetch_issue")
-graph.add_edge("fetch_issue", "ticket_clarity")
-graph.add_edge("ticket_clarity", "code_extractor")
-graph.add_edge("code_extractor", "process_with_llm")
-graph.add_edge("process_with_llm", "generate_code")
-graph.add_edge("generate_code", "integrate_code")
-graph.add_edge("integrate_code", "output_result")
-graph.add_edge("output_result", END)
+    This class manages the lifecycle of the application, including initialization
+    of services, workflows, and provides the main API for processing issues.
+    """
 
-graph.set_entry_point("pre_test_runner")
-app = graph.compile()
-log_info(logger, "Workflow defined and compiled successfully")
+    def __init__(self, config: Optional[AgenticsConfig] = None):
+        """
+        Initialize the agentics application.
+
+        Args:
+            config: Optional configuration. If None, loads from environment.
+        """
+        self.config = config or _config
+        self.service_manager = _service_manager
+        self.workflow_manager = _workflow_manager
+        self.monitor = _monitor
+        self._initialized = False
+
+    async def initialize(self) -> None:
+        """
+        Initialize all application components asynchronously.
+
+        This method sets up service clients, workflows, and performs health checks.
+        """
+        if self._initialized:
+            return
+
+        try:
+            log_info(__name__, "Initializing agentics application")
+            log_info(__name__, f"Configuration: GitHub token {'set' if self.config.github_token else 'not set'}")
+            log_info(__name__, f"Ollama host: {self.config.ollama_host}")
+            log_info(__name__, f"Reasoning model: {self.config.ollama_reasoning_model}")
+            log_info(__name__, f"Code model: {self.config.ollama_code_model}")
+
+            # Initialize services if not already done
+            if self.service_manager is None:
+                self.service_manager = await init_services(self.config)
+                # Update global reference
+                global _service_manager
+                _service_manager = self.service_manager
+
+            # Perform service health checks
+            await self._check_services_health()
+
+            # Initialize workflows if not already done
+            if self.workflow_manager is None:
+                self.workflow_manager = init_workflows()
+                # Update global reference
+                global _workflow_manager
+                _workflow_manager = self.workflow_manager
+
+            self._initialized = True
+            log_info(__name__, "Agentics application initialized successfully")
+
+        except Exception as e:
+            self.monitor.error(f"Failed to initialize application: {str(e)}")
+            raise AgenticsError(f"Application initialization failed: {str(e)}") from e
+
+    async def _check_services_health(self) -> None:
+        """
+        Perform comprehensive health checks on all services.
+
+        Raises:
+            ServiceUnavailableError: If critical services are unavailable.
+        """
+        log_info(__name__, "Performing service health checks")
+
+        health_results = await self.service_manager.check_services_health()
+
+        # Check critical services
+        critical_services = ["ollama_reasoning", "ollama_code", "github"]
+        failed_services = []
+
+        for service in critical_services:
+            if not health_results.get(service, False):
+                failed_services.append(service)
+
+        if failed_services:
+            error_msg = f"Critical services unavailable: {', '.join(failed_services)}"
+            self.monitor.error(error_msg)
+            raise ServiceUnavailableError(error_msg)
+
+        # Log MCP status (not critical)
+        if health_results.get("mcp", False):
+            log_info(__name__, "MCP service available")
+        else:
+            log_info(__name__, "MCP service not available, proceeding without MCP functionality")
+
+        log_info(__name__, "All critical services are healthy")
+
+    async def process_issue(self, issue_url: str) -> Dict[str, Any]:
+        """
+        Process a single GitHub issue.
+
+        Args:
+            issue_url: URL of the GitHub issue to process.
+
+        Returns:
+            Processing result containing generated code, tests, and metadata.
+
+        Raises:
+            ValidationError: If the issue URL is invalid.
+            AgenticsError: If processing fails.
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        if not validate_github_url(issue_url):
+            raise ValidationError(f"Invalid GitHub issue URL: {issue_url}")
+
+        log_info(__name__, f"Processing issue: {issue_url}")
+
+        try:
+            result = await self.workflow_manager.execute_workflow(
+                "issue_processing",
+                {"url": issue_url}
+            )
+            log_info(__name__, f"Successfully processed issue: {issue_url}")
+            return result
+
+        except Exception as e:
+            self.monitor.error(f"Failed to process issue {issue_url}: {str(e)}")
+            raise AgenticsError(f"Issue processing failed: {str(e)}") from e
+
+    async def process_issues_batch(self, issue_urls: List[str]) -> Dict[str, Any]:
+        """
+        Process multiple GitHub issues concurrently.
+
+        Args:
+            issue_urls: List of GitHub issue URLs to process.
+
+        Returns:
+            Batch processing results with success/failure counts and individual results.
+
+        Raises:
+            ValidationError: If any issue URL is invalid.
+            AgenticsError: If batch processing fails.
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        # Validate all URLs
+        invalid_urls = [url for url in issue_urls if not validate_github_url(url)]
+        if invalid_urls:
+            raise ValidationError(f"Invalid GitHub issue URLs: {invalid_urls}")
+
+        log_info(__name__, f"Starting batch processing of {len(issue_urls)} issues")
+
+        try:
+            result = await self.workflow_manager.execute_workflow(
+                "batch_issue_processing",
+                {"issue_urls": issue_urls}
+            )
+            log_info(__name__, f"Batch processing completed: {result['successful']}/{result['total_issues']} successful")
+            return result
+
+        except Exception as e:
+            self.monitor.error(f"Batch processing failed: {str(e)}")
+            raise AgenticsError(f"Batch processing failed: {str(e)}") from e
+
+    async def get_service_health(self) -> Dict[str, bool]:
+        """
+        Get the current health status of all services.
+
+        Returns:
+            Dictionary mapping service names to health status.
+        """
+        if not self._initialized:
+            await self.initialize()
+
+        return await self.service_manager.check_services_health()
+
+    async def shutdown(self) -> None:
+        """
+        Gracefully shutdown the application and clean up resources.
+        """
+        if not self._initialized:
+            return
+
+        log_info(__name__, "Shutting down agentics application")
+
+        try:
+            if self.service_manager:
+                await self.service_manager.close_services()
+
+            self._initialized = False
+            log_info(__name__, "Agentics application shutdown complete")
+
+        except Exception as e:
+            self.monitor.error(f"Error during shutdown: {str(e)}")
+
 
 # Main execution
 if __name__ == "__main__":
-    log_info(logger, "Starting main execution")
-    if len(sys.argv) != 2:
-        logger.error("Usage: python agentics.py <issue_url>")
-        sys.exit(1)
-    issue_url = sys.argv[1]
-    log_info(logger, f"Processing issue URL: {issue_url}")
-    initial_state = {"url": issue_url}
-    try:
-        log_info(logger, "Invoking workflow")
-        app.invoke(initial_state)
-        log_info(logger, "Workflow completed successfully")
-    except Exception as e:
-        logger.error(f"Workflow failed: {str(e)}")
-        sys.exit(1)
+    async def main():
+        """Main async execution function."""
+        if len(sys.argv) != 2:
+            print("Usage: python agentics.py <issue_url>", file=sys.stderr)
+            sys.exit(1)
+
+        issue_url = sys.argv[1]
+        log_info(__name__, f"Processing issue URL: {issue_url}")
+
+        app_instance = AgenticsApp()
+        try:
+            await app_instance.initialize()
+            result = await app_instance.process_issue(issue_url)
+            log_info(__name__, "Processing completed successfully")
+            print(f"Result: {result}")
+        except Exception as e:
+            log_info(__name__, f"Processing failed: {str(e)}")
+            print(f"Error: {str(e)}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            await app_instance.shutdown()
+
+    # Run the async main function
+    asyncio.run(main())
+
+

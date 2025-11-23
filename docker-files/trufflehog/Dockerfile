@@ -1,0 +1,1 @@
+FROM trufflesecurity/trufflehog:latest

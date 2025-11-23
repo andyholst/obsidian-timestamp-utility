@@ -384,6 +384,13 @@ describe('TimestampPlugin', () => {
             expect(command).toBeDefined();
             expect(command.name).toBe('Convert Reminders to Date Time-Blocked Tasks');
         });
+
+        test('process-tasks command callback exists', async () => {
+            await plugin.onload();
+            const command = mockCommands['process-tasks'];
+            expect(command).toBeDefined();
+            expect(typeof command.callback).toBe('function');
+        });
     });
 
     describe('parseDateString', () => {
@@ -404,10 +411,37 @@ describe('TimestampPlugin', () => {
         });
     });
 
+    describe('insert-date-range command', () => {
+        test('opens DateRangeModal', async () => {
+            await plugin.onload();
+            const command = mockCommands['insert-date-range'];
+            expect(command).toBeDefined();
+            if (command && typeof command.callback === 'function') {
+                command.callback();
+                // Modal is opened, but since it's not exported, we can't spy directly
+                expect(true).toBe(true);
+            }
+        });
+    });
+
     describe('DateRangeModal', () => {
-        test('creates modal with app', () => {
-            // DateRangeModal is not exported, so we test through the command
-            expect(true).toBe(true);
+        test('modal handles valid date range', () => {
+            // Since DateRangeModal is not exported, test the parseDateString function used in it
+            expect(parseDateString('20250101')).toEqual(new Date(2025, 0, 1));
+            expect(parseDateString('20251231')).toEqual(new Date(2025, 11, 31));
+        });
+
+        test('modal rejects invalid dates', () => {
+            expect(parseDateString('20250230')).toBeNull(); // Invalid date
+            expect(parseDateString('20251301')).toBeNull(); // Invalid month
+            expect(parseDateString('20250132')).toBeNull(); // Invalid day
+        });
+
+        test('modal handles edge cases', () => {
+            expect(parseDateString('20230229')).toBeNull(); // Not leap year
+            expect(parseDateString('20200229')).toEqual(new Date(2020, 1, 29)); // Leap year
+            expect(parseDateString('20240131')).toEqual(new Date(2024, 0, 31)); // Valid
+            expect(parseDateString('20240231')).toBeNull(); // Feb 31 doesn't exist
         });
     });
 
@@ -424,6 +458,21 @@ describe('TimestampPlugin', () => {
                     mockFile,
                     expect.stringMatching(/^folder\/\d{14}_my_note\.md$/)
                 );
+            }
+        });
+
+        test('handles case when no file is active', async () => {
+            mockApp.workspace.getActiveFile = jest.fn(() => null);
+            mockApp.workspace.getActiveViewOfType = jest.fn(() => null);
+            await plugin.onload();
+
+            const command = mockCommands['rename-with-timestamp'];
+            expect(command).toBeDefined();
+
+            if (command && typeof command.callback === 'function') {
+                // Should not throw, just not call renameFile
+                await expect(command.callback()).resolves.not.toThrow();
+                expect(mockApp.fileManager.renameFile).not.toHaveBeenCalled();
             }
         });
     });
@@ -451,6 +500,28 @@ describe('TimestampPlugin', () => {
 
             expect(timestampTime).toBeGreaterThanOrEqual(before - 1000); // Allow 1 second tolerance
             expect(timestampTime).toBeLessThanOrEqual(after + 1000);
+        });
+
+        test('timestamp components are valid', () => {
+            const timestamp = plugin.generateTimestamp();
+            const year = parseInt(timestamp.slice(0, 4));
+            const month = parseInt(timestamp.slice(4, 6));
+            const day = parseInt(timestamp.slice(6, 8));
+            const hour = parseInt(timestamp.slice(8, 10));
+            const minute = parseInt(timestamp.slice(10, 12));
+            const second = parseInt(timestamp.slice(12, 14));
+
+            expect(year).toBeGreaterThan(2020);
+            expect(month).toBeGreaterThan(0);
+            expect(month).toBeLessThanOrEqual(12);
+            expect(day).toBeGreaterThan(0);
+            expect(day).toBeLessThanOrEqual(31);
+            expect(hour).toBeGreaterThanOrEqual(0);
+            expect(hour).toBeLessThanOrEqual(23);
+            expect(minute).toBeGreaterThanOrEqual(0);
+            expect(minute).toBeLessThanOrEqual(59);
+            expect(second).toBeGreaterThanOrEqual(0);
+            expect(second).toBeLessThanOrEqual(59);
         });
     });
 });

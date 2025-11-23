@@ -1,0 +1,68 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+CHANGELOG.md
+*.md
+
+# CI/CD
+.github/
+.kilocode/
+
+# Tests
+agents/agentics/tests/
+src/__tests__/
+src/__mocks__/
+__pycache__/
+*.pyc
+.pytest_cache/
+coverage/
+.nyc_output/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+release/
+logs/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Config files not needed for build
+jest.config.cjs
+rollup.config.js
+tsconfig.json
+manifest.json
+versions.json
+commitlint.config.cjs
+containerd_wrapper.sh
+changelog.sh
+release.sh
+test_suite_validation.py
+chglog/
+
+# Docker
+docker-compose-files/
+docker-files/
+
+# Python
+agents/agentics/.dockerignore
+agents/agentics/ARCHITECTURE_REFACTOR.md
+agents/agentics/LLM_CODE_VALIDATION.md
+agents/agentics/TEST_SUITE_README.md
