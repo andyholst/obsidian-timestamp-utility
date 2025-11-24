@@ -1,7 +1,9 @@
 import pytest
 import os
 from unittest.mock import patch, MagicMock
+from langchain_ollama import OllamaLLM
 from src.code_generator_agent import CodeGeneratorAgent
+from src.config import AgenticsConfig
 from src.state import State
 from tests.fixtures.mock_llm_responses import create_code_generator_mock_responses
 
@@ -140,6 +142,15 @@ def test_code_generator_agent_process_with_feedback(mock_npm_list, mock_code_gen
     assert len(result["generated_code"]) > 0
 def test_code_generator_agent_generated_code_quality():
     """Test that generated code has basic TypeScript quality using real LLM."""
+    config = AgenticsConfig()
+    llm_config = config.get_code_llm_config()
+    llm = OllamaLLM(
+        model=llm_config.model,
+        base_url=llm_config.base_url,
+        temperature=0.1,
+        num_ctx=4096,
+        num_predict=2048
+    )
     agent = CodeGeneratorAgent(llm)
     state = State(
         result={
@@ -168,6 +179,15 @@ def test_code_generator_agent_generated_code_quality():
 
 def test_code_generator_agent_generated_tests_quality():
     """Test that generated tests have basic Jest quality using real LLM."""
+    config = AgenticsConfig()
+    llm_config = config.get_code_llm_config()
+    llm = OllamaLLM(
+        model=llm_config.model,
+        base_url=llm_config.base_url,
+        temperature=0.1,
+        num_ctx=4096,
+        num_predict=2048
+    )
     agent = CodeGeneratorAgent(llm)
     state = State(
         result={
