@@ -240,7 +240,7 @@ declare module 'obsidian' {{
 
             # Run TypeScript compiler
             result = subprocess.run(
-                ['npx', 'tsc', '--noEmit', '--target', 'es2020', '--moduleResolution', 'node',
+                ['tsc', '--noEmit', '--target', 'es2020', '--moduleResolution', 'node',
                  '--allowJs', '--checkJs', 'false', '--strict', '--noImplicitAny',
                  '--strictNullChecks', temp_file_path],
                 capture_output=True,
