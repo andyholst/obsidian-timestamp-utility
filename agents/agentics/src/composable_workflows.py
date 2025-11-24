@@ -102,7 +102,7 @@ class ComposableWorkflows:
             agent_names=["fetch_issue", "ticket_clarity", "implementation_planner"],
             tool_names=[tool.name for tool in self.mcp_tools]
         )
-        return self.composer.create_workflow("issue_processing", config)
+        return InitialStateAdapter() | self.composer.create_workflow("issue_processing", config)
 
     def _create_code_generation_workflow(self) -> Runnable:
         """Create CODE GENERATION workflow: extract -> collaborative generation."""

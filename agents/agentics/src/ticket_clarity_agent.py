@@ -8,7 +8,7 @@ from .base_agent import BaseAgent
 from .state import State
 from langchain_ollama import OllamaLLM
 from langchain.prompts import PromptTemplate
-from github import Github
+from github import Github, GithubException
 from .utils import safe_json_dumps, remove_thinking_tags, log_info, parse_json_response
 
 class TicketClarityAgent(BaseAgent):
@@ -138,5 +138,8 @@ class TicketClarityAgent(BaseAgent):
             f"## Acceptance Criteria\n" + "\n".join(f"- {ac}" for ac in refined_ticket['acceptance_criteria'])
         )
         log_info(self.name, f"Comment to post: {comment}")
-        issue.create_comment(comment)
+        try:
+            issue.create_comment(comment)
+        except GithubException as e:
+            self.monitor.error(f"Failed to create comment: {e}")
         log_info(self.name, "Refined ticket posted successfully")

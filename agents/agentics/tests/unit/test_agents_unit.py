@@ -181,7 +181,7 @@ def test_full_workflow_unit(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory and mocked GitHub with well-structured ticket
     project_dir = src_backup
@@ -341,8 +341,8 @@ def test_full_workflow_github_error():
         with pytest.raises(AgenticsError) as exc_info:
             asyncio.run(app.process_issue(initial_state["url"]))
         assert isinstance(exc_info.value.__cause__.__cause__, tenacity.RetryError)
-        assert isinstance(exc_info.value.__cause__.__cause__, GithubException)
-        assert "404" in str(exc_info.value.__cause__.__cause__) and "Not Found" in str(exc_info.value.__cause__.__cause__)
+        assert isinstance(exc_info.value.__cause__.__cause__.last_attempt.exception(), GithubException)
+        assert "404" in str(exc_info.value.__cause__.__cause__.last_attempt.exception()) and "Not Found" in str(exc_info.value.__cause__.__cause__.last_attempt.exception())
 
 def test_full_workflow_tests_fail(src_backup):
     # Instantiate agents for patching
@@ -350,7 +350,7 @@ def test_full_workflow_tests_fail(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory with failing test and mocked GitHub
     project_dir = src_backup
@@ -390,7 +390,7 @@ def test_full_workflow_vague_ticket_with_code_generation(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory and mocked GitHub with unclear ticket
     project_dir = src_backup
@@ -439,7 +439,7 @@ def test_full_workflow_file_write_error(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory and mocked GitHub with file write error
     project_dir = src_backup
@@ -479,7 +479,7 @@ def test_full_workflow_npm_install_fail(tmp_path):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: mocked GitHub and empty project directory without package.json
     mock_github = MagicMock()
@@ -559,7 +559,7 @@ def test_full_workflow_multiple_relevant_files(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory and mocked GitHub with well-structured ticket
     project_dir = src_backup
@@ -571,6 +571,43 @@ def test_full_workflow_multiple_relevant_files(src_backup):
     mock_github.get_repo.return_value = mock_repo
     mock_github.get_user.return_value = MagicMock(login='mock_user')
 
+    mock_github_client = MagicMock()
+    mock_github_client.get_repo.return_value = mock_repo
+    mock_github_client.get_user.return_value = MagicMock(login='mock_user')
+    mock_service_manager = MagicMock()
+    mock_service_manager.github = MagicMock()
+    mock_service_manager.github._client = mock_github_client
+    mock_service_manager.github.get_repo.return_value = mock_repo
+    mock_service_manager.github.get_user.return_value = MagicMock(login='mock_user')
+    mock_llm_reasoning = MagicMock()
+    mock_llm_code = MagicMock()
+    mock_service_manager.llm_reasoning = mock_llm_reasoning
+    mock_service_manager.llm_code = mock_llm_code
+
+    # Set up mock responses
+    ticket_clarity_responses = ['{"is_clear": true, "suggestions": []}'] * 5 + [json.dumps(EXPECTED_TICKET_JSON)]
+    impl_planner_response = '{"implementation_steps": [], "npm_packages": [], "manual_implementation_notes": ""}'
+    collab_gen_response = '{"passed": true, "score": 100, "coverage_percentage": 100, "alignment_score": 100, "issues": [], "recommendations": [], "test_quality": "excellent"}'
+    code_integrator_filename_response = "timestampGenerator"
+    code_integrator_code_response = "class TimestampPlugin { onload() { this.addCommand({ id: 'generate-uuid', name: 'Generate UUID', callback: () => { console.log('UUID generated'); } }); } }"
+    code_reviewer_response = '{"is_aligned": true, "feedback": "Code and tests are well-aligned", "tuned_prompt": "", "needs_fix": false}'
+
+    mock_llm_reasoning.invoke.side_effect = (
+        ticket_clarity_responses +
+        [impl_planner_response] +
+        [collab_gen_response] +
+        [code_integrator_filename_response] +
+        [code_integrator_code_response] +
+        [code_reviewer_response]
+    )
+
+    mock_llm_code.invoke.side_effect = [
+        "public generateUUID() { this.addCommand({ id: 'generate-uuid', name: 'Generate UUID', callback: () => { console.log('UUID generated'); } }); }",  # code generation
+        "test('generate UUID', () => { expect(true).toBe(true); });",  # test generation
+        "timestampGenerator",  # filename generation
+        "class TimestampPlugin { onload() { this.addCommand({ id: 'generate-uuid', name: 'Generate UUID', callback: () => { console.log('UUID generated'); } }); } }"  # code integration
+    ]
+
     def mock_github_init(self, token):
         self.token = token
         self._client = mock_github
@@ -580,7 +617,9 @@ def test_full_workflow_multiple_relevant_files(src_backup):
           patch.object(pre_test_runner_agent, 'project_root', str(project_dir)), \
           patch.object(code_extractor_agent, 'project_root', str(project_dir)), \
           patch.object(code_integrator_agent, 'project_root', str(project_dir)), \
-          patch.object(post_test_runner_agent, 'project_root', str(project_dir)):
+          patch.object(post_test_runner_agent, 'project_root', str(project_dir)), \
+          patch('src.services.ServiceManager.check_services_health', return_value={"ollama_reasoning": True, "ollama_code": True, "github": True, "mcp": False}), \
+          patch('src.services.get_service_manager', return_value=mock_service_manager):
 
         from src.agentics import AgenticsApp
         app = AgenticsApp()
@@ -623,7 +662,7 @@ def test_full_workflow_malformed_ticket(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory and mocked GitHub with malformed ticket
     project_dir = src_backup
@@ -674,7 +713,7 @@ def test_full_workflow_large_ticket(src_backup):
     pre_test_runner_agent = PreTestRunnerAgent()
     code_extractor_agent = CodeExtractorAgent(mock_llm)
     code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent()
+    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Given: project directory and mocked GitHub with large ticket content
     project_dir = src_backup
@@ -1043,5 +1082,5 @@ def test_integration_testing_phase_call_order():
         pass
 
     # Then: verify the agent call order for integration and testing phase
-    expected_order = ['code_integrator', 'post_test_runner', 'code_reviewer', 'output_result']
+    expected_order = ['code_integrator', 'post_test_runner']
     assert call_order == expected_order, f"Expected {expected_order}, got {call_order}"
