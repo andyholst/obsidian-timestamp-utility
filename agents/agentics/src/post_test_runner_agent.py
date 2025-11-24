@@ -14,7 +14,7 @@ from .utils import safe_json_dumps, log_info
 
 class PostTestRunnerAgent(ToolIntegratedAgent):
     def __init__(self, llm: Runnable):
-        super().__init__(llm, [npm_install_tool, npm_run_tool, check_file_exists_tool, write_file_tool])
+        super().__init__(llm, [npm_install_tool, npm_run_tool, check_file_exists_tool, write_file_tool], name="PostTestRunner")
         self.project_root = os.getenv('PROJECT_ROOT')
         if not self.project_root:
             raise ValueError("PROJECT_ROOT environment variable is required")

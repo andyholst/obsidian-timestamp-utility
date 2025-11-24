@@ -8,7 +8,7 @@ from .utils import safe_json_dumps, remove_thinking_tags, log_info
 
 class CodeExtractorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__(llm_client, [read_file_tool, list_files_tool, check_file_exists_tool])
+        super().__init__(llm_client, [read_file_tool, list_files_tool, check_file_exists_tool], "CodeExtractor")
         # Use environment variable for project root (can be set later for testing)
         self.project_root = os.getenv('PROJECT_ROOT')
         self.llm = llm_client

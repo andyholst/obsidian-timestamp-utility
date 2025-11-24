@@ -19,7 +19,7 @@ from .prompts import ModularPrompts
 
 class CodeGeneratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__(llm_client, [npm_search_tool, npm_install_tool])
+        super().__init__(llm_client, [npm_search_tool, npm_install_tool], name="CodeGenerator")
         self.main_file = os.getenv('MAIN_FILE', 'main.ts')
         self.test_file = os.getenv('TEST_FILE', 'main.test.ts')
         self.project_root = os.getenv('PROJECT_ROOT')
@@ -324,7 +324,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             # Check if ticket is vague (empty requirements and acceptance criteria)
             requirements = task_details.get('requirements', [])
             acceptance_criteria = task_details.get('acceptance_criteria', [])
-            is_vague_ticket = not requirements and not acceptance_criteria
+            is_vague_ticket = not requirements
             # If ticket is vague, skip code generation
             if is_vague_ticket:
                 log_info(self.name, "Ticket is vague (empty requirements/acceptance criteria); skipping code generation")
@@ -486,7 +486,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             # Check if ticket is vague (empty requirements and acceptance criteria)
             requirements = (state.result or {}).get('requirements', [])
             acceptance_criteria = (state.result or {}).get('acceptance_criteria', [])
-            is_vague_ticket = not requirements and not acceptance_criteria
+            is_vague_ticket = not requirements
 
             if is_vague_ticket:
                 log_info(self.name, "Ticket is vague (empty requirements/acceptance criteria); skipping code generation")
