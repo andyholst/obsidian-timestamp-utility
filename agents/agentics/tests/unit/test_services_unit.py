@@ -787,22 +787,26 @@ class TestServiceManager:
         mock_github_class.assert_not_called()
 
     @patch('src.services.get_health_monitor')
-    def test_service_manager_check_services_health(self, mock_get_health_monitor, mock_health_monitor):
+    def test_service_manager_check_services_health(self, mock_get_health_monitor):
         """Test ServiceManager check_services_health."""
+        mock_health_monitor = MagicMock()
         mock_get_health_monitor.return_value = mock_health_monitor
+
+        mock_health_monitor.is_service_healthy.side_effect = lambda name: {
+            "ollama_reasoning": True,
+            "ollama_code": False,
+            "github": True,
+            "mcp": True
+        }.get(name, False)
 
         config = MagicMock()
         manager = ServiceManager(config)
 
         # Mock services
         mock_ollama_reasoning = MagicMock()
-        mock_ollama_reasoning.health_check = AsyncMock(return_value=True)
         mock_ollama_code = MagicMock()
-        mock_ollama_code.health_check = AsyncMock(return_value=False)
         mock_github = MagicMock()
-        mock_github.health_check = AsyncMock(return_value=True)
         mock_mcp = MagicMock()
-        mock_mcp.health_check = AsyncMock(return_value=True)
 
         manager.ollama_reasoning = mock_ollama_reasoning
         manager.ollama_code = mock_ollama_code

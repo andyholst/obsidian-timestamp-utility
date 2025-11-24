@@ -15,7 +15,6 @@ class FetchIssueAgent(BaseAgent):
         self.monitor.setLevel(logging.INFO)
         log_info(self.name, "Initialized FetchIssueAgent")
 
-    @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10), retry=retry_if_exception_type((ValueError, GithubException)))
     def process(self, state: State) -> State:
         """Fetch GitHub issue content based on the provided URL and update the state."""
         log_info(self.name, f"Before processing in {self.name}: processing completed")

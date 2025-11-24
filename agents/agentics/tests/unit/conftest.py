@@ -66,8 +66,11 @@ def mock_github_health_check():
 @pytest.fixture(autouse=True)
 def mock_service_health():
     """Mock service health checks to always return healthy"""
-    from src.services import ServiceManager
-    with patch.object(ServiceManager, 'check_services_health', new_callable=AsyncMock, return_value={"github": True, "ollama_reasoning": True, "ollama_code": True, "mcp": True}):
+    from unittest.mock import MagicMock
+    from src.circuit_breaker import ServiceHealthMonitor
+    mock_monitor = MagicMock(spec=ServiceHealthMonitor)
+    mock_monitor.is_service_healthy.return_value = True
+    with patch('src.services.get_health_monitor', return_value=mock_monitor):
         yield
 
 

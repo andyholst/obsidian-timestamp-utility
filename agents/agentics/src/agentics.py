@@ -55,7 +55,7 @@ from .prompts import ModularPrompts
 
 
 # Global configuration and services initialization
-_config = init_config()
+_config = None
 _service_manager = None
 _workflow_manager = None
 _monitor = structured_log(__name__)
@@ -66,7 +66,10 @@ _mcp_client = None
 
 def _init_global_services():
     """Initialize global services and clients."""
-    global _service_manager, _mcp_client
+    global _service_manager, _mcp_client, _config
+
+    if _config is None:
+        _config = init_config()
 
     if _service_manager is None:
         _service_manager = init_services(_config)
@@ -138,6 +141,9 @@ class AgenticsApp:
         Args:
             config: Optional configuration. If None, loads from environment.
         """
+        global _config
+        if _config is None:
+            _config = init_config()
         self.config = config or _config
         self.service_manager = _service_manager
         self.workflow_manager = _workflow_manager
