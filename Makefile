@@ -15,7 +15,7 @@ HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 export HOST_UID HOST_GID
 
-.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite check-secrets
+.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite check-secrets lint-python
 
 all: build-app test-app release
 
@@ -106,7 +106,7 @@ test-agents-integration: build-image-agents check-deps
 test-agents-integration-fast: INTEGRATION_TEST_FILTER=--maxfail=1 -k "not slow"
 test-agents-integration-fast: test-agents-integration
 
-test-agents: test-agents-unit-mock test-agents-integration
+test-agents: lint-python test-agents-unit-mock test-agents-integration validate-test-suite
 
 test: test-app test-agents
 
@@ -170,3 +170,7 @@ validate-test-suite: build-image-agents check-deps
 
 check-secrets:
 	$(CONTAINER_RUNTIME) run --rm -v $(PWD):/app trufflesecurity/trufflehog:latest filesystem /app --fail --only-verified
+
+lint-python:
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents bash -c "ruff check /app/src /app/tests && black --check /app/src /app/tests"
+
