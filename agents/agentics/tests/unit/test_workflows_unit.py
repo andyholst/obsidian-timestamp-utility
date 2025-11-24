@@ -76,11 +76,11 @@ def mock_batch_processor():
 def mock_composable_workflow():
     """Create a mock composable workflow."""
     mock_workflow = MagicMock(spec=ComposableWorkflows)
-    mock_workflow.process_issue.return_value = {
+    mock_workflow.process_issue = AsyncMock(return_value={
         "success": True,
         "issue_url": "https://github.com/user/repo/issues/1",
         "result": {"title": "Test Issue", "description": "Test description"}
-    }
+    })
     return mock_workflow
 
 
@@ -230,9 +230,9 @@ class TestIssueProcessingWorkflow:
     @patch('src.workflows.get_batch_processor')
     @patch('src.workflows.validate_github_url')
     @patch('src.workflows.ComposableWorkflows')
-    @patch('src.workflows.log_info')
+    @patch('src.workflows._monitor')
     @pytest.mark.asyncio
-    async def test_execute_workflow_failure(self, mock_log_info, mock_composable_class, mock_validate_url,
+    async def test_execute_workflow_failure(self, mock_monitor, mock_composable_class, mock_validate_url,
                                           mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager,
                                           mock_service_manager):
         """Test execution failure handling."""
@@ -251,7 +251,8 @@ class TestIssueProcessingWorkflow:
         with pytest.raises(WorkflowError, match="Workflow execution failed: Workflow failed"):
             await workflow.execute(input_data)
 
-        assert mock_log_info.call_count == 2  # start and failure logs
+        assert mock_monitor.info.call_count == 1
+        assert mock_monitor.error.call_count == 1
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
@@ -353,9 +354,9 @@ class TestBatchIssueProcessingWorkflow:
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
     @patch('src.workflows.validate_github_url')
-    @patch('src.workflows.log_info')
+    @patch('src.workflows._monitor')
     @pytest.mark.asyncio
-    async def test_execute_success(self, mock_log_info, mock_validate_url, mock_get_batch_processor,
+    async def test_execute_success(self, mock_monitor, mock_validate_url, mock_get_batch_processor,
                                  mock_get_task_manager, mock_get_service_manager, mock_service_manager):
         """Test successful batch execution."""
         mock_get_service_manager.return_value = mock_service_manager
@@ -393,7 +394,7 @@ class TestBatchIssueProcessingWorkflow:
 
         assert result == expected_result
         mock_batch_processor.process_batch.assert_called_once()
-        assert mock_log_info.call_count == 2  # start and completion logs
+        assert mock_monitor.info.call_count == 2  # start and completion logs
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
@@ -613,17 +614,19 @@ class TestGlobalWorkflowFunctions:
         assert result == mock_manager
 
     @patch('src.workflows.WorkflowManager')
-    @patch('src.workflows.log_info')
-    def test_init_workflows(self, mock_log_info, mock_workflow_manager_class):
+    @patch('src.workflows.structured_log')
+    def test_init_workflows(self, mock_structured_log, mock_workflow_manager_class):
         """Test initializing global workflow manager."""
         mock_manager = MagicMock()
+        mock_monitor = MagicMock()
+        mock_structured_log.return_value = mock_monitor
         mock_workflow_manager_class.return_value = mock_manager
 
         result = init_workflows()
 
         assert result == mock_manager
         mock_workflow_manager_class.assert_called_once()
-        mock_log_info.assert_called_once_with('src.workflows', "Workflow manager initialized")
+        mock_monitor.info.assert_called_once_with("workflow_manager_initialized", {"workflows": ["issue_processing", "batch_issue_processing"]})
 
 
 class TestInputValidationAndErrorPropagation:
