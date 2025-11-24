@@ -4,7 +4,7 @@ import json
 import sys
 from typing import Optional
 from dataclasses import dataclass
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # Set to True to log messages originally at INFO level as DEBUG level
@@ -53,11 +53,11 @@ class AgenticsConfig(BaseModel):
     logger_level: int = LOGGER_LEVEL
     info_as_debug: bool = INFO_AS_DEBUG
 
-    @field_validator('ollama_host')
-    def validate_ollama_host(cls, v):
-        if not v.startswith(('http://', 'https://')):
+    @model_validator(mode='after')
+    def validate_ollama_host(cls, model):
+        if not model.ollama_host.startswith(('http://', 'https://')):
             raise ConfigValidationError("OLLAMA_HOST must be a valid HTTP/HTTPS URL")
-        return v
+        return model
 
     def get_reasoning_llm_config(self) -> LLMConfig:
         """Get configuration for reasoning LLM."""
