@@ -215,6 +215,15 @@ def test_code_generator_agent_generated_tests_quality():
 
 def test_code_generator_agent_chain_error_handling():
     """Test chain error handling with invalid state using real LLM."""
+    config = AgenticsConfig()
+    llm_config = config.get_code_llm_config()
+    llm = OllamaLLM(
+        model=llm_config.model,
+        base_url=llm_config.base_url,
+        temperature=0.1,
+        num_ctx=4096,
+        num_predict=2048
+    )
     agent = CodeGeneratorAgent(llm)
     # Invalid state missing required keys
     state = State(
@@ -239,6 +248,15 @@ def test_code_generator_agent_chain_error_handling():
 
 def test_code_generator_agent_langchain_chain_invocation():
     """Test direct chain invocation for LangChain validation using real LLM."""
+    config = AgenticsConfig()
+    llm_config = config.get_code_llm_config()
+    llm = OllamaLLM(
+        model=llm_config.model,
+        base_url=llm_config.base_url,
+        temperature=0.1,
+        num_ctx=4096,
+        num_predict=2048
+    )
     agent = CodeGeneratorAgent(llm)
     # Test code generation chain directly
     test_state = {
@@ -263,6 +281,15 @@ def test_code_generator_agent_langchain_chain_invocation():
 
 def test_code_generator_agent_test_chain_invocation():
     """Test test generation chain directly for LangChain validation using real LLM."""
+    config = AgenticsConfig()
+    llm_config = config.get_code_llm_config()
+    llm = OllamaLLM(
+        model=llm_config.model,
+        base_url=llm_config.base_url,
+        temperature=0.1,
+        num_ctx=4096,
+        num_predict=2048
+    )
     agent = CodeGeneratorAgent(llm)
     test_state = {
         "result": {
@@ -283,4 +310,3 @@ def test_code_generator_agent_test_chain_invocation():
     assert isinstance(generated_tests, str), "Chain should return string"
     assert len(generated_tests) > 0, "Generated tests should not be empty"
     assert "describe(" in generated_tests or "test(" in generated_tests, "Should generate test-like content"
-    assert len(result["generated_tests"]) > 0
