@@ -61,6 +61,29 @@ class TestAgenticsAppIntegration:
         ]
 
     @pytest.mark.integration
+    async def test_initialize_success(self):
+        """Test successful initialization with real services."""
+        # Use real AgenticsConfig with environment variables
+        config = AgenticsConfig(
+            github_token=os.environ.get('GITHUB_TOKEN', 'test_token'),
+            ollama_host=os.environ.get('OLLAMA_HOST', 'http://localhost:11434'),
+            ollama_reasoning_model=os.environ.get('OLLAMA_REASONING_MODEL', 'qwen2.5:14b'),
+            ollama_code_model=os.environ.get('OLLAMA_CODE_MODEL', 'qwen2.5-coder:14b')
+        )
+
+        app = AgenticsApp(config)
+
+        await app.initialize()
+
+        assert app._initialized is True
+        assert app.service_manager is not None
+        assert app.composable_workflows is not None
+        # Assert real initialization - services should be initialized
+        assert app.service_manager.ollama_reasoning is not None
+        assert app.service_manager.ollama_code is not None
+        assert app.service_manager.github is not None
+
+    @pytest.mark.integration
     async def test_agentics_app_initialization_with_real_services(self, agentics_app):
         """Test AgenticsApp initialization with real services and configuration."""
         # Verify app is initialized

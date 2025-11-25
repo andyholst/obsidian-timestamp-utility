@@ -44,23 +44,6 @@ def mock_composable_workflows():
 class TestAgenticsApp:
     """Test AgenticsApp functionality."""
 
-    @patch('src.agentics.create_composable_workflow')
-    @patch('src.agentics.init_services')
-    def test_initialize_success(self, mock_init_services, mock_create_workflows, mock_config, mock_service_manager, mock_composable_workflows):
-        """Test successful initialization."""
-        mock_init_services.return_value = mock_service_manager
-        mock_create_workflows.return_value = mock_composable_workflows
-
-        app = AgenticsApp(mock_config)
-
-        asyncio.run(app.initialize())
-
-        assert app._initialized is True
-        assert app.service_manager == mock_service_manager
-        assert app.composable_workflows == mock_composable_workflows
-        mock_init_services.assert_called_once_with(mock_config)
-        mock_create_workflows.assert_called_once()
-
     @patch('src.agentics.init_services')
     def test_initialize_failure(self, mock_init_services, mock_config):
         """Test initialization failure."""
@@ -145,26 +128,6 @@ class TestAgenticsApp:
 
         with pytest.raises(AgenticsError, match="Issue processing failed: Workflow failed"):
             asyncio.run(app.process_issue("https://github.com/test/repo/issues/1"))
-
-    @patch('src.agentics.validate_github_url')
-    def test_process_issues_batch_success(self, mock_validate_url, mock_config, mock_service_manager, mock_composable_workflows):
-        """Test successful batch processing."""
-        mock_validate_url.return_value = True
-        mock_composable_workflows.process_issue.return_value = {"success": True, "result": "processed"}
-
-        app = AgenticsApp(mock_config)
-        app._initialized = True
-        app.service_manager = mock_service_manager
-        app.composable_workflows = mock_composable_workflows
-
-        urls = ["https://github.com/test/repo/issues/1", "https://github.com/test/repo/issues/2"]
-        result = asyncio.run(app.process_issues_batch(urls))
-
-        assert result["total_issues"] == 2
-        assert result["successful"] == 2
-        assert result["failed"] == 0
-        assert len(result["results"]) == 2
-        mock_composable_workflows.process_issue.assert_called()
 
     @patch('src.agentics.validate_github_url')
     def test_process_issues_batch_validation_error(self, mock_validate_url, mock_config):

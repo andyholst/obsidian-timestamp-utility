@@ -174,6 +174,9 @@ class AgenticsApp:
                 # Update global reference
                 global _service_manager
                 _service_manager = self.service_manager
+            log_info(__name__, f"Service manager initialized: {self.service_manager is not None}")
+            log_info(__name__, f"GitHub client present: {self.service_manager.github is not None if self.service_manager else False}")
+
 
             # Perform service health checks
             await self._check_services_health()
