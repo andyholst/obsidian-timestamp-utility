@@ -38,6 +38,7 @@ from .tool_integrated_agent import ToolIntegratedAgent
 from .composable_workflows import ComposableWorkflows
 from .collaborative_generator import CollaborativeGenerator
 from .agent_composer import AgentComposer
+from .performance import get_batch_processor
 
 # Circuit breaker and monitoring
 from .circuit_breaker import get_circuit_breaker, CircuitBreaker, ServiceHealthMonitor
@@ -146,7 +147,8 @@ class AgenticsApp:
             _config = init_config()
         self.config = config or _config
         self.service_manager = _service_manager
-        self.workflow_manager = _workflow_manager
+        self.composable_workflows = None
+        self.batch_processor = get_batch_processor()
         self.monitor = _monitor
         self._initialized = False
 
@@ -176,12 +178,14 @@ class AgenticsApp:
             # Perform service health checks
             await self._check_services_health()
 
-            # Initialize workflows if not already done
-            if self.workflow_manager is None:
-                self.workflow_manager = init_workflows()
-                # Update global reference
-                global _workflow_manager
-                _workflow_manager = self.workflow_manager
+            # Initialize composable workflows if not already done
+            if self.composable_workflows is None:
+                self.composable_workflows = create_composable_workflow(
+                    github_client=self.service_manager.github._client if self.service_manager.github else None,
+                    llm_reasoning=self.service_manager.ollama_reasoning._client if self.service_manager.ollama_reasoning else None,
+                    llm_code=self.service_manager.ollama_code._client if self.service_manager.ollama_code else None,
+                    mcp_tools=self._get_mcp_tools()
+                )
 
             self._initialized = True
             log_info(__name__, "Agentics application initialized successfully")
@@ -220,7 +224,51 @@ class AgenticsApp:
         else:
             log_info(__name__, "MCP service not available, proceeding without MCP functionality")
 
-        log_info(__name__, "All critical services are healthy")
+
+    def _get_mcp_tools(self) -> List[Any]:
+        """Get MCP tools from the service manager."""
+        if self.service_manager and hasattr(self.service_manager, 'mcp') and self.service_manager.mcp:
+            try:
+                return self.service_manager.mcp.get_tools()
+            except Exception:
+                pass
+
+    async def _process_batch_parallel(self, issue_urls: List[str]) -> Dict[str, Any]:
+        """Process multiple issues in parallel using composable workflows."""
+        async def process_single_issue(issue_url: str) -> Dict[str, Any]:
+            """Process a single issue asynchronously."""
+            try:
+                self.monitor.info("batch_issue_started", {"issue_url": issue_url})
+                result = await self.composable_workflows.process_issue(issue_url)
+                self.monitor.info("batch_issue_completed", {"issue_url": issue_url})
+                return {
+                    "issue_url": issue_url,
+                    "success": True,
+                    "result": result
+                }
+            except Exception as e:
+                self.monitor.warning("batch_issue_failed", {"issue_url": issue_url, "error": str(e)})
+                return {
+                    "issue_url": issue_url,
+                    "success": False,
+                    "error": str(e)
+                }
+
+        # Use batch processor for concurrent execution
+        results = await self.batch_processor.process_batch(
+            items=issue_urls,
+            processor_func=process_single_issue
+        )
+
+        successful = sum(1 for r in results if r.get('success', False))
+        failed = len(results) - successful
+
+        return {
+            "total_issues": len(issue_urls),
+            "successful": successful,
+            "failed": failed,
+            "results": results
+        }
 
     async def process_issue(self, issue_url: str) -> Dict[str, Any]:
         """
@@ -242,13 +290,12 @@ class AgenticsApp:
         if not validate_github_url(issue_url):
             raise ValidationError(f"Invalid GitHub issue URL: {issue_url}")
 
+        self.monitor.info("issue_processing_started", {"issue_url": issue_url})
         log_info(__name__, f"Processing issue: {issue_url}")
 
         try:
-            result = await self.workflow_manager.execute_workflow(
-                "issue_processing",
-                {"url": issue_url}
-            )
+            result = await self.composable_workflows.process_issue(issue_url)
+            self.monitor.info("issue_processing_completed", {"issue_url": issue_url})
             log_info(__name__, f"Successfully processed issue: {issue_url}")
             return result
 
@@ -278,13 +325,12 @@ class AgenticsApp:
         if invalid_urls:
             raise ValidationError(f"Invalid GitHub issue URLs: {invalid_urls}")
 
+        self.monitor.info("batch_processing_started", {"issue_count": len(issue_urls)})
         log_info(__name__, f"Starting batch processing of {len(issue_urls)} issues")
 
         try:
-            result = await self.workflow_manager.execute_workflow(
-                "batch_issue_processing",
-                {"issue_urls": issue_urls}
-            )
+            result = await self._process_batch_parallel(issue_urls)
+            self.monitor.info("batch_processing_completed", {"total_issues": result["total_issues"], "successful": result["successful"], "failed": result["failed"]})
             log_info(__name__, f"Batch processing completed: {result['successful']}/{result['total_issues']} successful")
             return result
 

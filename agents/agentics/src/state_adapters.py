@@ -83,9 +83,11 @@ class CodeGenerationStateToStateAdapter(Runnable[CodeGenerationState, State]):
         if input.validation_results:
             state['validation_results'] = {
                 'success': input.validation_results.success,
+                'score': input.validation_results.score,
                 'errors': input.validation_results.errors,
                 'warnings': input.validation_results.warnings
             }
+            state['validation_score'] = input.validation_results.score
 
         return state
 

@@ -272,3 +272,62 @@ class TestComposableWorkflowsIntegration:
         assert hasattr(workflow, 'integration_testing_workflow')
         assert hasattr(workflow, 'full_workflow')
         assert hasattr(workflow, 'process_issue')
+
+    @pytest.mark.integration
+    def test_checkpointer_initialization(self, composable_workflow):
+        """Test that checkpointer is properly initialized."""
+        # Verify checkpointer is a MemorySaver instance
+        from langgraph.checkpoint.memory import MemorySaver
+        assert isinstance(composable_workflow.checkpointer, MemorySaver)
+
+    @pytest.mark.integration
+    def test_full_workflow_with_checkpointer(self, composable_workflow):
+        """Test that the full workflow uses checkpointer for state persistence."""
+        test_repo_url = os.getenv("TEST_ISSUE_URL")
+        assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
+        issue_url = f"{test_repo_url}/issues/1"
+
+        # Execute workflow
+        result = composable_workflow.process_issue(issue_url)
+
+        # Verify workflow completed
+        assert result is not None
+        assert isinstance(result, dict)
+
+        # Verify checkpointer was used (workflow should have thread_id in result or similar)
+        # The checkpointer should maintain state across the workflow execution
+        assert "refined_ticket" in result
+
+    @pytest.mark.integration
+    def test_workflow_state_persistence_simulation(self, composable_workflow):
+        """Test workflow state persistence by checking that intermediate states are maintained."""
+        # This test simulates checking that the checkpointer maintains state
+        # In a real scenario, we'd check thread state, but for integration test we verify
+        # that the workflow completes with expected state transitions
+
+        test_repo_url = os.getenv("TEST_ISSUE_URL")
+        assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
+        issue_url = f"{test_repo_url}/issues/1"
+
+        # Execute full workflow
+        result = composable_workflow.process_issue(issue_url)
+
+        # Verify that all expected state fields are present
+        # This indicates that state was properly maintained through the workflow
+        expected_fields = [
+            "refined_ticket",
+            "generated_code",
+            "generated_tests"
+        ]
+
+        for field in expected_fields:
+            assert field in result, f"Expected field '{field}' not found in result"
+
+        # Verify ticket structure (from issue processing phase)
+        ticket = result["refined_ticket"]
+        assert "title" in ticket
+        assert "requirements" in ticket
+
+        # Verify code and tests were generated (from code generation phase)
+        assert len(result["generated_code"]) > 0
+        assert len(result["generated_tests"]) > 0

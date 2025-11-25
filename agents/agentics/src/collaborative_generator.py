@@ -37,100 +37,18 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
         return self.generate_collaboratively(input)
 
     def generate_collaboratively(self, state: CodeGenerationState) -> CodeGenerationState:
-        """
-        Generate code and tests collaboratively with iterative refinement loops.
+        """Generate code and tests collaboratively"""
 
-        Implements a loop that continues refining code and tests until cross-validation
-        passes or a maximum number of iterations is reached. Tracks iteration count
-        and validation history in the state.
+        # Phase 1: Generate initial code
+        code_state = self.code_generator.generate(state)
 
-        Args:
-            state: Initial code generation state
+        # Phase 2: Generate tests based on code
+        test_state = self.test_generator.generate(code_state)
 
-        Returns:
-            Final state with validated code and tests
-        """
-        log_info(self.name, "Starting collaborative code/test generation with iterative refinement")
+        # Phase 3: Cross-validation and refinement
+        validated_state = self.cross_validate(code_state, test_state)
 
-        try:
-
-            def execute_collaborative_generation():
-                current_state = state
-                iteration = 0
-                validation_history = []
-
-                while iteration < self.max_refinement_iterations:
-                    log_info(self.name, f"Refinement iteration {iteration + 1}/{self.max_refinement_iterations}")
-
-                    # Phase 1: Generate/refine code
-                    code_state = self._generate_initial_code(current_state)
-
-                    # Phase 2: Generate/refine tests based on code
-                    test_state = self._generate_initial_tests(code_state)
-
-                    # Phase 3: Cross-validation using LLM-based validation
-                    validated_state = self.cross_validate(code_state, test_state)
-
-                    # Record validation result in history
-                    validation_result = validated_state.validation_results
-                    history_entry = {
-                        'iteration': iteration + 1,
-                        'passed': validation_result.success if validation_result else False,
-                        'errors': validation_result.errors if validation_result else [],
-                        'warnings': validation_result.warnings if validation_result else []
-                    }
-                    validation_history.append(history_entry)
-
-                    if validation_result and validation_result.success:
-                        # Validation passed
-                        self._log_structured("info", "cross_validation_passed", {
-                            "iteration": iteration + 1
-                        })
-
-                        # Add tracking to state feedback
-                        final_feedback = validated_state.feedback or {}
-                        final_feedback['iteration_count'] = iteration + 1
-                        final_feedback['validation_history'] = validation_history
-                        return validated_state.with_feedback(final_feedback)
-
-                    # Validation failed, perform refinement
-                    self._log_structured("warning", "cross_validation_failed", {
-                        "iteration": iteration + 1,
-                        "errors": validation_result.errors if validation_result else []
-                    })
-
-                    # Refine code and tests based on validation feedback
-                    validation_dict = {
-                        'passed': False,
-                        'issues': validation_result.errors if validation_result else ['Unknown validation failure']
-                    }
-                    refined_state = self._refine_code_and_tests(validated_state, validation_dict)
-
-                    # Prepare for next iteration
-                    current_state = refined_state
-                    iteration += 1
-
-                # Maximum iterations reached without success
-                self._log_structured("warning", "max_refinement_iterations_reached", {
-                    "final_iteration": iteration
-                })
-
-                final_feedback = validated_state.feedback or {}
-                final_feedback['iteration_count'] = iteration
-                final_feedback['validation_history'] = validation_history
-                final_feedback['max_iterations_exceeded'] = True
-                return validated_state.with_feedback(final_feedback)
-
-            return self.circuit_breaker.call(execute_collaborative_generation)
-
-        except Exception as e:
-            error_context = {
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "issue_url": state.issue_url
-            }
-            self._log_structured("error", "collaborative_generation_failed", error_context)
-            raise
+        return validated_state
 
     def _generate_initial_code(self, state: CodeGenerationState) -> CodeGenerationState:
         """Generate initial code using the code generator agent."""

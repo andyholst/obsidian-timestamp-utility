@@ -8,9 +8,11 @@ Composable workflows using AgentComposer for the three-phase architecture:
 from typing import Dict, Any
 from langchain_core.runnables import Runnable, RunnableParallel, RunnableLambda
 from langchain_core.runnables import Runnable, RunnableParallel
+from langgraph.graph import StateGraph
+from langgraph.checkpoint.memory import MemorySaver
 from .agent_composer import AgentComposer, WorkflowConfig
-from .state_adapters import AgentAdapter, InitialStateAdapter, FinalStateAdapter
-from .state import CodeGenerationState
+from .state_adapters import AgentAdapter, InitialStateAdapter, FinalStateAdapter, StateToCodeGenerationStateAdapter, CodeGenerationStateToStateAdapter
+from .state import CodeGenerationState, State
 from .collaborative_generator import CollaborativeGenerator
 from .fetch_issue_agent import FetchIssueAgent
 from .ticket_clarity_agent import TicketClarityAgent
@@ -21,6 +23,7 @@ from .code_integrator_agent import CodeIntegratorAgent
 from .post_test_runner_agent import PostTestRunnerAgent
 from .code_reviewer_agent import CodeReviewerAgent
 from .output_result_agent import OutputResultAgent
+from .hitl_node import HITLNode
 from .utils import log_info
 from .monitoring import structured_log, track_workflow_progress, get_monitoring_data
 import logging
@@ -37,6 +40,9 @@ class ComposableWorkflows:
         self.github_client = github_client
         self.mcp_tools = mcp_tools or []
         self.monitor = structured_log("composable_workflows")
+
+        # Initialize checkpointer for local development
+        self.checkpointer = MemorySaver()
 
         # Initialize composer
         self.composer = AgentComposer()
@@ -57,7 +63,7 @@ class ComposableWorkflows:
         self.full_workflow = self._create_full_workflow()
 
         self.monitor.info("workflows_initialized", {
-            "workflows": ["issue_processing", "code_generation", "integration_testing", "full_workflow"]
+            "workflows": ["issue_processing", "code_generation", "integration_testing", "hitl", "full_workflow"]
         })
 
     def _register_agents(self):
@@ -120,35 +126,62 @@ class ComposableWorkflows:
         )
         return self.composer.create_workflow("integration_testing", config)
 
-    def _create_full_workflow(self) -> Runnable:
-        """Create the full three-phase workflow chain with parallel processing."""
-        # Run issue processing and dependency analysis in parallel for performance
-        parallel_phase = RunnableParallel(
-            issue_processing=self.issue_processing_workflow,
-            dependency_analysis=self.composer.agents["dependency_analyzer"]
-        )
+    def _create_full_workflow(self):
+        """Create the full three-phase workflow using StateGraph with checkpointer."""
+        graph = StateGraph(State)
 
-        # Chain the workflows: parallel phase -> code generation -> integration/testing
-        full_chain = (
-            InitialStateAdapter() |
-            parallel_phase |
-            self.code_generation_workflow |
-            self.integration_testing_workflow |
-            FinalStateAdapter()
-        )
-        # Merge parallel outputs and continue with sequential workflows
-        merge_outputs = RunnableLambda(self._merge_parallel_outputs)
+        # Define node functions that convert between State dict and CodeGenerationState
+        def issue_processing_node(state: State) -> State:
+            cg_state = StateToCodeGenerationStateAdapter().invoke(state)
+            result_cg = self.issue_processing_workflow.invoke(cg_state)
+            result_state = CodeGenerationStateToStateAdapter().invoke(result_cg)
+            return result_state
 
-        # Chain the workflows: parallel phase -> merge -> code generation -> integration/testing
-        full_chain = (
-            InitialStateAdapter() |
-            parallel_phase |
-            merge_outputs |
-            self.code_generation_workflow |
-            self.integration_testing_workflow |
-            FinalStateAdapter()
-        )
-        return full_chain
+        def dependency_analysis_node(state: State) -> State:
+            cg_state = StateToCodeGenerationStateAdapter().invoke(state)
+            result_cg = self.composer.agents["dependency_analyzer"].invoke(cg_state)
+            result_state = CodeGenerationStateToStateAdapter().invoke(result_cg)
+            return result_state
+
+        def code_generation_node(state: State) -> State:
+            cg_state = StateToCodeGenerationStateAdapter().invoke(state)
+            result_cg = self.code_generation_workflow.invoke(cg_state)
+            result_state = CodeGenerationStateToStateAdapter().invoke(result_cg)
+            return result_state
+
+        def integration_testing_node(state: State) -> State:
+            cg_state = StateToCodeGenerationStateAdapter().invoke(state)
+            result_cg = self.integration_testing_workflow.invoke(cg_state)
+            result_state = CodeGenerationStateToStateAdapter().invoke(result_cg)
+            return result_state
+
+        def hitl_node(state: State) -> State:
+            hitl = HITLNode()
+            return hitl(state)
+
+        # Add nodes
+        graph.add_node("issue_processing", issue_processing_node)
+        graph.add_node("dependency_analysis", dependency_analysis_node)
+        graph.add_node("code_generation", code_generation_node)
+        graph.add_node("hitl", hitl_node)
+        graph.add_node("integration_testing", integration_testing_node)
+
+        # Define routing function for HITL
+        def route_hitl(state: State) -> str:
+            score = state.get("validation_score", 0)
+            return "hitl" if score < 80 else "integration_testing"
+
+        # Add edges (sequential for now, parallel can be added later)
+        graph.add_edge("issue_processing", "dependency_analysis")
+        graph.add_edge("dependency_analysis", "code_generation")
+        graph.add_conditional_edges("code_generation", route_hitl, {"hitl": "hitl", "integration_testing": "integration_testing"})
+        graph.add_edge("hitl", "integration_testing")
+
+        # Set entry point
+        graph.set_entry_point("issue_processing")
+
+        # Compile with checkpointer for persistence
+        return graph.compile(checkpointer=self.checkpointer)
 
     def _merge_parallel_outputs(self, parallel_result: Dict[str, Any]) -> CodeGenerationState:
         """Merge outputs from parallel issue processing and dependency analysis."""

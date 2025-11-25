@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.tools import tool
 from langchain_core.output_parsers import PydanticOutputParser
 from .tool_integrated_agent import ToolIntegratedAgent
-from .tools import npm_search_tool, npm_install_tool, npm_list_tool
+from .tools import npm_search_tool, npm_install_tool, npm_list_tool, read_file_tool, list_files_tool, check_file_exists_tool
 from .state import State, CodeGenerationState
 from .utils import safe_json_dumps, remove_thinking_tags, log_info
 from .models import CodeGenerationOutput, TestGenerationOutput
@@ -19,7 +19,7 @@ from .prompts import ModularPrompts
 
 class CodeGeneratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__(llm_client, [npm_search_tool, npm_install_tool], name="CodeGenerator")
+        super().__init__(llm_client, [npm_search_tool, npm_install_tool, read_file_tool, list_files_tool, check_file_exists_tool], name="CodeGenerator")
         self.main_file = os.getenv('MAIN_FILE', 'main.ts')
         self.test_file = os.getenv('TEST_FILE', 'main.test.ts')
         self.project_root = os.getenv('PROJECT_ROOT')
@@ -58,6 +58,8 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         """Create LCEL chain for code generation with modular prompts and output validation."""
         def build_code_prompt(inputs):
             code_structure = json.dumps(inputs.get('code_structure', {}))
+            tool_context = self._gather_tool_context(inputs)
+            tool_instructions = ModularPrompts.get_tool_instructions_for_code_generator_agent()
             return (
                 ModularPrompts.get_base_instruction() + "\n"
                 "You are tasked with generating TypeScript code for an Obsidian plugin. The plugin is defined in `{main_file}`, and you must integrate the new functionality into the existing structure without altering any existing code. Follow these instructions carefully:\n\n"
@@ -66,6 +68,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 + "3. **Task Details:**\n{task_details_str}\n\n"
                 + "4. **Existing Code ({main_file}):**\n{existing_code_content}\n\n"
                 + "5. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
+                + tool_instructions
                 + ModularPrompts.get_output_instructions_code()
             )
 
@@ -91,6 +94,8 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         """Create LCEL chain for test generation with modular prompts and output validation."""
         def build_test_prompt(inputs):
             test_structure = json.dumps(inputs.get('test_structure', {}))
+            tool_context = self._gather_tool_context(inputs)
+            tool_instructions = ModularPrompts.get_tool_instructions_for_code_generator_agent()
             return (
                 ModularPrompts.get_base_instruction() + "\n"
                 "You are tasked with generating Jest tests for the new functionality added to the plugin class in an Obsidian plugin. "
@@ -102,6 +107,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 + "4. **Generated Code:**\n{generated_code}\n\n"
                 + "5. **Existing Test File ({test_file}):**\n{existing_test_content}\n\n"
                 + "6. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
+                + tool_instructions
                 + ModularPrompts.get_output_instructions_tests()
             )
 

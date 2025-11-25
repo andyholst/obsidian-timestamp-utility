@@ -77,6 +77,7 @@ class CodeGenerationState:
         """Return new state with validation result"""
         results = ValidationResults(
             success=validation_result.get('passed', False),
+            score=validation_result.get('score', 0),
             errors=validation_result.get('issues', []),
             warnings=[]
         )

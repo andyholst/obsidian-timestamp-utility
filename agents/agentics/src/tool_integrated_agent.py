@@ -19,6 +19,10 @@ class ToolIntegratedAgent(BaseAgent):
         self.tools = tools
         self.tool_executor = ToolExecutor(tools)
 
+    def process(self, state: State) -> State:
+        """Main process method that delegates to process_with_tools."""
+        return self.process_with_tools(state)
+
     def process_with_tools(self, state: State) -> State:
         """Process state with tool integration."""
 
