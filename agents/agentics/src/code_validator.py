@@ -322,7 +322,7 @@ declare module 'obsidian' {{
                 json.dump({"type": "module"}, f)
             temp_file_path = os.path.join(temp_dir, 'temp.js')
             with open(temp_file_path, 'w') as temp_file:
-                temp_file.write(safe_code)
+                temp_file.write(code)
 
             # Execute with Node.js
             result = subprocess.run(

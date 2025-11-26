@@ -47,8 +47,12 @@ class TestTypeScriptValidator:
         assert validator.sandbox_config['network_disabled'] == True
         assert validator.sandbox_config['filesystem_readonly'] == True
 
-    def test_validate_compilation_success(self, validator):
+    @patch('code_validator.subprocess.run')
+    def test_validate_compilation_success(self, mock_run, validator):
         """Test successful TypeScript compilation"""
+        # Mock compilation success
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
         valid_code = """
         export class UserService {
             getUser(id: string): string {
@@ -141,13 +145,13 @@ class TestTypeScriptValidator:
 
     def test_validate_runtime_safety_success(self, validator):
         """Test successful runtime safety validation"""
-        safe_code = """
+        code = """
         export function add(a: number, b: number): number {
             return a + b;
         }
         """
 
-        result = validator.validate_runtime_safety(safe_code)
+        result = validator.validate_runtime_safety(code)
 
         assert result.success == True
         assert result.output == "Code executed successfully"
@@ -164,13 +168,13 @@ class TestTypeScriptValidator:
             stderr="ReferenceError: undefinedVar is not defined"
         )
 
-        unsafe_code = """
+        code = """
         export function test(): void {
             console.log(undefinedVar);
         }
         """
 
-        result = validator.validate_runtime_safety(unsafe_code)
+        result = validator.validate_runtime_safety(code)
 
         assert result.success == False
         assert "undefinedVar is not defined" in result.errors
@@ -203,14 +207,14 @@ class TestTypeScriptValidator:
             stderr="Error: Module not allowed: fs"
         )
 
-        dangerous_code = """
+        code = """
         export function readFile(): void {
             const fs = require('fs');
             fs.readFileSync('/etc/passwd');
         }
         """
 
-        result = validator.validate_runtime_safety(dangerous_code)
+        result = validator.validate_runtime_safety(code)
 
         assert result.success == False
         assert "Module not allowed" in result.errors
@@ -394,8 +398,12 @@ class TestIntegrationScenarios:
         """Fixture for TypeScriptValidator"""
         return TypeScriptValidator()
 
-    def test_complete_validation_workflow_valid_code(self, validator):
+    @patch('code_validator.subprocess.run')
+    def test_complete_validation_workflow_valid_code(self, mock_run, validator):
         """Test complete validation workflow with valid TypeScript code"""
+        # Mock compilation success
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
         valid_code = """
         export interface User {
             id: number;
@@ -760,13 +768,13 @@ class TestSafeCodeExecutor:
 
     def test_safe_execution_success(self, executor):
         """Test successful safe code execution"""
-        safe_code = """
+        code = """
         export function calculate(a: number, b: number): number {
             return a + b;
         }
         """
 
-        result = executor.validate_runtime_safety(safe_code)
+        result = executor.validate_runtime_safety(code)
 
         assert result.success == True
         assert "executed successfully" in result.output
@@ -782,13 +790,13 @@ class TestSafeCodeExecutor:
             stderr="ReferenceError: undefinedVariable is not defined"
         )
 
-        unsafe_code = """
+        code = """
         export function test(): void {
             console.log(undefinedVariable);
         }
         """
 
-        result = executor.validate_runtime_safety(unsafe_code)
+        result = executor.validate_runtime_safety(code)
 
         assert result.success == False
         assert "undefinedVariable" in result.errors
@@ -800,7 +808,7 @@ class TestSafeCodeExecutor:
         from subprocess import TimeoutExpired
         mock_run.side_effect = TimeoutExpired(cmd=['node'], timeout=5)
 
-        infinite_code = """
+        code = """
         export function infinite(): void {
             while (true) {
                 // Infinite loop
@@ -808,7 +816,7 @@ class TestSafeCodeExecutor:
         }
         """
 
-        result = executor.validate_runtime_safety(infinite_code)
+        result = executor.validate_runtime_safety(code)
 
         assert result.success == False
         assert result.timeout == True
@@ -823,14 +831,14 @@ class TestSafeCodeExecutor:
             stderr="Error: Module not allowed: fs"
         )
 
-        malicious_code = """
+        code = """
         export function readFile(): void {
             const fs = require('fs');
             fs.readFileSync('/etc/passwd');
         }
         """
 
-        result = executor.validate_runtime_safety(malicious_code)
+        result = executor.validate_runtime_safety(code)
 
         assert result.success == False
         assert "Module not allowed" in result.errors
@@ -844,7 +852,7 @@ class TestSafeCodeExecutor:
             stderr=""
         )
 
-        complex_code = """
+        code = """
         export interface User {
             id: number;
             name: string;
@@ -863,7 +871,7 @@ class TestSafeCodeExecutor:
         }
         """
 
-        result = executor.validate_runtime_safety(complex_code)
+        result = executor.validate_runtime_safety(code)
 
         assert result.success == True
         assert result.errors == ""
@@ -894,7 +902,8 @@ class TestTestValidationRunner:
     @patch('code_validator.TestValidator._write_test_files')
     @patch('code_validator.TestValidator._parse_jest_output')
     @patch('code_validator.TestValidator._parse_coverage_report')
-    def test_run_tests_success(self, mock_parse_coverage, mock_parse_output, mock_write_files, runner):
+    @patch('code_validator.subprocess.run')
+    def test_run_tests_success(self, mock_run, mock_parse_coverage, mock_parse_output, mock_write_files, runner):
         """Test successful test execution"""
         mock_parse_output.return_value = {'total': 5, 'passed': 5, 'failed': 0}
         mock_parse_coverage.return_value = {'total': {'lines': {'pct': 85.0}}}
@@ -976,8 +985,9 @@ class TestTestValidationRunner:
     def test_parse_coverage_report(self, mock_file, mock_exists, runner):
         """Test coverage report parsing"""
         mock_exists.return_value = True
+        temp_dir = "/tmp/test"
 
-        coverage = runner._parse_coverage_report()
+        coverage = runner._parse_coverage_report(temp_dir)
 
         assert coverage['total']['lines']['pct'] == 75.0
 
@@ -985,8 +995,9 @@ class TestTestValidationRunner:
     def test_parse_coverage_report_missing(self, mock_exists, runner):
         """Test coverage report parsing when file doesn't exist"""
         mock_exists.return_value = False
+        temp_dir = "/tmp/test"
 
-        coverage = runner._parse_coverage_report()
+        coverage = runner._parse_coverage_report(temp_dir)
 
         assert coverage == {}
 

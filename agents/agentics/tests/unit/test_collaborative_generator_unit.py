@@ -268,6 +268,7 @@ class TestCollaborativeGenerator:
 
     def test_cross_validate_error_handling(self, service_manager, sample_code_generation_state):
         """Test error handling in cross-validation."""
+        mock_llm_reasoning = service_manager.ollama_reasoning
         generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         code_state = sample_code_generation_state.with_code("function test() {}")

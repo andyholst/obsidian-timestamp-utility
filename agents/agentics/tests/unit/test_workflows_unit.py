@@ -85,10 +85,12 @@ class TestWorkflowBaseClass:
         with pytest.raises(TypeError):
             Workflow("test")
 
+    @patch('src.workflows.get_circuit_breaker')
     @patch('src.workflows.get_service_manager')
-    def test_workflow_instantiation_with_name(self, mock_get_service_manager, mock_service_manager):
+    def test_workflow_instantiation_with_name(self, mock_get_service_manager, mock_get_circuit_breaker, service_manager):
         """Test that concrete workflow classes can be instantiated with a name."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
+        mock_get_circuit_breaker.return_value = MagicMock()
 
         # Test with IssueProcessingWorkflow
         workflow = IssueProcessingWorkflow()
@@ -96,10 +98,12 @@ class TestWorkflowBaseClass:
         assert hasattr(workflow, 'validate_input')
         assert hasattr(workflow, 'execute')
 
+    @patch('src.workflows.get_circuit_breaker')
     @patch('src.workflows.get_service_manager')
-    def test_workflow_name_assignment(self, mock_get_service_manager, mock_service_manager):
+    def test_workflow_name_assignment(self, mock_get_service_manager, mock_get_circuit_breaker, service_manager):
         """Test that workflow name is properly assigned."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
+        mock_get_circuit_breaker.return_value = MagicMock()
 
         workflow = IssueProcessingWorkflow()
         assert workflow.name == "issue_processing"
@@ -123,11 +127,9 @@ class TestIssueProcessingWorkflow:
         assert workflow.service_manager == service_manager
         mock_get_service_manager.assert_called_once()
 
-    @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_valid_url(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_valid_url(self, mock_validate_url, service_manager):
         """Test input validation with valid GitHub URL."""
-        mock_get_service_manager.return_value = mock_service_manager
         mock_validate_url.return_value = True
 
         workflow = IssueProcessingWorkflow()

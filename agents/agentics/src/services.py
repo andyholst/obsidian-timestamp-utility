@@ -176,16 +176,11 @@ class MCPClient(ServiceClient):
 
     async def health_check(self) -> bool:
         """Check if MCP service is healthy."""
-        if not self._client:
-            return False
-        try:
-            return True
-        except Exception:
-            return False
+        return self._initialized
 
     def is_available(self) -> bool:
         """Check if MCP client is available."""
-        return self._initialized and self.health_monitor.is_service_healthy("mcp")
+        return self._initialized and self._client is not None
 
     async def get_context(self, query: str, max_tokens: int = 4096) -> str:
         """Get context from MCP."""
@@ -260,6 +255,7 @@ class MCPClient(ServiceClient):
                 self._client = None
                 log_info(__name__, "Closed MCP client")
             except Exception as e:
+                self._initialized = False
                 log_info(__name__, f"Failed to close MCP client: {str(e)}")
 
 

@@ -50,6 +50,10 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
             # Phase 3: Cross-validation and refinement
             validated_state = self.cross_validate(code_state, test_state)
 
+            # Ensure feedback is initialized
+            if validated_state.feedback is None:
+                validated_state.feedback = {}
+    
             # Ensure iteration_count is set
             if 'iteration_count' not in validated_state.feedback:
                 validated_state.feedback['iteration_count'] = 1

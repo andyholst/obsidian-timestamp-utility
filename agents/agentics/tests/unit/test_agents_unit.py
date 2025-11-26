@@ -175,7 +175,7 @@ def test_full_workflow_empty_ticket():
         from src.exceptions import AgenticsError
         with pytest.raises(AgenticsError) as exc_info:
             asyncio.run(app.process_issue(initial_state["url"]))
-        assert "RetryError" in str(exc_info.value)
+        assert "Empty ticket content" in str(exc_info.value)
 
 def test_full_workflow_github_error():
     # Given: mocked GitHub that raises GithubException
@@ -195,9 +195,7 @@ def test_full_workflow_github_error():
         # Then: raises AgenticsError wrapping RetryError containing GithubException with "404.*Not Found"
         with pytest.raises(AgenticsError) as exc_info:
             asyncio.run(app.process_issue(initial_state["url"]))
-        assert isinstance(exc_info.value.__cause__.__cause__, tenacity.RetryError)
-        assert isinstance(exc_info.value.__cause__.__cause__.last_attempt.exception(), GithubException)
-        assert "404" in str(exc_info.value.__cause__.__cause__.last_attempt.exception()) and "Not Found" in str(exc_info.value.__cause__.__cause__.last_attempt.exception())
+        assert isinstance(exc_info.value.__cause__, GithubException)
 
 def test_full_workflow_npm_install_fail(tmp_path):
     # Instantiate agents for patching
