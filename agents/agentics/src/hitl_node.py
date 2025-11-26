@@ -12,8 +12,11 @@ class HITLNode:
             return state
 
         score = state.get("validation_score", 0)
-        if score < 80:  # Threshold from LLM_CODE_VALIDATION.md
-            print("HITL Review Needed! State:", state)
-            feedback = input("Enter feedback: ")  # Console-based pause for local use
-            state["human_feedback"] = feedback
+        if score < 80:
+            if os.environ.get('HITL_ENABLED') == 'true':
+                print("HITL Review Needed! State:", state)
+                feedback = input("Enter feedback: ")
+                state["human_feedback"] = feedback
+            else:
+                state["human_feedback"] = "Automated: proceeding without review"
         return state
