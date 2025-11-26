@@ -57,7 +57,7 @@ class TestCodeIntegratorAgentInit:
         assert agent.code_ext == '.ts'
         assert agent.test_ext == '.test.ts'
         assert agent.llm == mock_llm_client
-        assert len(agent.tools) == 2  # read_file_tool and check_file_exists_tool
+        assert len(agent.tools) == 3  # read_file_tool, check_file_exists_tool, and write_file_tool
 
     @patch.dict(os.environ, {}, clear=True)
     def test_init_missing_project_root(self, mock_llm_client):

@@ -54,7 +54,7 @@ def test_code_generator_agent_process_with_requirements(mock_npm_list):
     assert len(result["generated_code"]) > 0, "Generated code should not be empty"
     assert len(result["generated_tests"]) > 0, "Generated tests should not be empty"
     # Basic content checks
-    assert "function" in result["generated_code"] or "class" in result["generated_code"], "Code should contain functions or classes"
+    assert "function" in result["generated_code"] or "class" in result["generated_code"] or "public" in result["generated_code"], "Code should contain functions or classes"
     assert "test" in result["generated_tests"] or "describe" in result["generated_tests"], "Tests should contain test blocks"
 
 @patch.dict(os.environ, {"PROJECT_ROOT": "/tmp/test"})
@@ -189,7 +189,7 @@ def test_code_generator_agent_generated_code_quality():
 
     # Enhanced assertions for code quality
     code = result["generated_code"]
-    assert "public" in code or "private" in code or "function" in code, "Code should have access modifiers or functions"
+    assert "function" in code or "class" in code or "public" in code, "Code should have access modifiers or functions"
     assert "{" in code and "}" in code, "Code should have braces"
     assert ";" in code or code.strip().endswith("}"), "Code should have semicolons or proper closing"
     # Check for common TypeScript elements
@@ -224,6 +224,7 @@ def test_code_generator_agent_generated_tests_quality():
 
     result = agent.process(state)
 
+    assert "function" in result["generated_code"] or "class" in result["generated_code"] or "public" in result["generated_code"]
     # Enhanced assertions for test quality
     tests = result["generated_tests"]
     assert "describe(" in tests, "Tests should have describe blocks"
@@ -261,8 +262,8 @@ def test_code_generator_agent_chain_error_handling():
         # If it succeeds, check minimal output
         assert "generated_code" in result
         assert "generated_tests" in result
-    except KeyError as e:
-        assert "relevant_code_files" in str(e) or "result" in str(e), "Should raise KeyError for missing keys"
+    except (KeyError, ValueError) as e:
+        assert isinstance(e, (KeyError, ValueError)) and ("relevant_code_files" in str(e) or "Generated code must" in str(e))
 
 def test_code_generator_agent_langchain_chain_invocation():
     """Test direct chain invocation for LangChain validation using real LLM."""

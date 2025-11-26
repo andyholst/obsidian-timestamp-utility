@@ -66,8 +66,8 @@ class TestLangChainBestPractices:
                     test_agent = TestGeneratorAgent(self.mock_llm)
             
                     # When: Creating a collaborative generator
-                    collab_gen = CollaborativeGenerator(self.mock_llm, self.mock_llm)
-            
+                    collab_gen = CollaborativeGenerator(self.mock_llm)
+
                     # Then: Should use composition patterns
                     assert hasattr(collab_gen, 'generate_collaboratively')
                     assert isinstance(collab_gen, Runnable)

@@ -6,6 +6,7 @@ pytest_plugins = ("pytest_asyncio",)
 from unittest.mock import patch, AsyncMock
 from src.circuit_breaker import circuit_breakers
 from src.services import GitHubClient
+from src.config import init_config, AgenticsConfig
 
 # Import enhanced mock fixtures
 from ..fixtures.mock_github_responses import (
@@ -230,3 +231,10 @@ def src_backup(request, tmp_path):
     shutil.rmtree(src_dir)
     shutil.copytree(backup_dir, src_dir)
     shutil.rmtree(backup_dir)
+@pytest.fixture(scope="session", autouse=True)
+def init_unit_test_config():
+    # Initialize config with test defaults
+    init_config(AgenticsConfig(
+        github_token=os.getenv("GITHUB_TOKEN", "test_token"),
+        ollama_host="http://localhost:11434"
+    ))

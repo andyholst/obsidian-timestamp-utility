@@ -9,6 +9,7 @@ import os
 import re
 import ast
 import json
+import shutil
 import hashlib
 import logging
 import tempfile
@@ -239,6 +240,8 @@ declare module 'obsidian' {{
                 temp_file_path = temp_file.name
 
             # Run TypeScript compiler
+            if not shutil.which('tsc'):
+                subprocess.run(['npm', 'install', '-g', 'typescript'], check=True, capture_output=True)
             result = subprocess.run(
                 ['tsc', '--noEmit', '--target', 'es2020', '--moduleResolution', 'node',
                  '--allowJs', '--checkJs', 'false', temp_file_path],
@@ -301,10 +304,10 @@ declare module 'obsidian' {{
                     execution_time=(datetime.now() - start_time).total_seconds()
                 )
         finally:
-            # Clean up temp file
+            # Clean up temp directory
             try:
-                if 'temp_file_path' in locals():
-                    os.unlink(temp_file_path)
+                if 'temp_dir' in locals():
+                    shutil.rmtree(temp_dir, ignore_errors=True)
             except:
                 pass
 
@@ -313,37 +316,13 @@ declare module 'obsidian' {{
         start_time = datetime.now()
 
         try:
-            # Create temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as temp_file:
-                # Wrap code in safety harness
-                allowed_modules_js = json.dumps(self.sandbox_config['allowed_modules'])
-                safe_code = f"""
-// Safety wrapper
-(function() {{
-    'use strict';
-
-    // Disable dangerous globals
-    const originalRequire = require;
-    require = function(module) {{
-        const allowed = {allowed_modules_js};
-        if (!allowed.includes(module)) {{
-            throw new Error(`Module not allowed: ${{module}}`);
-        }}
-        return originalRequire(module);
-    }};
-
-    // Execute user code
-    try {{
-        {code}
-        console.log('Code executed successfully');
-    }} catch (error) {{
-        console.error('Runtime error:', error.message);
-        process.exit(1);
-    }}
-}})();
-"""
+            # Create temporary directory
+            temp_dir = tempfile.mkdtemp()
+            with open(os.path.join(temp_dir, 'package.json'), 'w') as f:
+                json.dump({"type": "module"}, f)
+            temp_file_path = os.path.join(temp_dir, 'temp.js')
+            with open(temp_file_path, 'w') as temp_file:
                 temp_file.write(safe_code)
-                temp_file_path = temp_file.name
 
             # Execute with Node.js
             result = subprocess.run(
@@ -351,7 +330,7 @@ declare module 'obsidian' {{
                 capture_output=True,
                 text=True,
                 timeout=self.sandbox_config['timeout'] / 1000,
-                cwd='/tmp' if os.path.exists('/tmp') else None
+                cwd=temp_dir
             )
 
             execution_time = (datetime.now() - start_time).total_seconds()
@@ -394,10 +373,10 @@ declare module 'obsidian' {{
                 execution_time=(datetime.now() - start_time).total_seconds()
             )
         finally:
-            # Clean up temp file
+            # Clean up temp directory
             try:
-                if 'temp_file_path' in locals():
-                    os.unlink(temp_file_path)
+                if 'temp_dir' in locals():
+                    shutil.rmtree(temp_dir, ignore_errors=True)
             except:
                 pass
 
@@ -446,10 +425,11 @@ class TestValidator:
         start_time = datetime.now()
 
         try:
+            temp_dir = tempfile.mkdtemp(dir='/tmp')
             # Create test files
-            source_file = os.path.join(self.test_directory, 'source.ts')
-            test_file = os.path.join(self.test_directory, 'source.test.ts')
-            jest_config_file = os.path.join(self.test_directory, 'jest.config.js')
+            source_file = os.path.join(temp_dir, 'source.ts')
+            test_file = os.path.join(temp_dir, 'source.test.ts')
+            jest_config_file = os.path.join(temp_dir, 'jest.config.js')
 
             # Write source code
             with open(source_file, 'w') as f:
@@ -479,20 +459,20 @@ class TestValidator:
                 }
             }
 
-            with open(os.path.join(self.test_directory, 'package.json'), 'w') as f:
+            with open(os.path.join(temp_dir, 'package.json'), 'w') as f:
                 json.dump(package_json, f, indent=2)
 
             # Install dependencies (if npm available)
             try:
-                subprocess.run(['npm', 'install'], cwd=self.test_directory,
-                             capture_output=True, timeout=60)
+                subprocess.run(['npm', 'install'], cwd=temp_dir,
+                              capture_output=True, timeout=60)
             except:
                 self.monitor.warning("npm install failed, proceeding without dependencies")
 
             # Run Jest
             result = subprocess.run(
                 ['npx', 'jest', '--config', jest_config_file, '--coverage', '--verbose'],
-                cwd=self.test_directory,
+                cwd=temp_dir,
                 capture_output=True,
                 text=True,
                 timeout=60
@@ -510,7 +490,7 @@ class TestValidator:
 
             # Parse results
             test_result = self._parse_jest_output(result.stdout, result.stderr)
-            coverage = self._parse_coverage_report()
+            coverage = self._parse_coverage_report(temp_dir)
 
             return TestResult(
                 success=result.returncode == 0,
@@ -576,9 +556,9 @@ class TestValidator:
 
         return result
 
-    def _parse_coverage_report(self) -> Dict[str, Any]:
+    def _parse_coverage_report(self, temp_dir) -> Dict[str, Any]:
         """Parse Jest coverage report"""
-        coverage_file = os.path.join(self.test_directory, 'coverage', 'coverage-summary.json')
+        coverage_file = os.path.join(temp_dir, 'coverage', 'coverage-summary.json')
 
         if os.path.exists(coverage_file):
             try:

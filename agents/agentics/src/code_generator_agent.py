@@ -19,7 +19,7 @@ from .prompts import ModularPrompts
 
 class CodeGeneratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__(llm_client, [npm_search_tool, npm_install_tool, read_file_tool, list_files_tool, check_file_exists_tool], name="CodeGenerator")
+        super().__init__(llm_client, [npm_search_tool, npm_install_tool, npm_list_tool, read_file_tool, list_files_tool, check_file_exists_tool], name="CodeGenerator")
         self.main_file = os.getenv('MAIN_FILE', 'main.ts')
         self.test_file = os.getenv('TEST_FILE', 'main.test.ts')
         self.project_root = os.getenv('PROJECT_ROOT')
@@ -237,7 +237,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         generated_code = self._post_process_code(generated_code)
 
         # Keyword validation for code output
-        code_keywords = ['import', 'export', 'class', 'interface', 'function']
+        code_keywords = ['import', 'export', 'class', 'interface', 'function', 'public']
         if not any(keyword in generated_code for keyword in code_keywords):
             raise ValueError("Generated code must include at least one of: import, export, class, interface, or function")
 

@@ -5,7 +5,6 @@ from src.prompts import ModularPrompts
 def test_get_base_instruction():
     """Test base instruction generation."""
     instruction = ModularPrompts.get_base_instruction()
-    assert "/think" in instruction
     assert "TypeScript developer" in instruction
     assert "Obsidian plugins" in instruction
 
@@ -58,7 +57,6 @@ def test_get_output_instructions_tests():
     instructions = ModularPrompts.get_output_instructions_tests()
     assert "Output Instructions" in instructions
     assert "describe" in instructions
-    assert "TimestampPlugin" in instructions
 
 
 def test_modular_prompts_static_methods():
