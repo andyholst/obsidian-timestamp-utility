@@ -34,7 +34,9 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
         log_method = getattr(self.monitor, level.lower(), self.monitor.info)
         log_method(event, data)
 
-    def invoke(self, input: CodeGenerationState, config: Optional[RunnableConfig] = None) -> CodeGenerationState:
+    def invoke(self, input, config: Optional[RunnableConfig] = None) -> CodeGenerationState:
+        if isinstance(input, dict):
+            input = CodeGenerationState(**input)
         return self.generate_collaboratively(input)
 
     def generate_collaboratively(self, state: CodeGenerationState) -> CodeGenerationState:
