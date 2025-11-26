@@ -61,9 +61,6 @@ Add a feature with mismatched brackets: { { {.
 - It should somehow work
 """
 
-# Real project root
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
-
 # Patch paths for consistent mocking
 GITHUB_PATCH_PATH = 'github.Github'
 
@@ -143,26 +140,6 @@ def temp_project_dir(tmp_path):
     for file in required_files:
         assert os.path.exists(os.path.join(project_dir, file)), f"Required file {file} missing in temp project dir"
     return project_dir
-
-@pytest.fixture
-def src_backup(request, tmp_path):
-    """
-    Fixture to backup and restore the src directory for each test.
-    If the test uses temp_project_dir, it operates on that; otherwise, it creates a new temp dir.
-    """
-    if 'temp_project_dir' in request.fixturenames:
-        project_dir = request.getfixturevalue('temp_project_dir')
-    else:
-        project_dir = tmp_path / "project"
-        shutil.copytree(PROJECT_ROOT, str(project_dir), dirs_exist_ok=True)
-
-    src_dir = os.path.join(project_dir, 'src')
-    backup_dir = os.path.join(project_dir, 'src_backup')
-    shutil.copytree(src_dir, backup_dir)
-    yield project_dir
-    shutil.rmtree(src_dir)
-    shutil.copytree(backup_dir, src_dir)
-    shutil.rmtree(backup_dir)
 
 def test_validate_github_url():
     # Given: various GitHub URLs including valid issue URL, pull request URL, and invalid URL

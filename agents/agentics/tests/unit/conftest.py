@@ -1,5 +1,7 @@
 import os
 import pytest
+import tempfile
+import shutil
 pytest_plugins = ("pytest_asyncio",)
 from unittest.mock import patch, AsyncMock
 from src.circuit_breaker import circuit_breakers
@@ -34,6 +36,9 @@ from ..fixtures.mock_refactored_components import (
     patch_health_monitor,
     create_comprehensive_mock_context
 )
+
+# Real project root
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
 
 
 @pytest.fixture(autouse=True)
@@ -204,3 +209,24 @@ def mock_health_monitor_patch():
 def comprehensive_mock_context():
     """Context manager providing comprehensive mocking for all components."""
     return create_comprehensive_mock_context()
+
+
+@pytest.fixture
+def src_backup(request, tmp_path):
+    """
+    Fixture to backup and restore the src directory for each test.
+    If the test uses temp_project_dir, it operates on that; otherwise, it creates a new temp dir.
+    """
+    if 'temp_project_dir' in request.fixturenames:
+        project_dir = request.getfixturevalue('temp_project_dir')
+    else:
+        project_dir = tmp_path / "project"
+        shutil.copytree(PROJECT_ROOT, str(project_dir), dirs_exist_ok=True)
+
+    src_dir = os.path.join(project_dir, 'src')
+    backup_dir = tempfile.mkdtemp(prefix='src_backup_')
+    shutil.copytree(src_dir, backup_dir)
+    yield project_dir
+    shutil.rmtree(src_dir)
+    shutil.copytree(backup_dir, src_dir)
+    shutil.rmtree(backup_dir)
