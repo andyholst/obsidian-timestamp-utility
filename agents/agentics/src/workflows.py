@@ -41,6 +41,7 @@ class IssueProcessingWorkflow(Workflow):
         self.service_manager = get_service_manager()
         self.task_manager = get_task_manager()
         self.batch_processor = get_batch_processor()
+        self.circuit_breaker = get_circuit_breaker("workflow_execution")
 
     def validate_input(self, input_data: Dict[str, Any]) -> None:
         """Validate input for issue processing."""
@@ -58,7 +59,7 @@ class IssueProcessingWorkflow(Workflow):
         issue_url = input_data['url']
         _monitor.info("issue_processing_started", {"issue_url": issue_url})
 
-        try:
+        async def _execute_impl():
             # Create composable workflow instance
             workflow_system = self._create_workflow_system()
 
@@ -72,9 +73,7 @@ class IssueProcessingWorkflow(Workflow):
                 "result": result
             }
 
-        except Exception as e:
-            _monitor.error("issue_processing_failed", {"issue_url": issue_url, "error": str(e)}, error=e)
-            raise WorkflowError(f"Workflow execution failed: {str(e)}") from e
+        return await self.circuit_breaker.call_async(_execute_impl)
 
     def _create_workflow_system(self) -> ComposableWorkflows:
         """Create a composable workflow system instance."""

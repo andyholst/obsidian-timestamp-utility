@@ -225,7 +225,7 @@ def src_backup(request, tmp_path):
 
     src_dir = os.path.join(project_dir, 'src')
     backup_dir = tempfile.mkdtemp(prefix='src_backup_')
-    shutil.copytree(src_dir, backup_dir)
+    shutil.copytree(src_dir, backup_dir, ignore=shutil.ignore_patterns('logs'))
     yield project_dir
     shutil.rmtree(src_dir)
     shutil.copytree(backup_dir, src_dir)

@@ -229,7 +229,8 @@ class ComposableWorkflows:
 
         try:
             initial_state = {"url": issue_url}
-            result = await self.full_workflow.ainvoke(initial_state)
+            config = {"configurable": {"thread_id": "test_thread", "checkpoint_ns": "test_ns", "checkpoint_id": "test_id"}}
+            result = await self.full_workflow.ainvoke(initial_state, config=config)
 
             self.monitor.info("workflow_completed", {
                 "workflow_id": workflow_id,

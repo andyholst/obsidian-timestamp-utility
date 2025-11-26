@@ -5,13 +5,19 @@ from unittest.mock import patch, MagicMock, call
 from src.collaborative_generator import CollaborativeGenerator
 from src.state import CodeGenerationState
 from src.models import CodeSpec, TestSpec, ValidationResults
-from tests.fixtures.mock_llm_responses import create_mock_llm_response
+from src.services import ServiceManager
+from src.config import get_config
 
 
 @pytest.fixture
-def mock_llm_reasoning():
-    """Mock LLM for reasoning tasks (validation)."""
-    validation_response = json.dumps({
+def service_manager():
+    """Create a service manager with mocked clients for testing."""
+    config = get_config()
+    sm = ServiceManager(config)
+
+    # Mock the clients to simulate real behavior
+    sm.ollama_reasoning = MagicMock()
+    sm.ollama_reasoning.invoke.return_value = json.dumps({
         "passed": True,
         "score": 95,
         "coverage_percentage": 90,
@@ -20,13 +26,11 @@ def mock_llm_reasoning():
         "recommendations": [],
         "test_quality": "excellent"
     })
-    return create_mock_llm_response(validation_response)
 
+    sm.ollama_code = MagicMock()
+    sm.ollama_code.invoke.return_value = "generated code content"
 
-@pytest.fixture
-def mock_llm_code():
-    """Mock LLM for code generation tasks."""
-    return create_mock_llm_response("generated code content")
+    return sm
 
 
 @pytest.fixture
@@ -46,58 +50,35 @@ def sample_code_generation_state():
     )
 
 
-@pytest.fixture
-def mock_code_generator():
-    """Mock CodeGeneratorAgent."""
-    mock_agent = MagicMock()
-    mock_state = MagicMock()
-    mock_state.generated_code = "function test() {}"
-    mock_state.method_name = "test"
-    mock_state.command_id = "test-cmd"
-    mock_agent.generate.return_value = mock_state
-    return mock_agent
-
-
-@pytest.fixture
-def mock_test_generator():
-    """Mock TestGeneratorAgent."""
-    mock_agent = MagicMock()
-    mock_state = MagicMock()
-    mock_state.generated_tests = "describe('test', () => {});"
-    mock_agent.generate.return_value = mock_state
-    mock_agent.refine_tests.return_value = mock_state
-    return mock_agent
-
-
 class TestCollaborativeGenerator:
     """Comprehensive unit tests for CollaborativeGenerator class."""
 
-    def test_initialization(self, mock_llm_reasoning, mock_llm_code):
+    def test_initialization(self, service_manager):
         """Test CollaborativeGenerator initialization."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager)
 
         assert generator.name == "CollaborativeGenerator"
-        assert generator.llm_reasoning == mock_llm_reasoning
-        assert generator.llm_code == mock_llm_code
+        assert generator.llm_reasoning == service_manager.ollama_reasoning
+        assert generator.llm_code == service_manager.ollama_code
         assert generator.max_refinement_iterations == 3
         assert hasattr(generator, 'code_generator')
         assert hasattr(generator, 'test_generator')
         assert hasattr(generator, 'circuit_breaker')
 
     @patch('src.collaborative_generator.get_circuit_breaker')
-    def test_circuit_breaker_initialization(self, mock_get_circuit_breaker, mock_llm_reasoning, mock_llm_code):
+    def test_circuit_breaker_initialization(self, mock_get_circuit_breaker, service_manager):
         """Test circuit breaker is properly initialized."""
         mock_circuit_breaker = MagicMock()
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
 
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager)
 
         mock_get_circuit_breaker.assert_called_once_with("collaborative_generation")
         assert generator.circuit_breaker == mock_circuit_breaker
 
-    def test_invoke_method(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_invoke_method(self, service_manager, sample_code_generation_state):
         """Test invoke method delegates to generate_collaboratively."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager)
 
         with patch.object(generator, 'generate_collaboratively') as mock_generate:
             mock_generate.return_value = sample_code_generation_state
@@ -258,9 +239,9 @@ class TestCollaborativeGenerator:
             mock_log.assert_called_once()
 
     @patch.dict(os.environ, {'PROJECT_ROOT': '/tmp/test'})
-    def test_cross_validate_success(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_cross_validate_success(self, service_manager, sample_code_generation_state):
         """Test successful cross-validation."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager)
 
         code_state = sample_code_generation_state.with_code("function test() { return true; }")
         test_state = code_state.with_tests("describe('test', () => { it('works', () => { expect(test()).toBe(true); }); });")
@@ -269,7 +250,7 @@ class TestCollaborativeGenerator:
             result = generator.cross_validate(code_state, test_state)
 
             # Should have called LLM reasoning
-            mock_llm_reasoning.invoke.assert_called_once()
+            service_manager.ollama_reasoning.invoke.assert_called_once()
 
             # Should return combined state with validation
             assert result.generated_code == code_state.generated_code
@@ -279,6 +260,10 @@ class TestCollaborativeGenerator:
 
             # Should log completion
             assert mock_log.call_count >= 1  # completion log
+
+            # Immutability check: input states should not be modified
+            assert code_state.generated_code == "function test() { return true; }"
+            assert test_state.generated_tests == "describe('test', () => { it('works', () => { expect(test()).toBe(true); }); });"
 
     def test_cross_validate_error_handling(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
         """Test error handling in cross-validation."""

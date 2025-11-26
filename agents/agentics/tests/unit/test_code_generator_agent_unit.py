@@ -14,9 +14,18 @@ def mock_code_generator_llm():
 
 @patch.dict(os.environ, {"PROJECT_ROOT": "/tmp/test"})
 @patch('src.code_generator_agent.npm_list_tool', return_value='{"dependencies": {"uuid": "1.0.0"}}')
-def test_code_generator_agent_process_with_requirements(mock_npm_list, mock_code_generator_llm):
-    """Test CodeGeneratorAgent process with requirements using mock LLM."""
-    agent = CodeGeneratorAgent(mock_code_generator_llm["code_generation"])
+def test_code_generator_agent_process_with_requirements(mock_npm_list):
+    """Test CodeGeneratorAgent process with requirements using real LLM."""
+    config = AgenticsConfig()
+    llm_config = config.get_code_llm_config()
+    llm = OllamaLLM(
+        model=llm_config.model,
+        base_url=llm_config.base_url,
+        temperature=0.1,
+        num_ctx=4096,
+        num_predict=2048
+    )
+    agent = CodeGeneratorAgent(llm)
     state = State(
         result={
             "title": "Add UUID Generator",
@@ -114,9 +123,18 @@ def test_code_generator_agent_initialization(mock_code_generator_llm):
 
 @patch.dict(os.environ, {"PROJECT_ROOT": "/tmp/test"})
 @patch('src.code_generator_agent.npm_list_tool', return_value='{"dependencies": {"uuid": "1.0.0"}}')
-def test_code_generator_agent_process_with_feedback(mock_npm_list, mock_code_generator_llm):
+def test_code_generator_agent_process_with_feedback(mock_npm_list):
     """Test CodeGeneratorAgent process with feedback from previous iteration."""
-    agent = CodeGeneratorAgent(mock_code_generator_llm["feedback"])
+    config = AgenticsConfig()
+    llm_config = config.get_code_llm_config()
+    llm = OllamaLLM(
+        model=llm_config.model,
+        base_url=llm_config.base_url,
+        temperature=0.1,
+        num_ctx=4096,
+        num_predict=2048
+    )
+    agent = CodeGeneratorAgent(llm)
     state = State(
         result={
             "title": "Add UUID Generator",

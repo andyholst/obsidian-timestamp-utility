@@ -27,37 +27,29 @@ from tests.fixtures.mock_llm_responses import create_mock_llm_response
 
 
 @pytest.fixture
-def mock_service_manager():
-    """Create a mock service manager with all required clients."""
-    mock_sm = MagicMock(spec=ServiceManager)
+def service_manager():
+    """Create a service manager with mocked clients for testing."""
+    from src.config import get_config
+    config = get_config()
+    sm = ServiceManager(config)
 
-    # Mock Ollama clients
-    mock_ollama_reasoning = MagicMock()
-    mock_ollama_reasoning._client = MagicMock()
-    mock_ollama_reasoning._client.invoke.return_value = "mock response"
-    mock_ollama_reasoning.is_available.return_value = True
+    # Mock the clients to simulate real behavior
+    sm.ollama_reasoning = MagicMock()
+    sm.ollama_reasoning.invoke.return_value = "mock response"
+    sm.ollama_reasoning.is_available.return_value = True
 
-    mock_ollama_code = MagicMock()
-    mock_ollama_code._client = MagicMock()
-    mock_ollama_code._client.invoke.return_value = "mock code response"
-    mock_ollama_code.is_available.return_value = True
+    sm.ollama_code = MagicMock()
+    sm.ollama_code.invoke.return_value = "mock code response"
+    sm.ollama_code.is_available.return_value = True
 
-    # Mock GitHub client
-    mock_github = MagicMock()
-    mock_github._client = MagicMock()
-    mock_github.is_available.return_value = True
+    sm.github = MagicMock()
+    sm.github.is_available.return_value = True
 
-    # Mock MCP client
-    mock_mcp = MagicMock()
-    mock_mcp.get_tools.return_value = []
-    mock_mcp.is_available.return_value = True
+    sm.mcp = MagicMock()
+    sm.mcp.get_tools.return_value = []
+    sm.mcp.is_available.return_value = True
 
-    mock_sm.ollama_reasoning = mock_ollama_reasoning
-    mock_sm.ollama_code = mock_ollama_code
-    mock_sm.github = mock_github
-    mock_sm.mcp = mock_mcp
-
-    return mock_sm
+    return sm
 
 
 @pytest.fixture
@@ -119,16 +111,16 @@ class TestIssueProcessingWorkflow:
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
-    def test_init(self, mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager, mock_service_manager):
+    def test_init(self, mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager, service_manager):
         """Test IssueProcessingWorkflow initialization."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
 
         workflow = IssueProcessingWorkflow()
 
         assert workflow.name == "issue_processing"
-        assert workflow.service_manager == mock_service_manager
+        assert workflow.service_manager == service_manager
         mock_get_service_manager.assert_called_once()
 
     @patch('src.workflows.get_service_manager')

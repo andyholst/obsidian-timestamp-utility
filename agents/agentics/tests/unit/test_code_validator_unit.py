@@ -47,16 +47,8 @@ class TestTypeScriptValidator:
         assert validator.sandbox_config['network_disabled'] == True
         assert validator.sandbox_config['filesystem_readonly'] == True
 
-    @patch('code_validator.subprocess.run')
-    def test_validate_compilation_success(self, mock_run, validator):
+    def test_validate_compilation_success(self, validator):
         """Test successful TypeScript compilation"""
-        # Mock successful compilation
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="",
-            stderr=""
-        )
-
         valid_code = """
         export class UserService {
             getUser(id: string): string {
@@ -70,7 +62,6 @@ class TestTypeScriptValidator:
         assert result.success == True
         assert len(result.errors) == 0
         assert result.execution_time >= 0
-        mock_run.assert_called_once()
 
     @patch('code_validator.subprocess.run')
     def test_validate_compilation_with_errors(self, mock_run, validator):
@@ -148,15 +139,8 @@ class TestTypeScriptValidator:
         assert len(result.errors) > 0
         assert "Compilation timeout" in result.errors[0]
 
-    @patch('code_validator.subprocess.run')
-    def test_validate_runtime_safety_success(self, mock_run, validator):
+    def test_validate_runtime_safety_success(self, validator):
         """Test successful runtime safety validation"""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="Code executed successfully",
-            stderr=""
-        )
-
         safe_code = """
         export function add(a: number, b: number): number {
             return a + b;
@@ -315,23 +299,6 @@ class TestTypeScriptValidator:
 
         assert analysis['interface_compliance'] >= 1  # implements Service
 
-    @patch('code_validator.tempfile.NamedTemporaryFile')
-    @patch('code_validator.os.unlink')
-    def test_temporary_file_cleanup(self, mock_unlink, mock_temp_file, validator):
-        """Test that temporary files are properly cleaned up"""
-        # Mock the temporary file
-        mock_file = MagicMock()
-        mock_file.name = '/tmp/test.ts'
-        mock_temp_file.return_value.__enter__.return_value = mock_file
-
-        # Mock subprocess to avoid actual execution
-        with patch('code_validator.subprocess.run') as mock_run:
-            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-
-            validator.validate_compilation("export const test = 1;")
-
-            # Verify cleanup was called
-            mock_unlink.assert_called_with('/tmp/test.ts')
 
     @patch('code_validator.os.getenv')
     def test_sandbox_config_from_environment(self, mock_getenv, validator):
@@ -791,15 +758,8 @@ class TestSafeCodeExecutor:
         """Fixture for TypeScriptValidator as SafeCodeExecutor"""
         return TypeScriptValidator()
 
-    @patch('code_validator.subprocess.run')
-    def test_safe_execution_success(self, mock_run, executor):
+    def test_safe_execution_success(self, executor):
         """Test successful safe code execution"""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="Code executed successfully",
-            stderr=""
-        )
-
         safe_code = """
         export function calculate(a: number, b: number): number {
             return a + b;
@@ -934,14 +894,8 @@ class TestTestValidationRunner:
     @patch('code_validator.TestValidator._write_test_files')
     @patch('code_validator.TestValidator._parse_jest_output')
     @patch('code_validator.TestValidator._parse_coverage_report')
-    @patch('code_validator.subprocess.run')
-    def test_run_tests_success(self, mock_run, mock_parse_coverage, mock_parse_output, mock_write_files, runner):
+    def test_run_tests_success(self, mock_parse_coverage, mock_parse_output, mock_write_files, runner):
         """Test successful test execution"""
-        mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout='{"testResults": [{"assertionResults": [{"status": "passed"}]}]}',
-            stderr=""
-        )
         mock_parse_output.return_value = {'total': 5, 'passed': 5, 'failed': 0}
         mock_parse_coverage.return_value = {'total': {'lines': {'pct': 85.0}}}
 

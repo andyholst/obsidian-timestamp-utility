@@ -235,6 +235,12 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
 
         # Post-process the generated code
         generated_code = self._post_process_code(generated_code)
+
+        # Keyword validation for code output
+        code_keywords = ['import', 'export', 'class', 'interface', 'function']
+        if not any(keyword in generated_code for keyword in code_keywords):
+            raise ValueError("Generated code must include at least one of: import, export, class, interface, or function")
+
         return generated_code
 
     def _post_process_code(self, generated_code):
@@ -270,6 +276,13 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
 
         # Post-process the generated tests
         generated_tests = self._post_process_tests(generated_tests)
+
+        # Keyword validation for test output
+        if not (generated_tests.strip().startswith('describe(') and generated_tests.strip().endswith('});')):
+            raise ValueError("Generated tests must start with 'describe(' and end with '});'")
+        if 'describe(' not in generated_tests or ('it(' not in generated_tests and 'test(' not in generated_tests):
+            raise ValueError("Generated tests must include 'describe(' and 'it(' or 'test(' keywords")
+
         return generated_tests
 
     def _post_process_tests(self, generated_tests):

@@ -3,7 +3,7 @@ class ModularPrompts:
 
     @staticmethod
     def get_base_instruction():
-        return "/think\nYou are an expert TypeScript developer for Obsidian plugins."
+        return "You are an expert TypeScript developer for Obsidian plugins. IMPORTANT: Respond ONLY with valid code, no explanations, no markdown, no thinking content."
 
     @staticmethod
     def get_code_structure_section(code_structure: str):
@@ -57,35 +57,22 @@ class ModularPrompts:
     def get_output_instructions_code():
         return (
             "6. **Output Instructions:**\n"
-            " - Your response must contain only the new TypeScript code to be added to `{main_file}`, including any necessary imports not already present.\n"
-            " - The code should start with any new imports, followed by the new method definition inside the class, and the command addition in `onload`.\n"
-            " - Do not include any comments, explanations, or additional text outside the code itself, except for single-line comments above new methods.\n"
-            " - Do not add any markers or comments indicating the start or end of the new code.\n"
-            " - Do not wrap the code in a code block.\n"
-            " - The response must start with the code and end with the code, with no additional lines or text before or after.\n"
-            " - Ensure the code is properly formatted and uses TypeScript syntax with type annotations."
+            " - Your response MUST be ONLY the new TypeScript code to be added to `{main_file}`.\n"
+            " - Start directly with imports or code, end with code.\n"
+            " - NO comments, explanations, markdown, or extra text.\n"
+            " - MUST include at least one: import, export, class, interface, or function.\n"
+            " - Code must be syntactically valid TypeScript."
         )
 
     @staticmethod
     def get_output_instructions_tests():
         return (
             "7. **Output Instructions:**\n"
-            " - Return only the two inner `describe` blocks for `{method_name}` and `{command_id}`.\n"
-            " - The first block must start with `describe('TimestampPlugin: {method_name}', () => {`.\n"
-            " - The second block must start with `describe('TimestampPlugin: {command_id} command', () => {`.\n"
-            " - Each block must end with `});`.\n"
-            " - Do not include the top-level `describe('TimestampPlugin', ...)` block.\n"
-            " - Do not include any imports, `beforeEach`, or other setup code.\n"
-            " - Do not indent the describe blocks; they will be indented during integration.\n"
-            " - Do not generate the complete test file; only the new inner describe blocks.\n"
-            " - Your response must start with the first `describe` line and end with the last `});`, with no additional text, comments, or explanations.\n"
-            " - Ensure the generated code is valid Jest syntax.\n"
-            " - Ensure the generated code is valid Jest syntax with proper `describe` and `it` or `test` keywords.\n"
-            " - Each `describe` block must contain at least one `it` or `test` statement.\n"
-            " - Use `it` or `test` for individual test cases within each `describe` block.\n"
-            " - The tests should use the existing mocks (mockEditor, mockApp, mockFile, mockCommands) that are set up in the test file's beforeEach block.\n"
-            " - For method tests, call the method on the plugin instance.\n"
-            " - For command tests, access the command via mockCommands['{command_id}'] and call its callback."
+            " - Response MUST start with 'describe(' and end with '});'.\n"
+            " - ONLY the two inner describe blocks.\n"
+            " - NO top-level describe, imports, comments, or extra text.\n"
+            " - MUST include 'describe(' and 'it(' or 'test(' keywords.\n"
+            " - Valid Jest syntax only."
         )
     @staticmethod
     def get_tool_instructions_for_code_extractor_agent():

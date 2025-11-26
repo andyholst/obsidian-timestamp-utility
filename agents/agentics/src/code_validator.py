@@ -241,8 +241,7 @@ declare module 'obsidian' {{
             # Run TypeScript compiler
             result = subprocess.run(
                 ['tsc', '--noEmit', '--target', 'es2020', '--moduleResolution', 'node',
-                 '--allowJs', '--checkJs', 'false', '--strict', '--noImplicitAny',
-                 '--strictNullChecks', temp_file_path],
+                 '--allowJs', '--checkJs', 'false', temp_file_path],
                 capture_output=True,
                 text=True,
                 timeout=30

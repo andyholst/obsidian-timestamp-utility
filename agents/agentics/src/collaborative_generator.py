@@ -16,17 +16,18 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
     code and test generators with cross-validation and iterative refinement.
     """
 
-    def __init__(self, llm_reasoning: Runnable, llm_code: Runnable):
+    def __init__(self, service_manager):
         self.name = "CollaborativeGenerator"
-        self.llm_reasoning = llm_reasoning
-        self.llm_code = llm_code
-        self.code_generator = CodeGeneratorAgent(llm_code)
-        self.test_generator = TestGeneratorAgent(llm_code)
+        self.service_manager = service_manager
+        self.llm_reasoning = service_manager.ollama_reasoning
+        self.llm_code = service_manager.ollama_code
+        self.code_generator = CodeGeneratorAgent(self.llm_code)
+        self.test_generator = TestGeneratorAgent(self.llm_code)
         self.circuit_breaker = get_circuit_breaker("collaborative_generation")
         self.max_refinement_iterations = 3
         self.monitor = structured_log(self.name)
         self.monitor.setLevel(logging.INFO)
-        log_info(self.name, "Initialized CollaborativeGenerator with code and test agents")
+        log_info(self.name, "Initialized CollaborativeGenerator with service manager")
 
     def _log_structured(self, level: str, event: str, data: Dict[str, Any]):
         """Structured logging for workflow component."""
@@ -39,16 +40,23 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
     def generate_collaboratively(self, state: CodeGenerationState) -> CodeGenerationState:
         """Generate code and tests collaboratively"""
 
-        # Phase 1: Generate initial code
-        code_state = self.code_generator.generate(state)
+        def _generate_impl():
+            # Phase 1: Generate initial code
+            code_state = self.code_generator.generate(state)
 
-        # Phase 2: Generate tests based on code
-        test_state = self.test_generator.generate(code_state)
+            # Phase 2: Generate tests based on code
+            test_state = self.test_generator.generate(code_state)
 
-        # Phase 3: Cross-validation and refinement
-        validated_state = self.cross_validate(code_state, test_state)
+            # Phase 3: Cross-validation and refinement
+            validated_state = self.cross_validate(code_state, test_state)
 
-        return validated_state
+            # Ensure iteration_count is set
+            if 'iteration_count' not in validated_state.feedback:
+                validated_state.feedback['iteration_count'] = 1
+
+            return validated_state
+
+        return self.circuit_breaker.call(_generate_impl)
 
     def _generate_initial_code(self, state: CodeGenerationState) -> CodeGenerationState:
         """Generate initial code using the code generator agent."""
