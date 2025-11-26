@@ -17,6 +17,7 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
     """
 
     def __init__(self, llm):
+        self.name = "CollaborativeGenerator"
         self.llm = llm
         self.llm_reasoning = llm  # Use single LLM for both
         self.llm_code = llm

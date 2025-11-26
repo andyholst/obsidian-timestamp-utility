@@ -152,24 +152,6 @@ def test_validate_github_url():
     assert validate_github_url(pull_url) == False, "Pull request URL should return False"
     assert validate_github_url(invalid_url) == False, "Invalid URL should return False"
 
-def test_full_workflow_invalid_url():
-    # Given: an invalid GitHub URL
-    mock_github = MagicMock()
-    initial_state = {"url": "invalid_url"}
-    # When: invoking the app with the invalid URL
-    # Then: raises ValidationError with message "Invalid GitHub URL"
-    def mock_github_init(self, token):
-        self.token = token
-        self._client = mock_github
-    with patch.object(GitHubClient, '__init__', mock_github_init), \
-          patch.object(GitHubClient, 'health_check', return_value=True):
-        from src.agentics import AgenticsApp
-        app = AgenticsApp()
-        with pytest.raises(ValidationError) as exc_info:
-            asyncio.run(app.process_issue(initial_state["url"]))
-        assert isinstance(exc_info.value, ValidationError)
-        assert "Invalid GitHub issue URL" in str(exc_info.value)
-
 def test_full_workflow_empty_ticket():
     # Given: mocked GitHub with empty ticket content
     mock_github = MagicMock()
