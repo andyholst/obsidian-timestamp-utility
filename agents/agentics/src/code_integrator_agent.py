@@ -10,7 +10,7 @@ from .prompts import ModularPrompts
 
 class CodeIntegratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__("CodeIntegrator", llm_client, [read_file_tool, check_file_exists_tool, write_file_tool])
+        super().__init__(llm_client, [read_file_tool, check_file_exists_tool, write_file_tool], "CodeIntegrator")
         # Configurable project root and file extensions
         self.project_root = os.getenv('PROJECT_ROOT')
         if not self.project_root:
