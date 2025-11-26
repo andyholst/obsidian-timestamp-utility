@@ -16,10 +16,10 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
     code and test generators with cross-validation and iterative refinement.
     """
 
-    def __init__(self, llm_reasoning, llm_code):
-        self.name = "CollaborativeGenerator"
-        self.llm_reasoning = llm_reasoning
-        self.llm_code = llm_code
+    def __init__(self, llm):
+        self.llm = llm
+        self.llm_reasoning = llm  # Use single LLM for both
+        self.llm_code = llm
         self.code_generator = CodeGeneratorAgent(self.llm_code)
         self.test_generator = TestGeneratorAgent(self.llm_code)
         self.circuit_breaker = get_circuit_breaker("collaborative_generation")

@@ -86,7 +86,7 @@ class ComposableWorkflows:
         extractor_agent = AgentAdapter(CodeExtractorAgent(self.llm_reasoning))
         self.composer.register_agent("code_extractor", extractor_agent)
 
-        collaborative_gen = CollaborativeGenerator(self.llm_reasoning, self.llm_code)
+        collaborative_gen = CollaborativeGenerator(self.llm_reasoning)
         self.composer.register_agent("collaborative_generator", collaborative_gen)
 
         # Integration & testing agents
