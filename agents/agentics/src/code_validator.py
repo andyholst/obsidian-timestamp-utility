@@ -320,13 +320,33 @@ declare module 'obsidian' {{
             temp_dir = tempfile.mkdtemp()
             with open(os.path.join(temp_dir, 'package.json'), 'w') as f:
                 json.dump({"type": "module"}, f)
-            temp_file_path = os.path.join(temp_dir, 'temp.js')
-            with open(temp_file_path, 'w') as temp_file:
+            temp_ts_path = os.path.join(temp_dir, 'temp.ts')
+            temp_js_path = os.path.join(temp_dir, 'temp.js')
+
+            # Write TypeScript code
+            with open(temp_ts_path, 'w') as temp_file:
                 temp_file.write(code)
 
-            # Execute with Node.js
+            # Compile TypeScript to JavaScript
+            compile_result = subprocess.run(
+                ['tsc', '--target', 'es2020', '--moduleResolution', 'node',
+                 '--allowJs', '--checkJs', 'false', '--outFile', temp_js_path, temp_ts_path],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=temp_dir
+            )
+
+            if compile_result.returncode != 0:
+                return ExecutionResult(
+                    success=False,
+                    errors=f"Compilation failed: {compile_result.stderr}",
+                    execution_time=(datetime.now() - start_time).total_seconds()
+                )
+
+            # Execute compiled JavaScript with Node.js
             result = subprocess.run(
-                ['node', '--experimental-vm-modules', temp_file_path],
+                ['node', '--experimental-vm-modules', temp_js_path],
                 capture_output=True,
                 text=True,
                 timeout=self.sandbox_config['timeout'] / 1000,
