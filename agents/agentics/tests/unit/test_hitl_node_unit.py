@@ -30,8 +30,9 @@ class TestHITLNode:
 
     @patch('builtins.input')
     @patch('builtins.print')
-    def test_hitl_node_review_needed_low_score(self, mock_print, mock_input):
+    def test_hitl_node_review_needed_low_score(self, mock_print, mock_input, monkeypatch):
         """Test HITL node when validation score is low (review needed)."""
+        monkeypatch.setenv('HITL_ENABLED', 'true')
         mock_input.return_value = "User feedback: please improve error handling"
         node = HITLNode()
         state = {"validation_score": 75, "other_data": "test"}

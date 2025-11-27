@@ -54,15 +54,20 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
 
             # Ensure feedback is initialized
             if validated_state.feedback is None:
-                validated_state.feedback = {}
-    
+                validated_state = validated_state.with_feedback({})
+
             # Ensure iteration_count is set
-            if 'iteration_count' not in validated_state.feedback:
-                validated_state.feedback['iteration_count'] = 1
+            feedback = validated_state.feedback or {}
+            if 'iteration_count' not in feedback:
+                validated_state = validated_state.with_feedback({**feedback, 'iteration_count': 1})
 
             return validated_state
 
-        return self.circuit_breaker.call(_generate_impl)
+        try:
+            return self.circuit_breaker.call(_generate_impl)
+        except Exception as e:
+            self.monitor.error("generate_collaboratively_failed", {"error": str(e)})
+            raise
 
     def _generate_initial_code(self, state: CodeGenerationState) -> CodeGenerationState:
         """Generate initial code using the code generator agent."""

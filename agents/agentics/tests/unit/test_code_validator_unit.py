@@ -143,8 +143,10 @@ class TestTypeScriptValidator:
         assert len(result.errors) > 0
         assert "Compilation timeout" in result.errors[0]
 
-    def test_validate_runtime_safety_success(self, validator):
+    @patch('code_validator.subprocess.run')
+    def test_validate_runtime_safety_success(self, mock_run, validator):
         """Test successful runtime safety validation"""
+        mock_run.return_value = MagicMock(returncode=0, stdout="Code executed successfully", stderr="")
         code = """
         export function calculate(a, b) {
             return a + b;
@@ -181,8 +183,7 @@ class TestTypeScriptValidator:
         assert result.timeout == False
 
     @patch('code_validator.subprocess.run')
-    @patch('code_validator.subprocess.TimeoutExpired')
-    def test_validate_runtime_safety_timeout(self, mock_timeout, mock_run, validator):
+    def test_validate_runtime_safety_timeout(self, mock_run, validator):
         """Test runtime safety validation timeout"""
         mock_run.side_effect = subprocess.TimeoutExpired(cmd=['node'], timeout=5)
 
@@ -766,8 +767,10 @@ class TestSafeCodeExecutor:
         """Fixture for TypeScriptValidator as SafeCodeExecutor"""
         return TypeScriptValidator()
 
-    def test_safe_execution_success(self, executor):
+    @patch('code_validator.subprocess.run')
+    def test_safe_execution_success(self, mock_run, executor):
         """Test successful safe code execution"""
+        mock_run.return_value = MagicMock(returncode=0, stdout="Code executed successfully", stderr="")
         code = """
         export function calculate(a: number, b: number): number {
             return a + b;
@@ -905,6 +908,7 @@ class TestTestValidationRunner:
     @patch('code_validator.subprocess.run')
     def test_run_tests_success(self, mock_run, mock_parse_coverage, mock_parse_output, mock_write_files, runner):
         """Test successful test execution"""
+        mock_run.return_value.returncode = 0
         mock_parse_output.return_value = {'total': 5, 'passed': 5, 'failed': 0}
         mock_parse_coverage.return_value = {'total': {'lines': {'pct': 85.0}}}
 
