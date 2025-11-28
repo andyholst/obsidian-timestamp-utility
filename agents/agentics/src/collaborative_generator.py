@@ -81,6 +81,10 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
                         "iteration": iteration + 1,
                         "score": validation_result.score
                     })
+                    validated_state = validated_state.with_feedback({
+                        'iteration_count': iteration + 1,
+                        'validation_history': validation_history
+                    })
                     return validated_state
 
                 # If not passed, refine for next iteration
@@ -93,6 +97,10 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
             # If max iterations reached, return last state
             self._log_structured("warning", "max_iterations_reached", {
                 "final_iteration": self.max_refinement_iterations
+            })
+            current_state = current_state.with_feedback({
+                'iteration_count': self.max_refinement_iterations,
+                'validation_history': validation_history
             })
             return current_state
 
