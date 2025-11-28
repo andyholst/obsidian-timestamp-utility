@@ -64,8 +64,13 @@ class TestHITLNode:
 
     @patch('builtins.input')
     @patch('builtins.print')
-    def test_hitl_node_review_needed_zero_score(self, mock_print, mock_input):
+    def test_hitl_node_review_needed_zero_score(self, mock_print, mock_input, monkeypatch):
         """Test HITL node when validation score is zero."""
+        # Mock skip conditions to enable HITL execution
+        monkeypatch.delenv('CI', raising=False)
+        monkeypatch.setattr(sys, 'argv', ['test'])
+        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
+        monkeypatch.setenv('HITL_ENABLED', 'true')
         mock_input.return_value = "Complete rewrite needed"
         node = HITLNode()
         state = {"validation_score": 0}
@@ -98,8 +103,13 @@ class TestHITLNode:
 
     @patch('builtins.input')
     @patch('builtins.print')
-    def test_hitl_node_preserves_state_data(self, mock_print, mock_input):
+    def test_hitl_node_preserves_state_data(self, mock_print, mock_input, monkeypatch):
         """Test that HITL node preserves all existing state data."""
+        # Mock skip conditions to enable HITL execution
+        monkeypatch.delenv('CI', raising=False)
+        monkeypatch.setattr(sys, 'argv', ['test'])
+        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
+        monkeypatch.setenv('HITL_ENABLED', 'true')
         mock_input.return_value = "Feedback"
         node = HITLNode()
         state = {
