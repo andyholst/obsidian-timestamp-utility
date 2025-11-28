@@ -705,9 +705,9 @@ class TestAsyncExecutionPatterns:
     @patch('src.workflows.get_batch_processor')
     @pytest.mark.asyncio
     async def test_batch_processing_state_isolation(self, mock_get_batch_processor, mock_get_task_manager,
-                                                  mock_get_service_manager, mock_service_manager):
+                                                  mock_get_service_manager, mock_service_manager_comprehensive):
         """Test that batch processing maintains state isolation between items."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = mock_service_manager_comprehensive
         mock_get_task_manager.return_value = MagicMock()
         mock_batch_processor = MagicMock()
         mock_get_batch_processor.return_value = mock_batch_processor
