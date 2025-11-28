@@ -48,6 +48,7 @@ class CodeGenerationState:
     method_name: Optional[str] = None
     command_id: Optional[str] = None
     history: List[Dict[str, Any]] = field(default_factory=list)
+    validation_history: List[Dict[str, Any]] = field(default_factory=list)
     existing_tests_passed: int = 0
 
     def with_code(self, code: str, method_name: Optional[str] = None, command_id: Optional[str] = None) -> 'CodeGenerationState':
@@ -88,6 +89,13 @@ class CodeGenerationState:
         return CodeGenerationState(
             **{k: v for k, v in self.__dict__.items() if k != 'feedback'},
             feedback=feedback
+        )
+
+    def with_validation_history(self, validation_history: List[Dict[str, Any]]) -> 'CodeGenerationState':
+        """Return new state with validation history"""
+        return CodeGenerationState(
+            **{k: v for k, v in self.__dict__.items() if k != 'validation_history'},
+            validation_history=validation_history
         )
 
     def get_audit_trail(self) -> List[Dict[str, Any]]:
