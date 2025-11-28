@@ -14,12 +14,11 @@ from src.config import (
 @pytest.fixture
 def clean_config():
     """Fixture to reset global config before each test."""
-    global _config
-    from src.config import _config
-    original = _config
-    _config = None
+    import src.config
+    original = src.config._config
+    src.config._config = None
     yield
-    _config = original
+    src.config._config = original
 
 
 @pytest.fixture

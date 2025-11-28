@@ -1,3 +1,4 @@
+import sys
 import pytest
 from unittest.mock import patch, MagicMock
 from src.hitl_node import HITLNode
@@ -32,10 +33,15 @@ class TestHITLNode:
     @patch('builtins.print')
     def test_hitl_node_review_needed_low_score(self, mock_print, mock_input, monkeypatch):
         """Test HITL node when validation score is low (review needed)."""
+        # Mock skip conditions to enable HITL execution
+        monkeypatch.delenv('CI', raising=False)
+        monkeypatch.setattr(sys, 'argv', ['test'])
+        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
         monkeypatch.setenv('HITL_ENABLED', 'true')
         mock_input.return_value = "User feedback: please improve error handling"
         node = HITLNode()
-        state = {"validation_score": 75, "other_data": "test"}
+        original_state = {"validation_score": 75, "other_data": "test"}
+        state = original_state.copy()
 
         result = node(state)
 
@@ -46,7 +52,12 @@ class TestHITLNode:
         # Input should be called
         mock_input.assert_called_once()
 
-        # State should have human_feedback added
+        # Ensure immutability: original state unchanged
+        assert state == original_state
+        assert "human_feedback" not in state
+
+        # Result is a new state dict with human_feedback added
+        assert result != state
         assert result["human_feedback"] == "User feedback: please improve error handling"
         assert result["validation_score"] == 75
         assert result["other_data"] == "test"
