@@ -76,8 +76,13 @@ class TestHITLNode:
         mock_input.assert_called_once()
         assert result["human_feedback"] == "Complete rewrite needed"
 
-    def test_hitl_node_no_validation_score(self):
+    def test_hitl_node_no_validation_score(self, monkeypatch):
         """Test HITL node when no validation_score is present (defaults to 0)."""
+        # Mock skip conditions to enable HITL execution
+        monkeypatch.delenv('CI', raising=False)
+        monkeypatch.setattr(sys, 'argv', ['test'])
+        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
+        monkeypatch.setenv('HITL_ENABLED', 'true')
         node = HITLNode()
         state = {"other_data": "test"}
 
