@@ -14,7 +14,7 @@ os.environ.setdefault('GITHUB_TOKEN', 'dummy')
 from src.agentics import TicketClarityAgent, ImplementationPlannerAgent, PreTestRunnerAgent, CodeExtractorAgent, CodeIntegratorAgent, PostTestRunnerAgent, CodeReviewerAgent
 from src import agentics
 from src.utils import validate_github_url
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from github import GithubException
 from tests.fixtures.mock_github_responses import create_github_client_mock, create_well_structured_ticket_mock, create_unclear_ticket_mock, create_malformed_ticket_mock, create_empty_ticket_mock
 from src.services import GitHubClient
@@ -238,7 +238,7 @@ def test_full_workflow_npm_install_fail(tmp_path):
     mock_service_manager.ollama_code._client = mock_llm_code
     mock_service_manager.github = MagicMock()
     mock_service_manager.github._client = MagicMock()
-    mock_service_manager.check_services_health = MagicMock(return_value={'ollama_reasoning': True, 'ollama_code': True, 'github': True, 'mcp': False})
+    mock_service_manager.check_services_health = AsyncMock(return_value={'ollama_reasoning': True, 'ollama_code': True, 'github': True, 'mcp': False})
     mock_service_manager.close_services = MagicMock()
 
     # Given: mocked GitHub and empty project directory without package.json
