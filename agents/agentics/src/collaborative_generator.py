@@ -100,7 +100,8 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
             })
             current_state = current_state.with_feedback({
                 'iteration_count': self.max_refinement_iterations,
-                'validation_history': validation_history
+                'validation_history': validation_history,
+                'max_iterations_exceeded': True
             })
             return current_state
 
@@ -313,7 +314,13 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
         Returns:
             Validated state with validation results and accumulated history
         """
-        log_info(self.name, "Performing cross-validation on code and tests")
+        log_info(self.name, f"Performing cross-validation on code and tests - received {len([state]) if isinstance(state, CodeGenerationState) else 'multiple'} state(s)")
+        # Debug log to validate arguments
+        self._log_structured("info", "cross_validate_args", {
+            "args_count": 1 if isinstance(state, CodeGenerationState) else "unexpected",
+            "has_generated_code": hasattr(state, 'generated_code'),
+            "has_generated_tests": hasattr(state, 'generated_tests')
+        })
 
         try:
             # Create validation prompt
