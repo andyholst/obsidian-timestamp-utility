@@ -248,7 +248,7 @@ class TestCollaborativeGenerator:
         test_state = code_state.with_tests("describe('test', () => { it('works', () => { expect(test()).toBe(true); }); });")
 
         with patch.object(generator.monitor, 'info') as mock_log:
-            result = generator.cross_validate(code_state, test_state)
+            combined_state = code_state.with_tests(test_state.generated_tests); result = generator.cross_validate(combined_state)
 
             # Should have called LLM reasoning
             service_manager.ollama_reasoning.invoke.assert_called_once()
@@ -278,7 +278,7 @@ class TestCollaborativeGenerator:
         mock_llm_reasoning.invoke.side_effect = Exception("LLM validation failed")
 
         with patch.object(generator.monitor, 'error') as mock_log:
-            result = generator.cross_validate(code_state, test_state)
+            combined_state = code_state.with_tests(test_state.generated_tests); result = generator.cross_validate(combined_state)
 
             # Should return error validation result
             assert result.validation_results.success is False
@@ -349,7 +349,7 @@ class TestCollaborativeGenerator:
             result = generator._attempt_refinements(state, validation_result)
 
             mock_refine.assert_called_once()
-            assert result == refined_state
+            assert result.generated_code == refined_state.generated_code and assert result.generated_tests == refined_state.generated_tests and assert result.validation_results.success == refined_state.validation_results.success
 
     @patch.dict(os.environ, {'PROJECT_ROOT': '/tmp/test'})
     def test_attempt_refinements_code_refinement(self, service_manager, sample_code_generation_state):
@@ -360,7 +360,7 @@ class TestCollaborativeGenerator:
         validation_result = {"issues": ["Code has bugs"], "recommendations": ["Fix implementation"]}
 
         with patch.object(generator.test_generator, 'refine_tests') as mock_test_refine, \
-             patch.object(generator, '_cross_validate') as mock_validate:
+             patch.object(generator, 'cross_validate') as mock_validate:
 
             # Test refinement doesn't help
             mock_test_refine.return_value = state
@@ -483,7 +483,7 @@ class TestCollaborativeGenerator:
 
             result = generator._refine_code_and_tests(state, {"issues": ["Add more tests"]})
 
-            assert result == refined_state
+            assert result.generated_code == refined_state.generated_code and assert result.generated_tests == refined_state.generated_tests and assert result.validation_results.success == refined_state.validation_results.success
 
     def test_refine_code_and_tests_failure(self, service_manager, sample_code_generation_state):
         """Test refinement failure handling."""
@@ -585,7 +585,7 @@ class TestCollaborativeGenerator:
         code_state = sample_code_generation_state.with_code("code")
         test_state = code_state.with_tests("tests")
 
-        prompt = generator._create_validation_prompt(code_state, test_state)
+        combined_state = code_state.with_tests(test_state.generated_tests); prompt = generator._create_validation_prompt(combined_state)
 
         assert "Generated Code:" in prompt
         assert "Generated Tests:" in prompt

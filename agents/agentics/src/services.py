@@ -175,8 +175,7 @@ class MCPClient(ServiceClient):
             self._client = None
 
     async def health_check(self) -> bool:
-        """Check if MCP service is healthy."""
-        return self._initialized
+        return self._initialized and self._client is not None
 
     def is_available(self) -> bool:
         """Check if MCP client is available."""
@@ -217,6 +216,9 @@ class MCPClient(ServiceClient):
 
     def get_tools(self) -> list:
         """Get MCP tools for LangChain integration."""
+        if not self._initialized:
+            asyncio.run(self.initialize())
+
         if not self.is_available():
             return []
 

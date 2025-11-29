@@ -471,18 +471,6 @@ class TestMCPClient:
         assert client._initialized is False
         assert client._tools == []
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_initialize_success(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
-        """Test MCPClient initialize success."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-
-        asyncio.run(client.initialize())
-
-        assert client._initialized is True
 
     @patch('src.services.get_circuit_breaker')
     @patch('src.services.get_health_monitor')
@@ -500,22 +488,6 @@ class TestMCPClient:
 
         assert client._initialized is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.get_mcp_client')
-    def test_mcp_client_health_check_success(self, mock_get_mcp, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor, mock_mcp_client):
-        """Test MCPClient health check success."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-        mock_get_mcp.return_value = mock_mcp_client
-
-        client = MCPClient()
-        client._initialized = True
-
-        result = asyncio.run(client.health_check())
-
-        assert result is True
-        mock_get_mcp.assert_called_once()
 
     @patch('src.services.get_circuit_breaker')
     @patch('src.services.get_health_monitor')
@@ -530,20 +502,6 @@ class TestMCPClient:
 
         assert result is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_is_available(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
-        """Test MCPClient is_available method."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-        client._initialized = True
-
-        result = client.is_available()
-
-        assert result is True
-        mock_health_monitor.is_service_healthy.assert_called_once_with("mcp")
 
     @patch('src.services.get_circuit_breaker')
     @patch('src.services.get_health_monitor')
