@@ -199,12 +199,6 @@ def test_full_workflow_github_error():
 
 def test_full_workflow_npm_install_fail(tmp_path):
     reset_circuit_breakers()
-    # Instantiate agents for patching
-    mock_llm = MagicMock()
-    pre_test_runner_agent = PreTestRunnerAgent()
-    code_extractor_agent = CodeExtractorAgent(mock_llm)
-    code_integrator_agent = CodeIntegratorAgent(mock_llm)
-    post_test_runner_agent = PostTestRunnerAgent(mock_llm)
 
     # Mock LLMs to avoid real API calls
     mock_llm_reasoning = MagicMock()
@@ -229,45 +223,61 @@ def test_full_workflow_npm_install_fail(tmp_path):
         "timestampGenerator",
         "class TimestampPlugin { onload() { this.addCommand({ id: 'generate-uuid', name: 'Generate UUID', callback: () => { console.log('UUID generated'); } }); } }"
     ]
+
     # Mock circuit breakers
     mock_cb = MagicMock()
     mock_cb.is_open.return_value = False
     mock_cb.record_success = MagicMock()
     mock_cb.record_failure = MagicMock()
 
+    # Mock service manager with mocked clients
+    mock_service_manager = MagicMock()
+    mock_service_manager.ollama_reasoning = MagicMock()
+    mock_service_manager.ollama_reasoning._client = mock_llm_reasoning
+    mock_service_manager.ollama_code = MagicMock()
+    mock_service_manager.ollama_code._client = mock_llm_code
+    mock_service_manager.github = MagicMock()
+    mock_service_manager.github._client = MagicMock()
+    mock_service_manager.check_services_health = MagicMock(return_value={'ollama_reasoning': True, 'ollama_code': True, 'github': True, 'mcp': False})
+    mock_service_manager.close_services = MagicMock()
+
     # Given: mocked GitHub and empty project directory without package.json
-    mock_github = MagicMock()
+    mock_github_client = MagicMock()
     mock_repo = MagicMock()
     mock_issue = MagicMock()
     mock_issue.body = WELL_STRUCTURED_TICKET
     mock_repo.get_issue.return_value = mock_issue
-    mock_github.get_repo.return_value = mock_repo
-    mock_github.get_user.return_value = MagicMock(login='mock_user')
+    mock_github_client.get_repo.return_value = mock_repo
+    mock_github_client.get_user.return_value = MagicMock(login='mock_user')
+    mock_service_manager.github._client = mock_github_client
 
     project_dir = tmp_path / "madeup_dir"
     project_dir.mkdir()
 
-    # When: invoking the app with directory that can't install dependencies
-    def mock_github_init(self, token):
-        self.token = token
-        self._client = mock_github
-    with patch.object(GitHubClient, '__init__', mock_github_init), \
-          patch.object(GitHubClient, 'health_check', return_value=True), \
-          patch('src.clients.llm_reasoning', mock_llm_reasoning), \
-          patch('src.clients.llm_code', mock_llm_code), \
-          patch('src.circuit_breaker.circuit_breakers', {'ollama_reasoning_cb': mock_cb, 'ollama_code_cb': mock_cb, 'github_cb': mock_cb, 'mcp_cb': mock_cb}), \
-          patch.object(pre_test_runner_agent, 'project_root', str(project_dir)), \
-          patch.object(code_extractor_agent, 'project_root', str(project_dir)), \
-          patch.object(code_integrator_agent, 'project_root', str(project_dir)), \
-          patch.object(post_test_runner_agent, 'project_root', str(project_dir)):
+    # Set PROJECT_ROOT for PreTestRunnerAgent
+    old_project_root = os.environ.get('PROJECT_ROOT')
+    os.environ['PROJECT_ROOT'] = str(project_dir)
 
-        from src.agentics import AgenticsApp
-        app = AgenticsApp()
-        initial_state = {"url": "https://github.com/user/repo/issues/1"}
-        # Then: raises AgenticsError with "Install command failed"
-        from src.exceptions import AgenticsError
-        with pytest.raises(AgenticsError, match="Install command failed"):
-            asyncio.run(app.process_issue(initial_state["url"]))
+    try:
+        # When: invoking the app with directory that can't install dependencies
+        with patch('src.agentics.init_services', return_value=mock_service_manager), \
+              patch('src.agentics.get_service_manager', return_value=mock_service_manager), \
+              patch('src.agentics.init_mcp_client', return_value=None), \
+              patch('src.circuit_breaker.circuit_breakers', {'ollama_reasoning_cb': mock_cb, 'ollama_code_cb': mock_cb, 'github_cb': mock_cb, 'mcp_cb': mock_cb}):
+
+            from src.agentics import AgenticsApp
+            app = AgenticsApp()
+            initial_state = {"url": "https://github.com/user/repo/issues/1"}
+            # Then: raises AgenticsError with "Install command failed"
+            from src.exceptions import AgenticsError
+            with pytest.raises(AgenticsError, match="Install command failed"):
+                asyncio.run(app.process_issue(initial_state["url"]))
+    finally:
+        # Restore PROJECT_ROOT
+        if old_project_root is not None:
+            os.environ['PROJECT_ROOT'] = old_project_root
+        else:
+            os.environ.pop('PROJECT_ROOT', None)
 
 def test_full_workflow_agent_call_order():
     """Test that agents are called in the correct order during the full workflow."""

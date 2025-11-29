@@ -82,11 +82,11 @@ class TestGeneratorAgent(BaseAgent):
         )
         return (
             RunnablePassthrough.assign(
-                task_details_str=self._format_task_details,
-                existing_test_content=self._get_existing_test_content,
-                test_file=lambda x: self.test_file,
-                feedback=lambda x: (x.get('feedback', {}).get('feedback', '') if isinstance(x, dict) else (x.feedback.get('feedback', '') if x.feedback else ''))
-            )
+                             task_details_str=self._format_task_details,
+                             existing_test_content=self._get_existing_test_content,
+                             test_file=lambda x: self.test_file,
+                             feedback=lambda x: ((x.get('feedback') or {}).get('feedback', '') if isinstance(x, dict) else ((x.feedback or {}).get('feedback', '') if x.feedback else ''))
+                         )
             | refinement_prompt_template
             | self.llm
             | RunnableLambda(self._post_process_tests)

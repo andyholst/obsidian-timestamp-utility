@@ -21,6 +21,7 @@ from .dependency_analyzer_agent import DependencyAnalyzerAgent
 from .code_extractor_agent import CodeExtractorAgent
 from .code_integrator_agent import CodeIntegratorAgent
 from .post_test_runner_agent import PostTestRunnerAgent
+from .pre_test_runner_agent import PreTestRunnerAgent
 from .code_reviewer_agent import CodeReviewerAgent
 from .output_result_agent import OutputResultAgent
 from .hitl_node import HITLNode
@@ -90,6 +91,9 @@ class ComposableWorkflows:
         self.composer.register_agent("collaborative_generator", collaborative_gen)
 
         # Integration & testing agents
+        pre_test_agent = AgentAdapter(PreTestRunnerAgent())
+        self.composer.register_agent("pre_test_runner", pre_test_agent)
+
         integrator_agent = AgentAdapter(CodeIntegratorAgent(self.llm_code))
         self.composer.register_agent("code_integrator", integrator_agent)
 
@@ -119,9 +123,9 @@ class ComposableWorkflows:
         return self.composer.create_workflow("code_generation", config)
 
     def _create_integration_testing_workflow(self) -> Runnable:
-        """Create INTEGRATION & TESTING workflow: integrate -> test -> review -> output."""
+        """Create INTEGRATION & TESTING workflow: pre-test -> integrate -> test -> review -> output."""
         config = WorkflowConfig(
-            agent_names=["code_integrator", "post_test_runner", "code_reviewer", "output_result"],
+            agent_names=["pre_test_runner", "code_integrator", "post_test_runner", "code_reviewer", "output_result"],
             tool_names=[tool.name for tool in self.mcp_tools]
         )
         return self.composer.create_workflow("integration_testing", config)
