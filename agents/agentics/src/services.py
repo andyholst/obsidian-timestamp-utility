@@ -114,7 +114,6 @@ class GitHubClient(ServiceClient):
             self._client = None
 
     async def health_check(self) -> bool:
-        """Check if GitHub API is accessible."""
         if not self._client:
             return False
 

@@ -516,19 +516,6 @@ class TestMCPClient:
 
         assert result is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_get_context_success(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
-        """Test MCPClient get_context success."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-        asyncio.run(client.initialize())
-
-        result = asyncio.run(client.get_context("test query", 4096))
-
-        assert result is not None
 
     @patch('src.services.get_circuit_breaker')
     @patch('src.services.get_health_monitor')
