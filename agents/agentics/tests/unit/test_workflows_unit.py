@@ -85,7 +85,7 @@ class TestWorkflowBaseClass:
         with pytest.raises(TypeError):
             Workflow("test")
 
-    @patch('src.workflows.get_circuit_breaker')
+    @patch('src.services.get_circuit_breaker')
     @patch('src.workflows.get_service_manager')
     def test_workflow_instantiation_with_name(self, mock_get_service_manager, mock_get_circuit_breaker, service_manager):
         """Test that concrete workflow classes can be instantiated with a name."""
@@ -98,7 +98,7 @@ class TestWorkflowBaseClass:
         assert hasattr(workflow, 'validate_input')
         assert hasattr(workflow, 'execute')
 
-    @patch('src.workflows.get_circuit_breaker')
+    @patch('src.services.get_circuit_breaker')
     @patch('src.workflows.get_service_manager')
     def test_workflow_name_assignment(self, mock_get_service_manager, mock_get_circuit_breaker, service_manager):
         """Test that workflow name is properly assigned."""

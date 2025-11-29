@@ -364,7 +364,7 @@ class TestGitHubClient:
 
     @patch('src.services.get_circuit_breaker')
     @patch('src.services.get_health_monitor')
-    @patch('src.services.Github')
+    @patch('github.Github')
     @patch('src.services.Auth')
     def test_github_client_health_check_no_client(self, mock_auth_class, mock_github_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_github_token, mock_circuit_breaker, mock_health_monitor):
         """Test GitHubClient health check when client is None."""
@@ -541,18 +541,20 @@ class TestMCPClient:
         mock_get_mcp.return_value = mock_mcp_client
 
         client = MCPClient()
-        client._initialized = True
-
+        asyncio.run(client.initialize())
+    
         asyncio.run(client.store_memory("key", "value"))
 
         mock_mcp_client.store_memory.assert_called_once_with("key", "value")
 
     @patch('src.services.get_circuit_breaker')
     @patch('src.services.get_health_monitor')
-    def test_mcp_client_retrieve_memory_success(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch('src.services.get_mcp_client')
+    def test_mcp_client_retrieve_memory_success(self, mock_get_mcp_client, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor, mock_mcp_client):
         """Test MCPClient retrieve_memory success."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
+        mock_get_mcp_client.return_value = mock_mcp_client
 
         client = MCPClient()
         asyncio.run(client.initialize())
@@ -577,6 +579,7 @@ class TestMCPClient:
         mock_tool_class.from_function.side_effect = [mock_tool1, mock_tool2, mock_tool3]
 
         client = MCPClient()
+        client._client = mock_mcp_client
         client._initialized = True
 
         tools = client.get_tools()
