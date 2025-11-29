@@ -63,6 +63,10 @@ clean-cache:
 
 clean-logs:
 		find . -name "logs" -type d -exec rm -rf {} +
+		find . -name "logs" -type f -delete
+		find . -name "logs" -type l -delete
+		find . -name "*.logs" -type f -delete
+		find . -name "*.log" -type f -delete
 
 create-logs:
 		mkdir -p logs/failed logs/success && chmod -R 777 logs && ln -sf $(PWD)/logs agents/agentics/logs
