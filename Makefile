@@ -15,7 +15,7 @@ HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 export HOST_UID HOST_GID
 
-.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite check-secrets
+.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs create-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite check-secrets lint-python
 
 all: build-app test-app release
 
@@ -63,6 +63,13 @@ clean-cache:
 
 clean-logs:
 		find . -name "logs" -type d -exec rm -rf {} +
+		find . -name "logs" -type f -delete
+		find . -name "logs" -type l -delete
+		find . -name "*.logs" -type f -delete
+		find . -name "*.log" -type f -delete
+
+create-logs:
+		mkdir -p logs/failed logs/success && chmod -R 777 logs && ln -sf $(PWD)/logs agents/agentics/logs
 
 stop-containers:
 		./scripts/containerd_wrapper.sh -f docker-compose-files/agents.yaml down --remove-orphans
@@ -106,7 +113,7 @@ test-agents-integration: build-image-agents check-deps
 test-agents-integration-fast: INTEGRATION_TEST_FILTER=--maxfail=1 -k "not slow"
 test-agents-integration-fast: test-agents-integration
 
-test-agents: test-agents-unit-mock test-agents-integration
+test-agents: lint-python test-agents-unit-mock test-agents-integration validate-test-suite
 
 test: test-app test-agents
 
@@ -126,8 +133,7 @@ check-mcp:
 # Verbose test runners
 test-agents-unit-verbose: build-image-agents check-deps
 	@echo "🚀 Starting verbose unit tests..."
-	@mkdir -p logs/failed logs/success
-	@chmod -R 777 logs
+	$(MAKE) create-logs
 	@$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans unit-test-agents-verbose 2>&1 | tee logs/$(shell date -u +%Y-%m-%d_%H%M%S)_unit_tests_verbose_output.txt; \
 	exitcode=$${PIPESTATUS[0]}; \
 	echo "🏁 Verbose unit tests completed with exit code: $$exitcode"; \
@@ -135,8 +141,7 @@ test-agents-unit-verbose: build-image-agents check-deps
 
 test-agents-integration-verbose: build-image-agents check-deps
 	@echo "🚀 Starting verbose integration tests..."
-	@mkdir -p logs/failed logs/success
-	@chmod -R 777 logs
+	$(MAKE) create-logs
 	@$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans integration-test-agents-verbose 2>&1 | tee logs/$(shell date -u +%Y-%m-%d_%H%M%S)_integration_tests_verbose_output.txt; \
 	exitcode=$${PIPESTATUS[0]}; \
 	echo "🏁 Verbose integration tests completed with exit code: $$exitcode"; \
@@ -156,13 +161,11 @@ test-agents-integration-fail-verbose: build-image-agents check-deps
 	exit $$exitcode
 
 test-agents-unit-watch: build-image-agents
-		@mkdir -p logs/failed logs/success
-		@chmod -R 777 logs
+		$(MAKE) create-logs
 		env HOST_UID=$(HOST_UID) HOST_GID=$(HOST_GID) $(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) up unit-test-agents-watch
 
 test-agents-integration-watch: build-image-agents check-deps
-	@mkdir -p logs/failed logs/success
-	@chmod -R 777 logs
+	$(MAKE) create-logs
 	env HOST_UID=$(HOST_UID) HOST_GID=$(HOST_GID) $(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) up integration-test-agents-watch
 
 validate-test-suite: build-image-agents check-deps
@@ -170,3 +173,7 @@ validate-test-suite: build-image-agents check-deps
 
 check-secrets:
 	$(CONTAINER_RUNTIME) run --rm -v $(PWD):/app trufflesecurity/trufflehog:latest filesystem /app --fail --only-verified
+
+lint-python:
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents bash -c "ruff check /app/src /app/tests && black --check /app/src /app/tests"
+

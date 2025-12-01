@@ -89,7 +89,7 @@ def sample_state():
 def test_tool_integrated_agent_init(mock_llm, mock_tools):
     """Test ToolIntegratedAgent initialization."""
     # When: Creating agent with LLM and tools
-    agent = ToolIntegratedAgent(mock_llm, mock_tools)
+    agent = ToolIntegratedAgent(mock_llm, mock_tools, name="ToolIntegratedAgent")
 
     # Then: Agent is properly initialized
     assert agent.llm == mock_llm

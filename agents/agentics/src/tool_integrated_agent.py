@@ -13,11 +13,15 @@ class ToolIntegratedAgent(BaseAgent):
     Agent with integrated tool support following LangChain patterns.
     """
 
-    def __init__(self, llm: Runnable, tools: List[BaseTool]):
-        super().__init__("ToolIntegratedAgent")  # BaseAgent requires name
+    def __init__(self, llm: Runnable, tools: List[BaseTool], name: str = "ToolIntegratedAgent"):
+        super().__init__(name)  # BaseAgent requires name
         self.llm = llm
         self.tools = tools
         self.tool_executor = ToolExecutor(tools)
+
+    def process(self, state: State) -> State:
+        """Main process method that delegates to process_with_tools."""
+        return self.process_with_tools(state)
 
     def process_with_tools(self, state: State) -> State:
         """Process state with tool integration."""

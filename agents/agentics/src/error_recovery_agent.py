@@ -232,10 +232,14 @@ class ErrorRecoveryAgent(BaseAgent):
         return state
 
     def recover(self, failed_state: State, error: Exception) -> State:
-        """Attempt to recover from agent failure using circuit breaker protection"""
+        """Attempt to recover from agent failure"""
+
         strategy = self._select_recovery_strategy(error)
 
-        return self.circuit_breaker.call(lambda: strategy(failed_state, error))
+        def execute_recovery():
+            return strategy(failed_state, error)
+
+        return self.circuit_breaker.call(execute_recovery)
 
     def _select_recovery_strategy(self, error: Exception) -> Callable[[State, Exception], State]:
         """Select appropriate recovery strategy based on error type"""

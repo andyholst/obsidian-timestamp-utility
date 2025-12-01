@@ -1,17 +1,24 @@
 import pytest
+import pytest_asyncio
 import json
 import os
 from unittest.mock import patch, MagicMock, call
 from src.collaborative_generator import CollaborativeGenerator
 from src.state import CodeGenerationState
 from src.models import CodeSpec, TestSpec, ValidationResults
-from tests.fixtures.mock_llm_responses import create_mock_llm_response
+from src.services import ServiceManager
+from src.config import get_config
 
 
-@pytest.fixture
-def mock_llm_reasoning():
-    """Mock LLM for reasoning tasks (validation)."""
-    validation_response = json.dumps({
+@pytest_asyncio.fixture
+async def service_manager():
+    """Create a service manager with mocked clients for testing."""
+    config = get_config()
+    sm = ServiceManager(config)
+
+    # Mock the clients to simulate real behavior
+    sm.ollama_reasoning = MagicMock()
+    sm.ollama_reasoning.invoke.return_value = json.dumps({
         "passed": True,
         "score": 95,
         "coverage_percentage": 90,
@@ -20,13 +27,11 @@ def mock_llm_reasoning():
         "recommendations": [],
         "test_quality": "excellent"
     })
-    return create_mock_llm_response(validation_response)
 
+    sm.ollama_code = MagicMock()
+    sm.ollama_code.invoke.return_value = "generated code content"
 
-@pytest.fixture
-def mock_llm_code():
-    """Mock LLM for code generation tasks."""
-    return create_mock_llm_response("generated code content")
+    return sm
 
 
 @pytest.fixture
@@ -46,58 +51,36 @@ def sample_code_generation_state():
     )
 
 
-@pytest.fixture
-def mock_code_generator():
-    """Mock CodeGeneratorAgent."""
-    mock_agent = MagicMock()
-    mock_state = MagicMock()
-    mock_state.generated_code = "function test() {}"
-    mock_state.method_name = "test"
-    mock_state.command_id = "test-cmd"
-    mock_agent.generate.return_value = mock_state
-    return mock_agent
-
-
-@pytest.fixture
-def mock_test_generator():
-    """Mock TestGeneratorAgent."""
-    mock_agent = MagicMock()
-    mock_state = MagicMock()
-    mock_state.generated_tests = "describe('test', () => {});"
-    mock_agent.generate.return_value = mock_state
-    mock_agent.refine_tests.return_value = mock_state
-    return mock_agent
-
-
 class TestCollaborativeGenerator:
     """Comprehensive unit tests for CollaborativeGenerator class."""
 
-    def test_initialization(self, mock_llm_reasoning, mock_llm_code):
+    def test_initialization(self, service_manager):
         """Test CollaborativeGenerator initialization."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         assert generator.name == "CollaborativeGenerator"
-        assert generator.llm_reasoning == mock_llm_reasoning
-        assert generator.llm_code == mock_llm_code
+        assert generator.llm == service_manager.ollama_reasoning
+        assert generator.llm_reasoning == service_manager.ollama_reasoning
+        assert generator.llm_code == service_manager.ollama_reasoning
         assert generator.max_refinement_iterations == 3
         assert hasattr(generator, 'code_generator')
         assert hasattr(generator, 'test_generator')
         assert hasattr(generator, 'circuit_breaker')
 
     @patch('src.collaborative_generator.get_circuit_breaker')
-    def test_circuit_breaker_initialization(self, mock_get_circuit_breaker, mock_llm_reasoning, mock_llm_code):
+    def test_circuit_breaker_initialization(self, mock_get_circuit_breaker, service_manager):
         """Test circuit breaker is properly initialized."""
         mock_circuit_breaker = MagicMock()
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
 
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         mock_get_circuit_breaker.assert_called_once_with("collaborative_generation")
         assert generator.circuit_breaker == mock_circuit_breaker
 
-    def test_invoke_method(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_invoke_method(self, service_manager, sample_code_generation_state):
         """Test invoke method delegates to generate_collaboratively."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator, 'generate_collaboratively') as mock_generate:
             mock_generate.return_value = sample_code_generation_state
@@ -109,9 +92,9 @@ class TestCollaborativeGenerator:
 
     @patch('src.collaborative_generator.log_info')
     @patch.dict(os.environ, {'PROJECT_ROOT': '/tmp/test'})
-    def test_generate_collaboratively_success_first_iteration(self, mock_log_info, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_generate_collaboratively_success_first_iteration(self, mock_log_info, service_manager, sample_code_generation_state):
         """Test successful collaborative generation on first iteration."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         # Mock the agents
         with patch.object(generator, 'code_generator') as mock_code_gen, \
@@ -143,9 +126,9 @@ class TestCollaborativeGenerator:
             assert len(result.feedback['validation_history']) == 1
 
     @patch('src.collaborative_generator.log_info')
-    def test_generate_collaboratively_with_refinement(self, mock_log_info, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_generate_collaboratively_with_refinement(self, mock_log_info, service_manager, sample_code_generation_state):
         """Test collaborative generation requiring refinement."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator, 'code_generator') as mock_code_gen, \
              patch.object(generator, 'test_generator') as mock_test_gen, \
@@ -173,9 +156,9 @@ class TestCollaborativeGenerator:
             assert len(result.feedback['validation_history']) == 2
 
     @patch('src.collaborative_generator.log_info')
-    def test_generate_collaboratively_max_iterations_reached(self, mock_log_info, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_generate_collaboratively_max_iterations_reached(self, mock_log_info, service_manager, sample_code_generation_state):
         """Test collaborative generation reaches max iterations without success."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator, 'code_generator') as mock_code_gen, \
              patch.object(generator, 'test_generator') as mock_test_gen, \
@@ -199,9 +182,9 @@ class TestCollaborativeGenerator:
             assert result.feedback['iteration_count'] == 3
             assert result.feedback['max_iterations_exceeded'] is True
 
-    def test_generate_initial_code_success(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_generate_initial_code_success(self, service_manager, sample_code_generation_state):
         """Test successful initial code generation."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator.code_generator, 'generate') as mock_generate, \
              patch.object(generator.monitor, 'info') as mock_log:
@@ -214,9 +197,9 @@ class TestCollaborativeGenerator:
             assert result == expected_state
             mock_log.assert_called_once()
 
-    def test_generate_initial_code_error_handling(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_generate_initial_code_error_handling(self, service_manager, sample_code_generation_state):
         """Test error handling in initial code generation."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator.code_generator, 'generate') as mock_generate, \
              patch.object(generator.monitor, 'error') as mock_log:
@@ -228,9 +211,9 @@ class TestCollaborativeGenerator:
 
             mock_log.assert_called_once()
 
-    def test_generate_initial_tests_success(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_generate_initial_tests_success(self, service_manager, sample_code_generation_state):
         """Test successful initial test generation."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator.test_generator, 'generate') as mock_generate, \
              patch.object(generator.monitor, 'info') as mock_log:
@@ -243,9 +226,9 @@ class TestCollaborativeGenerator:
             assert result == expected_state
             mock_log.assert_called_once()
 
-    def test_generate_initial_tests_error_handling(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_generate_initial_tests_error_handling(self, service_manager, sample_code_generation_state):
         """Test error handling in initial test generation."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator.test_generator, 'generate') as mock_generate, \
              patch.object(generator.monitor, 'error') as mock_log:
@@ -258,18 +241,18 @@ class TestCollaborativeGenerator:
             mock_log.assert_called_once()
 
     @patch.dict(os.environ, {'PROJECT_ROOT': '/tmp/test'})
-    def test_cross_validate_success(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_cross_validate_success(self, service_manager, sample_code_generation_state):
         """Test successful cross-validation."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         code_state = sample_code_generation_state.with_code("function test() { return true; }")
         test_state = code_state.with_tests("describe('test', () => { it('works', () => { expect(test()).toBe(true); }); });")
 
         with patch.object(generator.monitor, 'info') as mock_log:
-            result = generator.cross_validate(code_state, test_state)
+            combined_state = code_state.with_tests(test_state.generated_tests); result = generator.cross_validate(combined_state)
 
             # Should have called LLM reasoning
-            mock_llm_reasoning.invoke.assert_called_once()
+            service_manager.ollama_reasoning.invoke.assert_called_once()
 
             # Should return combined state with validation
             assert result.generated_code == code_state.generated_code
@@ -280,9 +263,14 @@ class TestCollaborativeGenerator:
             # Should log completion
             assert mock_log.call_count >= 1  # completion log
 
-    def test_cross_validate_error_handling(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+            # Immutability check: input states should not be modified
+            assert code_state.generated_code == "function test() { return true; }"
+            assert test_state.generated_tests == "describe('test', () => { it('works', () => { expect(test()).toBe(true); }); });"
+
+    def test_cross_validate_error_handling(self, service_manager, sample_code_generation_state):
         """Test error handling in cross-validation."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        mock_llm_reasoning = service_manager.ollama_reasoning
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         code_state = sample_code_generation_state.with_code("function test() {}")
         test_state = code_state.with_tests("describe('test', () => {});")
@@ -291,7 +279,7 @@ class TestCollaborativeGenerator:
         mock_llm_reasoning.invoke.side_effect = Exception("LLM validation failed")
 
         with patch.object(generator.monitor, 'error') as mock_log:
-            result = generator.cross_validate(code_state, test_state)
+            combined_state = code_state.with_tests(test_state.generated_tests); result = generator.cross_validate(combined_state)
 
             # Should return error validation result
             assert result.validation_results.success is False
@@ -299,9 +287,9 @@ class TestCollaborativeGenerator:
 
             mock_log.assert_called_once()
 
-    def test_parse_validation_response_success(self, mock_llm_reasoning, mock_llm_code):
+    def test_parse_validation_response_success(self, service_manager):
         """Test successful parsing of validation response."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         response = json.dumps({
             "passed": True,
@@ -317,9 +305,9 @@ class TestCollaborativeGenerator:
         assert result["issues"] == ["minor issue"]
         assert result["recommendations"] == ["fix this"]
 
-    def test_parse_validation_response_malformed_json(self, mock_llm_reasoning, mock_llm_code):
+    def test_parse_validation_response_malformed_json(self, service_manager):
         """Test parsing of malformed JSON validation response."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         response = "not json at all"
 
@@ -329,9 +317,9 @@ class TestCollaborativeGenerator:
         assert result["score"] == 30  # fallback score
         assert "Failed to parse validation response" in result["issues"][0]
 
-    def test_combine_states_with_validation(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_combine_states_with_validation(self, service_manager, sample_code_generation_state):
         """Test combining code and test states with validation results."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         code_state = sample_code_generation_state.with_code("code content")
         test_state = code_state.with_tests("test content")
@@ -345,9 +333,9 @@ class TestCollaborativeGenerator:
         assert result.issue_url == code_state.issue_url
         assert result.requirements == code_state.requirements
 
-    def test_attempt_refinements_test_refinement(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_attempt_refinements_test_refinement(self, service_manager, sample_code_generation_state):
         """Test refinement attempts focusing on test improvements."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         state = sample_code_generation_state.with_validation({"passed": False})
         validation_result = {"issues": ["Add more test cases"], "recommendations": ["Cover edge cases"]}
@@ -362,32 +350,34 @@ class TestCollaborativeGenerator:
             result = generator._attempt_refinements(state, validation_result)
 
             mock_refine.assert_called_once()
-            assert result == refined_state
+            assert result.generated_code == refined_state.generated_code
+            assert result.generated_tests == refined_state.generated_tests
+            assert result.validation_results.success == refined_state.validation_results.success
 
     @patch.dict(os.environ, {'PROJECT_ROOT': '/tmp/test'})
-    def test_attempt_refinements_code_refinement(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_attempt_refinements_code_refinement(self, service_manager, sample_code_generation_state):
         """Test refinement attempts focusing on code improvements."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         state = sample_code_generation_state.with_validation({"passed": False})
         validation_result = {"issues": ["Code has bugs"], "recommendations": ["Fix implementation"]}
 
         with patch.object(generator.test_generator, 'refine_tests') as mock_test_refine, \
-             patch.object(generator, '_cross_validate') as mock_validate:
+             patch.object(generator, 'cross_validate') as mock_validate:
 
             # Test refinement doesn't help
             mock_test_refine.return_value = state
-            mock_validate.return_value = {"passed": False}
-
+            mock_validate.return_value = state.with_validation({"passed": False})
+        
             result = generator._attempt_refinements(state, validation_result)
 
             # Should attempt test refinement but not succeed
             mock_test_refine.assert_called_once()
             assert result.feedback["refinement_attempted"] is True
 
-    def test_extract_methods_from_code(self, mock_llm_reasoning, mock_llm_code):
+    def test_extract_methods_from_code(self, service_manager):
         """Test extracting method names from generated code."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         code = """
         export class TestClass {
@@ -407,9 +397,9 @@ class TestCollaborativeGenerator:
         assert "if" not in methods
         assert "constructor" not in methods
 
-    def test_extract_tested_methods_from_tests(self, mock_llm_reasoning, mock_llm_code):
+    def test_extract_tested_methods_from_tests(self, service_manager):
         """Test extracting tested method names from test code."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         tests = """
         describe('TestClass', () => {
@@ -427,9 +417,9 @@ class TestCollaborativeGenerator:
         assert "testMethod" in methods
         assert "helper" in methods
 
-    def test_create_refinement_feedback(self, mock_llm_reasoning, mock_llm_code):
+    def test_create_refinement_feedback(self, service_manager):
         """Test creating refinement feedback from issues."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         issues = [
             "Untested methods: ['helper']",
@@ -443,9 +433,9 @@ class TestCollaborativeGenerator:
         assert "Structure tests with proper describe blocks" in feedback
         assert "Ensure tests properly reference the generated method" in feedback
 
-    def test_cross_validate_basic_checks(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_cross_validate_basic_checks(self, service_manager, sample_code_generation_state):
         """Test basic cross-validation checks without LLM."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         # Test with untested methods
         state = sample_code_generation_state.with_code("function test() {}").with_tests("describe('other', () => {});")
@@ -456,9 +446,9 @@ class TestCollaborativeGenerator:
         assert len(result["issues"]) > 0
         assert "Untested methods" in str(result["issues"])
 
-    def test_cross_validate_missing_test_structure(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_cross_validate_missing_test_structure(self, service_manager, sample_code_generation_state):
         """Test cross-validation with missing test structure."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         # Test with missing describe blocks
         state = sample_code_generation_state.with_code("function test() {}").with_tests("it('works', () => {});")
@@ -468,9 +458,9 @@ class TestCollaborativeGenerator:
         assert result["passed"] is False
         assert any("describe blocks" in issue for issue in result["issues"])
 
-    def test_cross_validate_missing_method_reference(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_cross_validate_missing_method_reference(self, service_manager, sample_code_generation_state):
         """Test cross-validation with missing method/command references."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         # State with method_name but tests don't reference it
         state = sample_code_generation_state.with_code("function myMethod() {}").with_tests("describe('test', () => { it('works', () => {}); });")
@@ -481,9 +471,9 @@ class TestCollaborativeGenerator:
         assert result["passed"] is False
         assert any("not reference" in issue for issue in result["issues"])
 
-    def test_refine_code_and_tests_success(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_refine_code_and_tests_success(self, service_manager, sample_code_generation_state):
         """Test successful refinement of code and tests."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         state = sample_code_generation_state.with_validation({"passed": False, "issues": ["Add more tests"]})
 
@@ -496,11 +486,13 @@ class TestCollaborativeGenerator:
 
             result = generator._refine_code_and_tests(state, {"issues": ["Add more tests"]})
 
-            assert result == refined_state
+            assert result.generated_code == refined_state.generated_code
+            assert result.generated_tests == refined_state.generated_tests
+            assert result.validation_results.success == refined_state.validation_results.success
 
-    def test_refine_code_and_tests_failure(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_refine_code_and_tests_failure(self, service_manager, sample_code_generation_state):
         """Test refinement failure handling."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         state = sample_code_generation_state.with_validation({"passed": False})
 
@@ -515,12 +507,12 @@ class TestCollaborativeGenerator:
             mock_log.assert_called_once()
 
     @patch('src.collaborative_generator.get_circuit_breaker')
-    def test_circuit_breaker_execution(self, mock_get_circuit_breaker, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_circuit_breaker_execution(self, mock_get_circuit_breaker, service_manager, sample_code_generation_state):
         """Test that circuit breaker wraps execution."""
         mock_circuit_breaker = MagicMock()
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
 
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator, '_generate_initial_code') as mock_code_gen, \
              patch.object(generator, '_generate_initial_tests') as mock_test_gen, \
@@ -535,9 +527,9 @@ class TestCollaborativeGenerator:
             # Circuit breaker should have been called
             assert mock_circuit_breaker.call.called
 
-    def test_structured_logging(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_structured_logging(self, service_manager, sample_code_generation_state):
         """Test structured logging functionality."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator.monitor, 'info') as mock_info, \
              patch.object(generator.monitor, 'warning') as mock_warning, \
@@ -555,9 +547,9 @@ class TestCollaborativeGenerator:
             generator._log_structured("error", "test_error", {"error": "failure"})
             mock_error.assert_called_with("test_error", {"error": "failure"})
 
-    def test_error_recovery_in_generate_collaboratively(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_error_recovery_in_generate_collaboratively(self, service_manager, sample_code_generation_state):
         """Test error recovery in main generation method."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         with patch.object(generator, 'circuit_breaker') as mock_circuit_breaker, \
              patch.object(generator.monitor, 'error') as mock_log:
@@ -569,9 +561,9 @@ class TestCollaborativeGenerator:
 
             mock_log.assert_called_once()
 
-    def test_empty_code_generation(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_empty_code_generation(self, service_manager, sample_code_generation_state):
         """Test handling of empty generated code."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         state = sample_code_generation_state.with_code("").with_tests("describe('test', () => {});")
 
@@ -580,9 +572,9 @@ class TestCollaborativeGenerator:
         assert result["passed"] is False
         assert result["code_methods"] == []
 
-    def test_empty_test_generation(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_empty_test_generation(self, service_manager, sample_code_generation_state):
         """Test handling of empty generated tests."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         state = sample_code_generation_state.with_code("function test() {}").with_tests("")
 
@@ -591,14 +583,14 @@ class TestCollaborativeGenerator:
         assert result["passed"] is False
         assert "describe(" not in result["issues"][0] or "test cases" in result["issues"][0]
 
-    def test_malformed_validation_prompt_creation(self, mock_llm_reasoning, mock_llm_code, sample_code_generation_state):
+    def test_malformed_validation_prompt_creation(self, service_manager, sample_code_generation_state):
         """Test validation prompt creation with various inputs."""
-        generator = CollaborativeGenerator(mock_llm_reasoning, mock_llm_code)
+        generator = CollaborativeGenerator(service_manager.ollama_reasoning)
 
         code_state = sample_code_generation_state.with_code("code")
         test_state = code_state.with_tests("tests")
 
-        prompt = generator._create_validation_prompt(code_state, test_state)
+        combined_state = code_state.with_tests(test_state.generated_tests); prompt = generator._create_validation_prompt(combined_state)
 
         assert "Generated Code:" in prompt
         assert "Generated Tests:" in prompt

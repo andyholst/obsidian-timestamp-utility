@@ -2,14 +2,17 @@ import logging
 import json
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from .base_agent import BaseAgent
+from .tool_integrated_agent import ToolIntegratedAgent
+from .tools import read_file_tool, list_files_tool, check_file_exists_tool
 from .state import State
 from .utils import safe_json_dumps, remove_thinking_tags, log_info
 from .circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
-class CodeReviewerAgent(BaseAgent):
+from .prompts import ModularPrompts
+
+
+class CodeReviewerAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__("CodeReviewer")
-        self.llm = llm_client
+        super().__init__(llm_client, [read_file_tool, list_files_tool, check_file_exists_tool], name="CodeReviewer")
         self.monitor.logger.setLevel(logging.INFO)
         log_info(self.name, "Initialized CodeReviewerAgent for code/test analysis and feedback")
         # Define LCEL chain for review
@@ -17,9 +20,9 @@ class CodeReviewerAgent(BaseAgent):
 
     def _create_review_chain(self):
         """Create LCEL chain for code/test review against requirements."""
-        review_prompt_template = PromptTemplate(
-            input_variables=["requirements", "acceptance_criteria", "generated_code", "generated_tests"],
-            template=(
+        def build_review_prompt(inputs):
+            tool_instructions = "7. **Available Tools:**\nYou have access to file operation tools to help with code review:\n\n- **read_file_tool**: Read file contents for detailed analysis\n- **list_files_tool**: Explore project structure\n- **check_file_exists_tool**: Verify file availability\n\nUse these tools if you need to examine additional files for comprehensive review."
+            return (
                 "/think\n"
                 "You are a code reviewer analyzing generated TypeScript code and tests for an Obsidian plugin against ticket requirements and acceptance criteria. "
                 "Provide feedback on alignment, bugs, improvements, and a tuned prompt for re-generation if needed. "
@@ -28,9 +31,11 @@ class CodeReviewerAgent(BaseAgent):
                 "Acceptance Criteria: {acceptance_criteria}\n"
                 "Generated Code: {generated_code}\n"
                 "Generated Tests: {generated_tests}\n\n"
+                f"{tool_instructions}\n\n"
                 "Return only JSON."
             )
-        )
+
+        # Use RunnableLambda to build the prompt dynamically
         return (
             RunnablePassthrough.assign(
                 requirements=lambda x: json.dumps(x['result'].get('requirements', [])),
@@ -38,7 +43,7 @@ class CodeReviewerAgent(BaseAgent):
                 generated_code=lambda x: x['generated_code'],
                 generated_tests=lambda x: x['generated_tests']
             )
-            | review_prompt_template
+            | RunnableLambda(build_review_prompt)
             | self.llm
             | RunnableLambda(self._process_review_response)
         )

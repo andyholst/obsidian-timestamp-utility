@@ -1,9 +1,13 @@
+import pytest_asyncio
 import os
 import pytest
+import tempfile
+import shutil
 pytest_plugins = ("pytest_asyncio",)
 from unittest.mock import patch, AsyncMock
 from src.circuit_breaker import circuit_breakers
 from src.services import GitHubClient
+from src.config import init_config, AgenticsConfig
 
 # Import enhanced mock fixtures
 from ..fixtures.mock_github_responses import (
@@ -35,6 +39,9 @@ from ..fixtures.mock_refactored_components import (
     create_comprehensive_mock_context
 )
 
+# Real project root
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+
 
 @pytest.fixture(autouse=True)
 def reset_circuit_breakers():
@@ -58,16 +65,22 @@ def mock_github_token():
 
 @pytest.fixture(autouse=True)
 def mock_github_health_check():
-    """Mock GitHub health check to always return True"""
-    with patch.object(GitHubClient, 'health_check', new_callable=AsyncMock, return_value=True):
+    """Mock GitHub health check to return True if client exists, False if None"""
+    async def mock_health_check(self):
+        return self._client is not None
+
+    with patch.object(GitHubClient, 'health_check', mock_health_check):
         yield
 
 
 @pytest.fixture(autouse=True)
 def mock_service_health():
     """Mock service health checks to always return healthy"""
-    from src.services import ServiceManager
-    with patch.object(ServiceManager, 'check_services_health', new_callable=AsyncMock, return_value={"github": True, "ollama_reasoning": True, "ollama_code": True, "mcp": True}):
+    from unittest.mock import MagicMock
+    from src.circuit_breaker import ServiceHealthMonitor
+    mock_monitor = MagicMock(spec=ServiceHealthMonitor)
+    mock_monitor.is_service_healthy.return_value = True
+    with patch('src.services.get_health_monitor', return_value=mock_monitor):
         yield
 
 
@@ -201,3 +214,42 @@ def mock_health_monitor_patch():
 def comprehensive_mock_context():
     """Context manager providing comprehensive mocking for all components."""
     return create_comprehensive_mock_context()
+
+
+@pytest.fixture
+def src_backup(request, tmp_path):
+    """
+    Fixture to backup and restore the src directory for each test.
+    If the test uses temp_project_dir, it operates on that; otherwise, it creates a new temp dir.
+    """
+    if 'temp_project_dir' in request.fixturenames:
+        project_dir = request.getfixturevalue('temp_project_dir')
+    else:
+        project_dir = tmp_path / "project"
+        shutil.copytree(PROJECT_ROOT, str(project_dir), dirs_exist_ok=True)
+
+    src_dir = os.path.join(project_dir, 'src')
+    backup_dir = tempfile.mkdtemp(prefix='src_backup_')
+    shutil.copytree(src_dir, backup_dir, ignore=shutil.ignore_patterns('logs'))
+    yield project_dir
+    shutil.rmtree(src_dir)
+    shutil.copytree(backup_dir, src_dir)
+    shutil.rmtree(backup_dir)
+@pytest_asyncio.fixture
+async def service_manager():
+    """Create a service manager with initialized real services for testing."""
+    from src.config import get_config
+    from src.services import ServiceManager
+    config = get_config()
+    sm = ServiceManager(config)
+    await sm.initialize_services()
+    return sm
+
+
+@pytest.fixture(scope="session", autouse=True)
+def init_unit_test_config():
+    # Initialize config with test defaults
+    init_config(AgenticsConfig(
+        github_token=os.getenv("GITHUB_TOKEN", "test_token"),
+        ollama_host="http://localhost:11434"
+    ))

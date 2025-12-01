@@ -1,8 +1,10 @@
 import os
 import logging
+import json
+import sys
 from typing import Optional
 from dataclasses import dataclass
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # Set to True to log messages originally at INFO level as DEBUG level
@@ -51,11 +53,11 @@ class AgenticsConfig(BaseModel):
     logger_level: int = LOGGER_LEVEL
     info_as_debug: bool = INFO_AS_DEBUG
 
-    @field_validator('ollama_host')
-    def validate_ollama_host(cls, v):
-        if not v.startswith(('http://', 'https://')):
+    @model_validator(mode='after')
+    def validate_ollama_host(cls, model):
+        if not model.ollama_host.startswith(('http://', 'https://')):
             raise ConfigValidationError("OLLAMA_HOST must be a valid HTTP/HTTPS URL")
-        return v
+        return model
 
     def get_reasoning_llm_config(self) -> LLMConfig:
         """Get configuration for reasoning LLM."""
@@ -105,4 +107,72 @@ def init_config(config: Optional[AgenticsConfig] = None) -> AgenticsConfig:
     if config.github_token is None:
         raise ConfigValidationError("GITHUB_TOKEN environment variable is required")
     _config = config
+
+    # Setup logging with the configured level
+    setup_logging(level=config.logger_level, enable_json=True)
+
     return _config
+
+
+class JSONFormatter(logging.Formatter):
+    """JSON formatter for structured logging."""
+
+    def format(self, record):
+        """Format log record as JSON."""
+        # If the message is already JSON (from StructuredLogger), use it directly
+        if isinstance(record.getMessage(), str) and record.getMessage().startswith('{'):
+            try:
+                # Parse and re-format to ensure consistent structure
+                log_data = json.loads(record.getMessage())
+                return json.dumps(log_data, separators=(',', ':'))
+            except json.JSONDecodeError:
+                pass
+
+        # Fallback for regular log messages
+        log_entry = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
+            "level": record.levelname,
+            "component": record.name,
+            "message": record.getMessage()
+        }
+
+        # Add exception info if present
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+
+        return json.dumps(log_entry, separators=(',', ':'))
+
+
+def setup_logging(level: int = logging.INFO, enable_json: bool = True) -> None:
+    """Setup logging configuration for the application.
+
+    Args:
+        level: Logging level (e.g., logging.INFO, logging.DEBUG)
+        enable_json: Whether to use JSON formatting for structured logs
+    """
+    # Clear existing handlers to avoid duplicates
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Set root logger level
+    root_logger.setLevel(level)
+
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(level)
+
+    if enable_json:
+        # Use JSON formatter for structured logging
+        formatter = JSONFormatter()
+    else:
+        # Use simple formatter for development
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+
+    # Ensure structured loggers work properly
+    # The StructuredLogger will inherit this configuration

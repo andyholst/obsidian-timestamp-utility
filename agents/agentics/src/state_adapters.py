@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional
 from langchain_core.runnables import Runnable
 from .state import State, CodeGenerationState
 from .models import CodeSpec, TestSpec, ValidationResults
+from .monitoring import structured_log
 
 
 class StateToCodeGenerationStateAdapter(Runnable[State, CodeGenerationState]):
@@ -83,9 +84,11 @@ class CodeGenerationStateToStateAdapter(Runnable[CodeGenerationState, State]):
         if input.validation_results:
             state['validation_results'] = {
                 'success': input.validation_results.success,
+                'score': input.validation_results.score,
                 'errors': input.validation_results.errors,
                 'warnings': input.validation_results.warnings
             }
+            state['validation_score'] = input.validation_results.score
 
         return state
 
@@ -112,7 +115,13 @@ class AgentAdapter(Runnable[CodeGenerationState, CodeGenerationState]):
 class InitialStateAdapter(Runnable[Dict[str, Any], CodeGenerationState]):
     """Adapter to convert initial dict state to CodeGenerationState."""
 
+    def __init__(self):
+        self.monitor = structured_log("initial_state_adapter")
+
     def invoke(self, input: Dict[str, Any], config=None) -> CodeGenerationState:
+        if not isinstance(input, dict):
+            self.monitor.error("InitialStateAdapter received non-dict input", {"input_type": type(input)})
+            raise TypeError(f"Expected dict, got {type(input)}")
         return CodeGenerationState(
             issue_url=input.get('url', ''),
             ticket_content='',

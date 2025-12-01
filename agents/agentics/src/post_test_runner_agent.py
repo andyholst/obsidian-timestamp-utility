@@ -1,19 +1,20 @@
 import logging
 import os
 import re
-import subprocess
-from typing import Dict
+from typing import Dict, List
 import json
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from langchain_core.runnables import Runnable
 
-from .base_agent import BaseAgent
+from .tools import check_file_exists_tool, write_file_tool, npm_install_tool, npm_run_tool
+from .tool_integrated_agent import ToolIntegratedAgent
 from .state import State
 from .utils import safe_json_dumps, log_info
 
-class PostTestRunnerAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("PostTestRunner")
+class PostTestRunnerAgent(ToolIntegratedAgent):
+    def __init__(self, llm: Runnable):
+        super().__init__(llm, [npm_install_tool, npm_run_tool, check_file_exists_tool, write_file_tool], name="PostTestRunner")
         self.project_root = os.getenv('PROJECT_ROOT')
         if not self.project_root:
             raise ValueError("PROJECT_ROOT environment variable is required")
@@ -30,61 +31,52 @@ class PostTestRunnerAgent(BaseAgent):
     def process(self, state: State) -> State:
         self.monitor.info(f"Before processing in {self.name}: {safe_json_dumps(state, indent=2)}")
         self.monitor.info("Starting post-test runner process")
+        log_info(self.name, f"Using project_root: {self.project_root}")
+        log_info(self.name, f"existing_tests_passed from state: {state.get('existing_tests_passed', 0)}")
 
         if self.install_command == 'npm install' and self.test_command == 'npm test':
             package_json_path = os.path.join(self.project_root, 'package.json')
             log_info(self.name, f"Checking for package.json at: {package_json_path}")
-            if not os.path.isfile(package_json_path):
+            exists = self.tool_executor.execute_tool('check_file_exists_tool', {'file_path': package_json_path})
+            if not exists:
                 self.monitor.error(f"package.json not found at {package_json_path}")
                 raise RuntimeError("Install command failed")
 
         log_info(self.name, f"Running install command: {self.install_command} in {self.project_root}")
-        @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), retry=retry_if_exception_type(subprocess.CalledProcessError))
+        @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), retry=retry_if_exception_type(Exception))
         def run_install():
-            install_result = subprocess.run(
-                self.install_command.split(),
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            log_info(self.name, f"Install command completed successfully")
-            log_info(self.name, f"Install stdout length: {len(install_result.stdout)}")
-            if install_result.stderr:
-                log_info(self.name, f"Install stderr length: {len(install_result.stderr)}")
-            return install_result
+            result = self.tool_executor.execute_tool('npm_install_tool', {'package_name': '', 'is_dev': False, 'save_exact': False})
+            if not result.startswith("Successfully"):
+                raise RuntimeError(f"Install failed: {result}")
+            log_info(self.name, f"Install command completed successfully: {result}")
+            return result
 
         try:
             run_install()
-        except subprocess.CalledProcessError as e:
-            self.monitor.error(f"Install command failed with return code {e.returncode}")
-            self.monitor.error(f"Install stderr: {e.stderr}")
-            raise RuntimeError(f"Install command failed: {e.stderr}")
+        except Exception as e:
+            self.monitor.error(f"Install command failed: {str(e)}")
+            raise RuntimeError(f"Install command failed: {str(e)}")
 
         log_info(self.name, f"Running test command: {self.test_command} in {self.project_root}")
         combined_output = ""
-        @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), retry=retry_if_exception_type(subprocess.CalledProcessError))
+        @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), retry=retry_if_exception_type(Exception))
         def run_test():
-            test_result = subprocess.run(
-                self.test_command.split(),
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            return self.strip_ansi_codes(test_result.stdout + test_result.stderr)
+            result = self.tool_executor.execute_tool('npm_run_tool', {'script': 'test', 'args': ''})
+            if result.startswith("npm run test failed:"):
+                raise RuntimeError(f"Test failed: {result}")
+            return self.strip_ansi_codes(result)
 
         try:
             combined_output = run_test()
             log_info(self.name, f"Test command completed successfully")
             log_info(self.name, f"Combined test output length: {len(combined_output)}")
-        except subprocess.CalledProcessError as e:
-            combined_output = self.strip_ansi_codes((e.stdout or '') + (e.stderr or ''))
+        except Exception as e:
+            combined_output = self.strip_ansi_codes(str(e))
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             log_file = os.path.join(self.project_root, f"test_failure_post_{timestamp}.log")
             with open(log_file, 'w') as f:
                 f.write(combined_output)
-            self.monitor.error(f"Test command failed with return code {e.returncode}")
+            self.monitor.error(f"Test command failed: {str(e)}")
             self.monitor.error(f"Test command failed. Full output logged to {log_file}: {combined_output[:500]}...")
             raise RuntimeError(f"Post-integration tests failed. See {log_file} for details.")
 

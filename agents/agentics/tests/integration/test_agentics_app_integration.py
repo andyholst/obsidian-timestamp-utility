@@ -61,23 +61,47 @@ class TestAgenticsAppIntegration:
         ]
 
     @pytest.mark.integration
+    async def test_initialize_success(self):
+        """Test successful initialization with real services."""
+        # Use real AgenticsConfig with environment variables
+        config = AgenticsConfig(
+            github_token=os.environ.get('GITHUB_TOKEN', 'test_token'),
+            ollama_host=os.environ.get('OLLAMA_HOST', 'http://localhost:11434'),
+            ollama_reasoning_model=os.environ.get('OLLAMA_REASONING_MODEL', 'qwen2.5:14b'),
+            ollama_code_model=os.environ.get('OLLAMA_CODE_MODEL', 'qwen2.5-coder:14b')
+        )
+
+        app = AgenticsApp(config)
+
+        await app.initialize()
+
+        assert app._initialized is True
+        assert app.service_manager is not None
+        assert app.composable_workflows is not None
+        # Assert real initialization - services should be initialized
+        assert app.service_manager.ollama_reasoning is not None
+        assert app.service_manager.ollama_code is not None
+        assert app.service_manager.github is not None
+
+    @pytest.mark.integration
     async def test_agentics_app_initialization_with_real_services(self, agentics_app):
         """Test AgenticsApp initialization with real services and configuration."""
         # Verify app is initialized
         assert agentics_app._initialized is True
         assert agentics_app.config is not None
         assert agentics_app.service_manager is not None
-        assert agentics_app.workflow_manager is not None
+        assert agentics_app.composable_workflows is not None
 
         # Verify services are initialized
         assert agentics_app.service_manager.ollama_reasoning is not None
         assert agentics_app.service_manager.ollama_code is not None
         assert agentics_app.service_manager.github is not None
 
-        # Verify workflows are initialized
-        assert agentics_app.workflow_manager.workflows is not None
-        assert "issue_processing" in agentics_app.workflow_manager.workflows
-        assert "batch_issue_processing" in agentics_app.workflow_manager.workflows
+        # Verify composable workflows are initialized
+        assert agentics_app.composable_workflows.issue_processing_workflow is not None
+        assert agentics_app.composable_workflows.code_generation_workflow is not None
+        assert agentics_app.composable_workflows.integration_testing_workflow is not None
+        assert agentics_app.composable_workflows.full_workflow is not None
 
         # Verify service health checks passed during initialization
         health_status = await agentics_app.get_service_health()
@@ -254,30 +278,25 @@ class TestAgenticsAppIntegration:
             assert isinstance(is_healthy, bool)
 
     @pytest.mark.integration
-    async def test_workflow_manager_integration(self, agentics_app, test_issue_url):
-        """Test workflow manager integration."""
+    async def test_composable_workflows_integration(self, agentics_app, test_issue_url):
+        """Test composable workflows integration."""
         # Test direct workflow execution
-        result = await agentics_app.workflow_manager.execute_workflow(
-            "issue_processing",
-            {"url": test_issue_url}
-        )
+        result = await agentics_app.composable_workflows.process_issue(test_issue_url)
 
         # Verify workflow result
-        assert "success" in result
-        assert result["success"] is True
-        assert "issue_url" in result
-        assert "result" in result
+        assert isinstance(result, dict)
+        assert "refined_ticket" in result
+        assert "generated_code" in result
+        assert "generated_tests" in result
 
-        # Test batch workflow execution
+        # Test batch workflow execution through app
         test_urls = [test_issue_url]
-        batch_result = await agentics_app.workflow_manager.execute_workflow(
-            "batch_issue_processing",
-            {"issue_urls": test_urls}
-        )
+        batch_result = await agentics_app.process_issues_batch(test_urls)
 
-        assert "success" in batch_result
-        assert batch_result["success"] is True
         assert "total_issues" in batch_result
+        assert batch_result["total_issues"] == 1
+        assert "successful" in batch_result
+        assert "failed" in batch_result
         assert "results" in batch_result
 
     @pytest.mark.integration

@@ -367,6 +367,7 @@ class TestErrorRecoveryAgent:
 
         with patch.object(error_recovery_agent, '_code_generation_fallback') as mock_fallback_func:
             mock_fallback_func.side_effect = Exception("Fallback failed")
+            strategy_config['fallback_strategy'] = mock_fallback_func
 
             result = error_recovery_agent._execute_fallback_strategy(
                 AgentType.CODE_GENERATOR, strategy_config, valid_failed_state, {}, ValueError("Test")

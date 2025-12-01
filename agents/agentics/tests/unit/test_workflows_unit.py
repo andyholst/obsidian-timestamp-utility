@@ -1,4 +1,5 @@
 import pytest
+import pytest_asyncio
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
 from typing import Dict, Any
@@ -26,38 +27,14 @@ from src.composable_workflows import ComposableWorkflows
 from tests.fixtures.mock_llm_responses import create_mock_llm_response
 
 
-@pytest.fixture
-def mock_service_manager():
-    """Create a mock service manager with all required clients."""
-    mock_sm = MagicMock(spec=ServiceManager)
-
-    # Mock Ollama clients
-    mock_ollama_reasoning = MagicMock()
-    mock_ollama_reasoning._client = MagicMock()
-    mock_ollama_reasoning._client.invoke.return_value = "mock response"
-    mock_ollama_reasoning.is_available.return_value = True
-
-    mock_ollama_code = MagicMock()
-    mock_ollama_code._client = MagicMock()
-    mock_ollama_code._client.invoke.return_value = "mock code response"
-    mock_ollama_code.is_available.return_value = True
-
-    # Mock GitHub client
-    mock_github = MagicMock()
-    mock_github._client = MagicMock()
-    mock_github.is_available.return_value = True
-
-    # Mock MCP client
-    mock_mcp = MagicMock()
-    mock_mcp.get_tools.return_value = []
-    mock_mcp.is_available.return_value = True
-
-    mock_sm.ollama_reasoning = mock_ollama_reasoning
-    mock_sm.ollama_code = mock_ollama_code
-    mock_sm.github = mock_github
-    mock_sm.mcp = mock_mcp
-
-    return mock_sm
+@pytest_asyncio.fixture
+async def service_manager():
+    """Create a service manager with real services for testing."""
+    from src.config import get_config
+    config = get_config()
+    sm = ServiceManager(config)
+    await sm.initialize_services()
+    return sm
 
 
 @pytest.fixture
@@ -76,11 +53,11 @@ def mock_batch_processor():
 def mock_composable_workflow():
     """Create a mock composable workflow."""
     mock_workflow = MagicMock(spec=ComposableWorkflows)
-    mock_workflow.process_issue.return_value = {
+    mock_workflow.process_issue = AsyncMock(return_value={
         "success": True,
         "issue_url": "https://github.com/user/repo/issues/1",
         "result": {"title": "Test Issue", "description": "Test description"}
-    }
+    })
     return mock_workflow
 
 
@@ -93,10 +70,13 @@ class TestWorkflowBaseClass:
         with pytest.raises(TypeError):
             Workflow("test")
 
+    @patch('src.services.get_circuit_breaker')
     @patch('src.workflows.get_service_manager')
-    def test_workflow_instantiation_with_name(self, mock_get_service_manager, mock_service_manager):
+    @pytest.mark.asyncio
+    async def test_workflow_instantiation_with_name(self, mock_get_service_manager, mock_get_circuit_breaker, service_manager):
         """Test that concrete workflow classes can be instantiated with a name."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
+        mock_get_circuit_breaker.return_value = MagicMock()
 
         # Test with IssueProcessingWorkflow
         workflow = IssueProcessingWorkflow()
@@ -104,10 +84,12 @@ class TestWorkflowBaseClass:
         assert hasattr(workflow, 'validate_input')
         assert hasattr(workflow, 'execute')
 
+    @patch('src.services.get_circuit_breaker')
     @patch('src.workflows.get_service_manager')
-    def test_workflow_name_assignment(self, mock_get_service_manager, mock_service_manager):
+    def test_workflow_name_assignment(self, mock_get_service_manager, mock_get_circuit_breaker, service_manager):
         """Test that workflow name is properly assigned."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
+        mock_get_circuit_breaker.return_value = MagicMock()
 
         workflow = IssueProcessingWorkflow()
         assert workflow.name == "issue_processing"
@@ -119,24 +101,24 @@ class TestIssueProcessingWorkflow:
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
-    def test_init(self, mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager, mock_service_manager):
+    @pytest.mark.asyncio
+    async def test_init(self, mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager, service_manager):
         """Test IssueProcessingWorkflow initialization."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
 
         workflow = IssueProcessingWorkflow()
 
         assert workflow.name == "issue_processing"
-        assert workflow.service_manager == mock_service_manager
+        assert workflow.service_manager == service_manager
         mock_get_service_manager.assert_called_once()
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_valid_url(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
-        """Test input validation with valid GitHub URL."""
-        mock_get_service_manager.return_value = mock_service_manager
+    def test_validate_input_valid_url(self, mock_validate_url, mock_get_service_manager, service_manager):
         mock_validate_url.return_value = True
+        mock_get_service_manager.return_value = service_manager
 
         workflow = IssueProcessingWorkflow()
         input_data = {"url": "https://github.com/user/repo/issues/1"}
@@ -147,9 +129,9 @@ class TestIssueProcessingWorkflow:
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_missing_url(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_missing_url(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test input validation with missing URL."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         workflow = IssueProcessingWorkflow()
         input_data = {}
@@ -161,9 +143,9 @@ class TestIssueProcessingWorkflow:
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_invalid_url_type(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_invalid_url_type(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test input validation with non-string URL."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         workflow = IssueProcessingWorkflow()
         input_data = {"url": 123}
@@ -176,9 +158,9 @@ class TestIssueProcessingWorkflow:
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_invalid_github_url(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_invalid_github_url(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test input validation with invalid GitHub URL."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_validate_url.return_value = False
 
         workflow = IssueProcessingWorkflow()
@@ -194,13 +176,13 @@ class TestIssueProcessingWorkflow:
     @patch('src.workflows.get_batch_processor')
     @patch('src.workflows.validate_github_url')
     @patch('src.workflows.ComposableWorkflows')
-    @patch('src.workflows.log_info')
+    @patch('src.workflows._monitor')
     @pytest.mark.asyncio
-    async def test_execute_success(self, mock_log_info, mock_composable_class, mock_validate_url,
-                                 mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager,
-                                 mock_service_manager, mock_composable_workflow):
+    async def test_execute_success(self, mock_monitor, mock_composable_class, mock_validate_url,
+                                  mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager,
+                                  service_manager, mock_composable_workflow):
         """Test successful execution of issue processing workflow."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
         mock_validate_url.return_value = True
@@ -223,20 +205,20 @@ class TestIssueProcessingWorkflow:
 
         assert result == expected_result
         mock_composable_workflow.process_issue.assert_called_once_with("https://github.com/user/repo/issues/1")
-        assert mock_log_info.call_count == 2  # start and success logs
+        assert mock_monitor.info.call_count == 2  # start and success logs
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
     @patch('src.workflows.validate_github_url')
     @patch('src.workflows.ComposableWorkflows')
-    @patch('src.workflows.log_info')
+    @patch('src.workflows._monitor')
     @pytest.mark.asyncio
-    async def test_execute_workflow_failure(self, mock_log_info, mock_composable_class, mock_validate_url,
-                                          mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager,
-                                          mock_service_manager):
+    async def test_execute_workflow_failure(self, mock_monitor, mock_composable_class, mock_validate_url,
+                                           mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager,
+                                           service_manager):
         """Test execution failure handling."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
         mock_validate_url.return_value = True
@@ -251,15 +233,17 @@ class TestIssueProcessingWorkflow:
         with pytest.raises(WorkflowError, match="Workflow execution failed: Workflow failed"):
             await workflow.execute(input_data)
 
-        assert mock_log_info.call_count == 2  # start and failure logs
+        assert mock_monitor.info.call_count == 1
+        assert mock_monitor.error.call_count == 1
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
-    def test_create_workflow_system(self, mock_get_batch_processor, mock_get_task_manager,
-                                   mock_get_service_manager, mock_service_manager):
+    @pytest.mark.asyncio
+    async def test_create_workflow_system(self, mock_get_batch_processor, mock_get_task_manager,
+                                    mock_get_service_manager, service_manager):
         """Test creation of composable workflow system."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
 
@@ -278,22 +262,23 @@ class TestBatchIssueProcessingWorkflow:
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
-    def test_init(self, mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager, mock_service_manager):
+    @pytest.mark.asyncio
+    async def test_init(self, mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager, service_manager):
         """Test BatchIssueProcessingWorkflow initialization."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
 
         workflow = BatchIssueProcessingWorkflow()
 
         assert workflow.name == "batch_issue_processing"
-        assert workflow.service_manager == mock_service_manager
+        assert workflow.service_manager == service_manager
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_valid_urls(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_valid_urls(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test batch input validation with valid URLs."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_validate_url.return_value = True
 
         workflow = BatchIssueProcessingWorkflow()
@@ -309,9 +294,9 @@ class TestBatchIssueProcessingWorkflow:
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_missing_issue_urls(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_missing_issue_urls(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test batch input validation with missing issue_urls."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         workflow = BatchIssueProcessingWorkflow()
         input_data = {}
@@ -321,9 +306,9 @@ class TestBatchIssueProcessingWorkflow:
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_empty_issue_urls(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_empty_issue_urls(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test batch input validation with empty issue_urls list."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         workflow = BatchIssueProcessingWorkflow()
         input_data = {"issue_urls": []}
@@ -333,9 +318,9 @@ class TestBatchIssueProcessingWorkflow:
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validate_input_invalid_url_in_list(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validate_input_invalid_url_in_list(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test batch input validation with invalid URL in list."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_validate_url.side_effect = [True, False]
 
         workflow = BatchIssueProcessingWorkflow()
@@ -353,12 +338,12 @@ class TestBatchIssueProcessingWorkflow:
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
     @patch('src.workflows.validate_github_url')
-    @patch('src.workflows.log_info')
+    @patch('src.workflows._monitor')
     @pytest.mark.asyncio
-    async def test_execute_success(self, mock_log_info, mock_validate_url, mock_get_batch_processor,
-                                 mock_get_task_manager, mock_get_service_manager, mock_service_manager):
+    async def test_execute_success(self, mock_monitor, mock_validate_url, mock_get_batch_processor,
+                                  mock_get_task_manager, mock_get_service_manager, service_manager):
         """Test successful batch execution."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_batch_processor = MagicMock()
         mock_get_batch_processor.return_value = mock_batch_processor
@@ -393,7 +378,7 @@ class TestBatchIssueProcessingWorkflow:
 
         assert result == expected_result
         mock_batch_processor.process_batch.assert_called_once()
-        assert mock_log_info.call_count == 2  # start and completion logs
+        assert mock_monitor.info.call_count == 2  # start and completion logs
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
@@ -402,9 +387,9 @@ class TestBatchIssueProcessingWorkflow:
     @patch('src.workflows.log_info')
     @pytest.mark.asyncio
     async def test_execute_with_failures(self, mock_log_info, mock_validate_url, mock_get_batch_processor,
-                                       mock_get_task_manager, mock_get_service_manager, mock_service_manager):
+                                        mock_get_task_manager, mock_get_service_manager, service_manager):
         """Test batch execution with some failures."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_batch_processor = MagicMock()
         mock_get_batch_processor.return_value = mock_batch_processor
@@ -443,12 +428,12 @@ class TestBatchIssueProcessingWorkflow:
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
     @patch('src.workflows.validate_github_url')
-    @patch('src.workflows.log_info')
+    @patch('src.workflows._monitor')
     @pytest.mark.asyncio
-    async def test_execute_batch_processing_failure(self, mock_log_info, mock_validate_url, mock_get_batch_processor,
-                                                  mock_get_task_manager, mock_get_service_manager, mock_service_manager):
+    async def test_execute_batch_processing_failure(self, mock_monitor, mock_validate_url, mock_get_batch_processor,
+                                                   mock_get_task_manager, mock_get_service_manager, service_manager):
         """Test batch execution failure handling."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_batch_processor = MagicMock()
         mock_get_batch_processor.return_value = mock_batch_processor
@@ -468,16 +453,17 @@ class TestBatchIssueProcessingWorkflow:
         with pytest.raises(BatchProcessingError, match="Batch processing failed: Batch processing failed"):
             await workflow.execute(input_data)
 
-        assert mock_log_info.call_count == 2  # start and failure logs
+        assert mock_monitor.info.call_count == 1
+        assert mock_monitor.error.call_count == 1
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.get_task_manager')
     @patch('src.workflows.get_batch_processor')
     @pytest.mark.asyncio
     async def test_process_batch_concurrent_execution(self, mock_get_batch_processor, mock_get_task_manager,
-                                                    mock_get_service_manager, mock_service_manager):
+                                                     mock_get_service_manager, service_manager):
         """Test that batch processing handles concurrent execution."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_batch_processor = MagicMock()
         mock_get_batch_processor.return_value = mock_batch_processor
@@ -506,9 +492,10 @@ class TestWorkflowManager:
     """Test WorkflowManager functionality."""
 
     @patch('src.workflows.get_service_manager')
-    def test_init_registers_workflows(self, mock_get_service_manager, mock_service_manager):
+    @pytest.mark.asyncio
+    async def test_init_registers_workflows(self, mock_get_service_manager, service_manager):
         """Test that WorkflowManager initializes with registered workflows."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         manager = WorkflowManager()
 
@@ -518,9 +505,9 @@ class TestWorkflowManager:
         assert isinstance(manager.workflows["batch_issue_processing"], BatchIssueProcessingWorkflow)
 
     @patch('src.workflows.get_service_manager')
-    def test_get_workflow_existing(self, mock_get_service_manager, mock_service_manager):
+    def test_get_workflow_existing(self, mock_get_service_manager, service_manager):
         """Test getting an existing workflow."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         manager = WorkflowManager()
 
@@ -529,9 +516,9 @@ class TestWorkflowManager:
         assert workflow.name == "issue_processing"
 
     @patch('src.workflows.get_service_manager')
-    def test_get_workflow_nonexistent(self, mock_get_service_manager, mock_service_manager):
+    def test_get_workflow_nonexistent(self, mock_get_service_manager, service_manager):
         """Test getting a nonexistent workflow raises error."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         manager = WorkflowManager()
 
@@ -539,9 +526,9 @@ class TestWorkflowManager:
             manager.get_workflow("nonexistent")
 
     @patch('src.workflows.get_service_manager')
-    def test_list_workflows(self, mock_get_service_manager, mock_service_manager):
+    def test_list_workflows(self, mock_get_service_manager, service_manager):
         """Test listing available workflows."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         manager = WorkflowManager()
 
@@ -557,10 +544,10 @@ class TestWorkflowManager:
     @patch('src.workflows.ComposableWorkflows')
     @pytest.mark.asyncio
     async def test_execute_workflow_success(self, mock_composable_class, mock_validate_url,
-                                          mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager,
-                                          mock_service_manager, mock_composable_workflow):
+                                           mock_get_batch_processor, mock_get_task_manager, mock_get_service_manager,
+                                           service_manager, mock_composable_workflow):
         """Test successful workflow execution through manager."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
         mock_validate_url.return_value = True
@@ -585,9 +572,9 @@ class TestWorkflowManager:
 
     @patch('src.workflows.get_service_manager')
     @pytest.mark.asyncio
-    async def test_execute_workflow_nonexistent(self, mock_get_service_manager, mock_service_manager):
+    async def test_execute_workflow_nonexistent(self, mock_get_service_manager, service_manager):
         """Test executing nonexistent workflow raises error."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
 
         manager = WorkflowManager()
         input_data = {"url": "https://github.com/user/repo/issues/1"}
@@ -613,17 +600,19 @@ class TestGlobalWorkflowFunctions:
         assert result == mock_manager
 
     @patch('src.workflows.WorkflowManager')
-    @patch('src.workflows.log_info')
-    def test_init_workflows(self, mock_log_info, mock_workflow_manager_class):
+    @patch('src.workflows.structured_log')
+    def test_init_workflows(self, mock_structured_log, mock_workflow_manager_class):
         """Test initializing global workflow manager."""
         mock_manager = MagicMock()
+        mock_monitor = MagicMock()
+        mock_structured_log.return_value = mock_monitor
         mock_workflow_manager_class.return_value = mock_manager
 
         result = init_workflows()
 
         assert result == mock_manager
         mock_workflow_manager_class.assert_called_once()
-        mock_log_info.assert_called_once_with('src.workflows', "Workflow manager initialized")
+        mock_monitor.info.assert_called_once_with("workflow_manager_initialized", {"workflows": ["issue_processing", "batch_issue_processing"]})
 
 
 class TestInputValidationAndErrorPropagation:
@@ -631,9 +620,9 @@ class TestInputValidationAndErrorPropagation:
 
     @patch('src.workflows.get_service_manager')
     @patch('src.workflows.validate_github_url')
-    def test_validation_error_propagation(self, mock_validate_url, mock_get_service_manager, mock_service_manager):
+    def test_validation_error_propagation(self, mock_validate_url, mock_get_service_manager, service_manager):
         """Test that validation errors are properly propagated."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_validate_url.return_value = False
 
         workflow = IssueProcessingWorkflow()
@@ -648,9 +637,9 @@ class TestInputValidationAndErrorPropagation:
     @patch('src.workflows.validate_github_url')
     @pytest.mark.asyncio
     async def test_execution_error_propagation(self, mock_validate_url, mock_get_batch_processor,
-                                             mock_get_task_manager, mock_get_service_manager, mock_service_manager):
+                                              mock_get_task_manager, mock_get_service_manager, service_manager):
         """Test that execution errors are properly propagated."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
         mock_validate_url.return_value = True
@@ -680,10 +669,10 @@ class TestAsyncExecutionPatterns:
     @patch('src.workflows.ComposableWorkflows')
     @pytest.mark.asyncio
     async def test_async_execution_is_thread_safe(self, mock_composable_class, mock_validate_url,
-                                                mock_get_batch_processor, mock_get_task_manager,
-                                                mock_get_service_manager, mock_service_manager):
+                                                 mock_get_batch_processor, mock_get_task_manager,
+                                                 mock_get_service_manager, service_manager):
         """Test that async execution handles concurrent calls properly."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_get_batch_processor.return_value = MagicMock()
         mock_validate_url.return_value = True
@@ -708,9 +697,9 @@ class TestAsyncExecutionPatterns:
     @patch('src.workflows.get_batch_processor')
     @pytest.mark.asyncio
     async def test_batch_processing_state_isolation(self, mock_get_batch_processor, mock_get_task_manager,
-                                                  mock_get_service_manager, mock_service_manager):
+                                                   mock_get_service_manager, service_manager):
         """Test that batch processing maintains state isolation between items."""
-        mock_get_service_manager.return_value = mock_service_manager
+        mock_get_service_manager.return_value = service_manager
         mock_get_task_manager.return_value = MagicMock()
         mock_batch_processor = MagicMock()
         mock_get_batch_processor.return_value = mock_batch_processor

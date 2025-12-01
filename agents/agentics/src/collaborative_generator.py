@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Any, Optional
+from datetime import datetime
 from langchain_core.runnables import Runnable, RunnableConfig
 from .base_agent import BaseAgent
 from .state import CodeGenerationState
@@ -16,120 +17,98 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
     code and test generators with cross-validation and iterative refinement.
     """
 
-    def __init__(self, llm_reasoning: Runnable, llm_code: Runnable):
+    def __init__(self, llm):
         self.name = "CollaborativeGenerator"
-        self.llm_reasoning = llm_reasoning
-        self.llm_code = llm_code
-        self.code_generator = CodeGeneratorAgent(llm_code)
-        self.test_generator = TestGeneratorAgent(llm_code)
+        self.llm = llm
+        self.llm_reasoning = llm  # Use single LLM for both
+        self.llm_code = llm
+        self.code_generator = CodeGeneratorAgent(self.llm_code)
+        self.test_generator = TestGeneratorAgent(self.llm_code)
         self.circuit_breaker = get_circuit_breaker("collaborative_generation")
         self.max_refinement_iterations = 3
         self.monitor = structured_log(self.name)
         self.monitor.setLevel(logging.INFO)
-        log_info(self.name, "Initialized CollaborativeGenerator with code and test agents")
+        log_info(self.name, "Initialized CollaborativeGenerator with service manager")
 
     def _log_structured(self, level: str, event: str, data: Dict[str, Any]):
         """Structured logging for workflow component."""
         log_method = getattr(self.monitor, level.lower(), self.monitor.info)
         log_method(event, data)
 
-    def invoke(self, input: CodeGenerationState, config: Optional[RunnableConfig] = None) -> CodeGenerationState:
+    def invoke(self, input, config: Optional[RunnableConfig] = None) -> CodeGenerationState:
+        if isinstance(input, dict):
+            input = CodeGenerationState(**input)
         return self.generate_collaboratively(input)
 
     def generate_collaboratively(self, state: CodeGenerationState) -> CodeGenerationState:
-        """
-        Generate code and tests collaboratively with iterative refinement loops.
+        """Generate code and tests collaboratively with iterative refinement"""
 
-        Implements a loop that continues refining code and tests until cross-validation
-        passes or a maximum number of iterations is reached. Tracks iteration count
-        and validation history in the state.
+        def _generate_impl():
+            current_state = state
+            validation_history = []
 
-        Args:
-            state: Initial code generation state
+            for iteration in range(self.max_refinement_iterations):
+                log_info(self.name, f"Iterative refinement iteration {iteration + 1}/{self.max_refinement_iterations}")
 
-        Returns:
-            Final state with validated code and tests
-        """
-        log_info(self.name, "Starting collaborative code/test generation with iterative refinement")
+                # Phase 1: Generate initial code
+                code_state = self.code_generator.generate(current_state)
 
-        try:
+                # Phase 2: Generate tests based on code
+                test_state = self.test_generator.generate(code_state)
 
-            def execute_collaborative_generation():
-                current_state = state
-                iteration = 0
-                validation_history = []
+                # Combine states
+                combined_state = self._combine_states(code_state, test_state)
 
-                while iteration < self.max_refinement_iterations:
-                    log_info(self.name, f"Refinement iteration {iteration + 1}/{self.max_refinement_iterations}")
+                # Phase 3: Cross-validation
+                validated_state = self.cross_validate(combined_state)
 
-                    # Phase 1: Generate/refine code
-                    code_state = self._generate_initial_code(current_state)
-
-                    # Phase 2: Generate/refine tests based on code
-                    test_state = self._generate_initial_tests(code_state)
-
-                    # Phase 3: Cross-validation using LLM-based validation
-                    validated_state = self.cross_validate(code_state, test_state)
-
-                    # Record validation result in history
-                    validation_result = validated_state.validation_results
-                    history_entry = {
+                # Accumulate validation history
+                validation_result = validated_state.validation_results
+                if validation_result:
+                    validation_history.append({
                         'iteration': iteration + 1,
-                        'passed': validation_result.success if validation_result else False,
-                        'errors': validation_result.errors if validation_result else [],
-                        'warnings': validation_result.warnings if validation_result else []
-                    }
-                    validation_history.append(history_entry)
-
-                    if validation_result and validation_result.success:
-                        # Validation passed
-                        self._log_structured("info", "cross_validation_passed", {
-                            "iteration": iteration + 1
-                        })
-
-                        # Add tracking to state feedback
-                        final_feedback = validated_state.feedback or {}
-                        final_feedback['iteration_count'] = iteration + 1
-                        final_feedback['validation_history'] = validation_history
-                        return validated_state.with_feedback(final_feedback)
-
-                    # Validation failed, perform refinement
-                    self._log_structured("warning", "cross_validation_failed", {
-                        "iteration": iteration + 1,
-                        "errors": validation_result.errors if validation_result else []
+                        'passed': validation_result.success,
+                        'score': validation_result.score,
+                        'issues': validation_result.errors,
+                        'timestamp': datetime.now().isoformat()
                     })
 
-                    # Refine code and tests based on validation feedback
-                    validation_dict = {
-                        'passed': False,
-                        'issues': validation_result.errors if validation_result else ['Unknown validation failure']
-                    }
-                    refined_state = self._refine_code_and_tests(validated_state, validation_dict)
+                validated_state = validated_state.with_validation_history(validation_history)
 
-                    # Prepare for next iteration
-                    current_state = refined_state
-                    iteration += 1
+                # Check if validation passed
+                if validation_result and validation_result.success:
+                    self._log_structured("info", "validation_passed", {
+                        "iteration": iteration + 1,
+                        "score": validation_result.score
+                    })
+                    validated_state = validated_state.with_feedback({
+                        'iteration_count': iteration + 1,
+                        'validation_history': validation_history
+                    })
+                    return validated_state
 
-                # Maximum iterations reached without success
-                self._log_structured("warning", "max_refinement_iterations_reached", {
-                    "final_iteration": iteration
+                # If not passed, refine for next iteration
+                current_state = self._refine_code_and_tests(validated_state, {
+                    'passed': validation_result.success if validation_result else False,
+                    'score': validation_result.score if validation_result else 0,
+                    'issues': validation_result.errors if validation_result else []
                 })
 
-                final_feedback = validated_state.feedback or {}
-                final_feedback['iteration_count'] = iteration
-                final_feedback['validation_history'] = validation_history
-                final_feedback['max_iterations_exceeded'] = True
-                return validated_state.with_feedback(final_feedback)
+            # If max iterations reached, return last state
+            self._log_structured("warning", "max_iterations_reached", {
+                "final_iteration": self.max_refinement_iterations
+            })
+            current_state = current_state.with_feedback({
+                'iteration_count': self.max_refinement_iterations,
+                'validation_history': validation_history,
+                'max_iterations_exceeded': True
+            })
+            return current_state
 
-            return self.circuit_breaker.call(execute_collaborative_generation)
-
+        try:
+            return self.circuit_breaker.call(_generate_impl)
         except Exception as e:
-            error_context = {
-                "error_type": type(e).__name__,
-                "message": str(e),
-                "issue_url": state.issue_url
-            }
-            self._log_structured("error", "collaborative_generation_failed", error_context)
+            self.monitor.error("generate_collaboratively_failed", {"error": str(e)})
             raise
 
     def _generate_initial_code(self, state: CodeGenerationState) -> CodeGenerationState:
@@ -277,10 +256,11 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
             # Try to refine tests first (usually easier)
             if any("test" in issue.lower() for issue in issues):
                 refined_state = self.test_generator.refine_tests(state, refinement_feedback)
-                # Re-validate
-                re_validation = self._cross_validate(refined_state)
-                if re_validation['passed']:
-                    return refined_state.with_validation(re_validation)
+                # Re-validate using LLM-based cross_validate
+                re_validated_state = self.cross_validate(refined_state)
+                re_validation = re_validated_state.validation_results
+                if re_validation and re_validation.success:
+                    return re_validated_state
                 # If still failing, continue to code refinement
 
             # If test refinement didn't work or code issues exist, we would refine code
@@ -324,22 +304,27 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
         return " ".join(feedback_parts)
         return " ".join(feedback_parts)
 
-    def cross_validate(self, code_state: CodeGenerationState, test_state: CodeGenerationState) -> CodeGenerationState:
+    def cross_validate(self, state: CodeGenerationState) -> CodeGenerationState:
         """
         Cross-validate code and tests to ensure they work together properly.
 
         Args:
-            code_state: State containing generated code
-            test_state: State containing generated tests
+            state: State containing generated code and tests
 
         Returns:
-            Validated state with combined code/tests and validation results
+            Validated state with validation results and accumulated history
         """
-        log_info(self.name, "Performing cross-validation between code and tests")
+        log_info(self.name, f"Performing cross-validation on code and tests - received {len([state]) if isinstance(state, CodeGenerationState) else 'multiple'} state(s)")
+        # Debug log to validate arguments
+        self._log_structured("info", "cross_validate_args", {
+            "args_count": 1 if isinstance(state, CodeGenerationState) else "unexpected",
+            "has_generated_code": hasattr(state, 'generated_code'),
+            "has_generated_tests": hasattr(state, 'generated_tests')
+        })
 
         try:
             # Create validation prompt
-            validation_prompt = self._create_validation_prompt(code_state, test_state)
+            validation_prompt = self._create_validation_prompt(state)
 
             # Use LLM reasoning for analysis
             llm_response = self.llm_reasoning.invoke(validation_prompt)
@@ -347,13 +332,25 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
             # Parse validation results
             validation_result = self._parse_validation_response(llm_response)
 
-            # Combine states and add validation
-            combined_state = self._combine_states_with_validation(code_state, test_state, validation_result)
+            # Add validation to state
+            validated_state = state.with_validation(validation_result)
+
+            # Accumulate validation history
+            current_history = state.validation_history or []
+            new_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'passed': validation_result.get('passed', False),
+                'score': validation_result.get('score', 0),
+                'issues': validation_result.get('issues', []),
+                'recommendations': validation_result.get('recommendations', [])
+            }
+            updated_history = current_history + [new_entry]
+            validated_state = validated_state.with_validation_history(updated_history)
 
             # Check if refinements are needed
             if not validation_result.get('passed', False):
                 log_info(self.name, "Validation failed, attempting refinements")
-                combined_state = self._attempt_refinements(combined_state, validation_result)
+                validated_state = self._attempt_refinements(validated_state, validation_result)
 
             self._log_structured("info", "cross_validation_completed", {
                 "passed": validation_result.get('passed', False),
@@ -361,19 +358,29 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
                 "issues_count": len(validation_result.get('issues', []))
             })
 
-            return combined_state
+            return validated_state
 
         except Exception as e:
             self._log_structured("error", "cross_validation_failed", {"error": str(e)})
-            # Return combined state with error validation
+            # Return state with error validation
             error_result = {
                 "passed": False,
                 "score": 0,
                 "issues": [f"Cross-validation error: {str(e)}"]
             }
-            return self._combine_states_with_validation(code_state, test_state, error_result)
+            error_state = state.with_validation(error_result)
+            current_history = state.validation_history or []
+            error_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'passed': False,
+                'score': 0,
+                'issues': [f"Cross-validation error: {str(e)}"],
+                'recommendations': []
+            }
+            updated_history = current_history + [error_entry]
+            return error_state.with_validation_history(updated_history)
 
-    def _create_validation_prompt(self, code_state: CodeGenerationState, test_state: CodeGenerationState) -> str:
+    def _create_validation_prompt(self, state: CodeGenerationState) -> str:
         """Create prompt for LLM to validate code-test alignment."""
         return f"""
 You are an expert software engineer validating the alignment between generated code and its corresponding tests.
@@ -385,15 +392,15 @@ Analyze the following generated TypeScript code and Jest tests to determine:
 4. Potential issues - any gaps or misalignments?
 
 Generated Code:
-{code_state.generated_code}
+{state.generated_code}
 
 Generated Tests:
-{test_state.generated_tests}
+{state.generated_tests}
 
 Additional Context:
-- Method Name: {code_state.method_name or 'N/A'}
-- Command ID: {code_state.command_id or 'N/A'}
-- Requirements: {', '.join(code_state.requirements)}
+- Method Name: {state.method_name or 'N/A'}
+- Command ID: {state.command_id or 'N/A'}
+- Requirements: {', '.join(state.requirements)}
 
 Please respond with a JSON object containing:
 {{
@@ -442,6 +449,34 @@ Be thorough but practical. Focus on functional correctness and test adequacy rat
                 "test_quality": "unknown"
             }
 
+    def _combine_states(self, code_state: CodeGenerationState, test_state: CodeGenerationState) -> CodeGenerationState:
+        """Combine code and test states."""
+        # Create new state with code from code_state, tests from test_state
+        combined_state = CodeGenerationState(
+            issue_url=code_state.issue_url,
+            ticket_content=code_state.ticket_content,
+            title=code_state.title,
+            description=code_state.description,
+            requirements=code_state.requirements,
+            acceptance_criteria=code_state.acceptance_criteria,
+            implementation_steps=code_state.implementation_steps,
+            npm_packages=code_state.npm_packages,
+            manual_implementation_notes=code_state.manual_implementation_notes,
+            code_spec=code_state.code_spec,
+            test_spec=test_state.test_spec,  # Use test spec from test_state
+            generated_code=code_state.generated_code,
+            generated_tests=test_state.generated_tests,
+            validation_results=None,
+            result=code_state.result,
+            relevant_code_files=code_state.relevant_code_files,
+            relevant_test_files=test_state.relevant_test_files,  # Use test files from test_state
+            feedback=code_state.feedback,
+            method_name=code_state.method_name,
+            command_id=code_state.command_id,
+            validation_history=code_state.validation_history  # Preserve history
+        )
+        return combined_state
+
     def _combine_states_with_validation(self, code_state: CodeGenerationState, test_state: CodeGenerationState, validation_result: Dict[str, Any]) -> CodeGenerationState:
         """Combine code and test states with validation results."""
         # Create new state with code from code_state, tests from test_state
@@ -465,7 +500,8 @@ Be thorough but practical. Focus on functional correctness and test adequacy rat
             relevant_test_files=test_state.relevant_test_files,  # Use test files from test_state
             feedback=code_state.feedback,
             method_name=code_state.method_name,
-            command_id=code_state.command_id
+            command_id=code_state.command_id,
+            validation_history=code_state.validation_history  # Preserve history
         )
 
         # Add validation results
@@ -482,10 +518,11 @@ Be thorough but practical. Focus on functional correctness and test adequacy rat
             # Try refining tests first (usually easier)
             log_info(self.name, "Attempting test refinement")
             refined_state = self.test_generator.refine_tests(state, refinement_feedback)
-            # Re-validate
-            re_validation = self._cross_validate(refined_state)
-            if re_validation['passed']:
-                return refined_state.with_validation(re_validation)
+            # Re-validate using LLM-based cross_validate
+            re_validated_state = self.cross_validate(refined_state)
+            re_validation = re_validated_state.validation_results
+            if re_validation and re_validation.success:
+                return re_validated_state
 
             # If test refinement didn't work or code issues exist, try code refinement
             if any(keyword in refinement_feedback.lower() for keyword in ['code', 'method', 'function', 'implementation']):

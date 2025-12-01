@@ -10,6 +10,7 @@ from .state import CodeGenerationState
 from .utils import remove_thinking_tags, log_info
 from .models import TestGenerationOutput
 from .prompts import ModularPrompts
+from .circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
 
 
 class TestGeneratorAgent(BaseAgent):
@@ -81,11 +82,11 @@ class TestGeneratorAgent(BaseAgent):
         )
         return (
             RunnablePassthrough.assign(
-                task_details_str=self._format_task_details,
-                existing_test_content=self._get_existing_test_content,
-                test_file=lambda x: self.test_file,
-                feedback=lambda x: x.feedback.get('feedback', '') if x.feedback else ''
-            )
+                             task_details_str=self._format_task_details,
+                             existing_test_content=self._get_existing_test_content,
+                             test_file=lambda x: self.test_file,
+                             feedback=lambda x: ((x.get('feedback') or {}).get('feedback', '') if isinstance(x, dict) else ((x.feedback or {}).get('feedback', '') if x.feedback else ''))
+                         )
             | refinement_prompt_template
             | self.llm
             | RunnableLambda(self._post_process_tests)
@@ -192,7 +193,14 @@ class TestGeneratorAgent(BaseAgent):
             # Generate tests using LCEL chain
             self._log_structured("info", "test_generation_start", {"chain": "test_generation"})
 
-            generated_tests = self.test_generation_chain.invoke(state)
+            try:
+                generated_tests = get_circuit_breaker("test_generation").call(lambda: self.test_generation_chain.invoke(state))
+            except CircuitBreakerOpenException as e:
+                self._log_structured("error", "circuit_breaker_open", {"operation": "test_generation", "error": str(e)})
+                raise
+            except Exception as e:
+                self._log_structured("error", "test_generation_failed", {"error": str(e)})
+                raise
 
             self._log_structured("info", "test_generation_complete", {
                 "test_length": len(generated_tests),
@@ -228,6 +236,14 @@ class TestGeneratorAgent(BaseAgent):
         try:
             refinement_inputs = {**state.__dict__, 'validation_feedback': validation_feedback}
 
+            try:
+                refined_tests = get_circuit_breaker("test_refinement").call(lambda: self.test_refinement_chain.invoke(refinement_inputs))
+            except CircuitBreakerOpenException as e:
+                self._log_structured("error", "circuit_breaker_open", {"operation": "test_refinement", "error": str(e)})
+                raise
+            except Exception as e:
+                self._log_structured("error", "test_refinement_failed", {"error": str(e)})
+                raise
             refined_tests = self.test_refinement_chain.invoke(refinement_inputs)
 
             self._log_structured("info", "test_refinement_complete", {
