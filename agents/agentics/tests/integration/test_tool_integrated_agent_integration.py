@@ -3,9 +3,8 @@ import os
 import tempfile
 import shutil
 from typing import Dict, Any, List
-from langchain_core.runnables import RunnableLambda
-from langchain_core.messages import AIMessage
 from langchain.tools import BaseTool
+from langchain_ollama import OllamaLLM
 from src.tool_integrated_agent import ToolIntegratedAgent
 from src.tools import read_file_tool, write_file_tool, list_files_tool
 from src.circuit_breaker import CircuitBreakerOpenException
@@ -29,14 +28,6 @@ class TestToolIntegratedAgentIntegration:
             shutil.rmtree(self.temp_dir)
             del os.environ["PROJECT_ROOT"]
 
-    def create_dummy_llm(self, tool_calls: List[Dict]):
-        """Dummy LLM that triggers specific tool calls."""
-        def llm_func(input):
-            return AIMessage(
-                content="Trigger tools",
-                tool_calls=tool_calls
-            )
-        return RunnableLambda(llm_func)
 
     def test_scenario1_single_tool_call(self):
         """Scenario 1: Instantiate with real LLM/tools; dummy state triggers read_file_tool."""
@@ -156,3 +147,6 @@ class TestToolIntegratedAgentIntegration:
             assert "tools context confirmed" in result["tool_integrated_response"]
         finally:
             self.teardown_temp_project()
+
+@pytest.mark.integration
+def test_single_tool
