@@ -15,6 +15,7 @@ from agents.agentics.src.config import AgenticsConfig
 
 
 @pytest.mark.integration
+@pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_full_e2e_ticket20(real_ollama_config: AgenticsConfig, temp_project_dir: str):
     """

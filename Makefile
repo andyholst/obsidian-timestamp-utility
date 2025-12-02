@@ -15,7 +15,7 @@ HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 export HOST_UID HOST_GID
 
-.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs create-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite check-secrets lint-python
+.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs create-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite check-secrets lint-python test-agents-e2e
 
 all: build-app test-app release
 
@@ -110,8 +110,10 @@ test-agents-integration: build-image-agents check-deps
 		-e OLLAMA_TIMEOUT="$(OLLAMA_TIMEOUT)" \
 		integration-test-agents
 
-test-agents-integration-fast: INTEGRATION_TEST_FILTER=--maxfail=1 -k "not slow"
+test-agents-integration-fast: INTEGRATION_TEST_FILTER = --maxfail=1 -k "not slow"
 test-agents-integration-fast: test-agents-integration
+test-agents-e2e: INTEGRATION_TEST_FILTER = "-m e2e"
+test-agents-e2e: test-agents-integration
 
 test-agents: lint-python test-agents-unit-mock test-agents-integration validate-test-suite
 
