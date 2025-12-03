@@ -15,7 +15,7 @@ Focus on key refactored components from [`agents/agentics/ARCHITECTURE_REFACTOR.
 - Assertions on structures/transforms/files (no LLM output content checks).
 - Follow patterns: [`conftest.py`](agents/agentics/tests/integration/conftest.py) fixtures (e.g., `integration_config`), `@pytest.mark.integration`, parametrize, async if needed, temp dirs/cleanup.
 
-**Total: 12 key scenarios** grouped by component. Propose implementation across 4-5 test files (e.g., `test_agent_composer_integration.py` etc.).
+**Total: 14 key scenarios** grouped by component. Propose implementation across 6-8 test files (e.g., `test_agent_composer_integration.py`, `test_llm_code_gen_validation_e2e.py`, `test_collaborative_hitl_e2e.py` etc.).
 
 ## Detailed Integration Test Scenarios
 
@@ -116,6 +116,18 @@ Full Phase 1 integration.
     - **Assertions**: `config.ollama_code_model == expected`.
     - **Pytest**: parametrize models.
 
+13. **LLM Code Gen/Validation E2E**
+    - **Description**: CodeGeneratorAgent.process with dummy_llm, LLMResponseValidator.validate_response, LLMCodeValidationPipeline.validate_typescript_code, refine logic mock.
+    - **Involved**: [`code_generator_agent.py`](agents/agentics/src/code_generator_agent.py), [`llm_validator.py`](agents/agentics/src/llm_validator.py), [`code_validator.py`](agents/agentics/src/code_validator.py).
+    - **Assertions**: `generated_code` contains `'testMethod'`, `is_valid` True, `overall_score > 50`.
+    - **Pytest**: [`test_llm_code_gen_validation_e2e.py`](agents/agentics/tests/integration/test_llm_code_gen_validation_e2e.py), @pytest.mark.integration.
+
+14. **Collaborative/HITL/Checkpointers/State Adapters**
+    - **Description**: CollaborativeGenerator.generate_collaboratively, HITLNode monkeypatch, adapter roundtrip, StateGraph MemorySaver basic persistence.
+    - **Involved**: [`collaborative_generator.py`](agents/agentics/src/collaborative_generator.py), [`hitl_node.py`](agents/agentics/src/hitl_node.py), [`state_adapters.py`](agents/agentics/src/state_adapters.py), langgraph.
+    - **Assertions**: `len(validation_history) > 0`, `human_feedback` present, roundtrip fidelity, app.invoke succeeds.
+    - **Pytest**: [`test_collaborative_hitl_e2e.py`](agents/agentics/tests/integration/test_collaborative_hitl_e2e.py), @pytest.mark.integration.
+
 ## Prerequisites
 - **Env Vars**: `OLLAMA_HOST=http://host.docker.internal:11434` (optional, dummy used); `PROJECT_ROOT=/tmp/test-*` (temp fixture); `GITHUB_TOKEN` (if GitHub tools).
 - **Fixtures**: Extend [`conftest.py`](agents/agentics/tests/integration/conftest.py): `real_ollama_config` (skip if unhealthy), `temp_project_dir` (mkdtemp + cleanup), `dummy_state`.
@@ -131,12 +143,16 @@ Full Phase 1 integration.
 | Tool-Integrated Agents/Tools | 6-8 | High |
 | BaseAgent Resilience | 9-10 | Medium |
 | End-to-End Core Infrastructure | 11-12 | High |
+| LLM Code Gen/Validation E2E | 13 | High |
+| Collaborative/HITL/Checkpointers/State Adapters | 14 | High |
 
 ```mermaid
 graph TD
     A[State Tests 4-5] --> B[Agent Tests 6-10]
     B --> C[Composer Tests 1-3]
     C --> D[E2E 11-12]
+    D --> E[LLM Code Gen/Validation E2E 13]
+    E --> F[Collaborative/HITL/Checkpointers 14]
 ```
 
 Ensures real validation of Phase 1 composability/immutability/tool flows.
@@ -155,5 +171,8 @@ Ensures real validation of Phase 1 composability/immutability/tool flows.
   - Composer tool-binding verification (hasattr check).
   - State frozen setattr error.
   - Real env var propagation for config (OLLAMA_*).
-  - CB full cycle (Half-Open success).
+  - [x] CB full cycle (Half-Open success).
+- **Closed by new tests**:
+  - LLM code gen/validation E2E (scenario 13, [`test_llm_code_gen_validation_e2e.py`](agents/agentics/tests/integration/test_llm_code_gen_validation_e2e.py))
+  - Collaborative/HITL/checkpointers/state adapters (scenario 14, [`test_collaborative_hitl_e2e.py`](agents/agentics/tests/integration/test_collaborative_hitl_e2e.py))
 - **Post-Plan**: Fill gaps with new files; extend conftest.py for dummy_llm/temp_dir; validate no mocks used.

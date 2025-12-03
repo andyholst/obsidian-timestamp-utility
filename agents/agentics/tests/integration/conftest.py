@@ -130,9 +130,14 @@ def dummy_state():
         history=[]
     )
 
+@pytest.fixture(scope="function")
+def dummy_llm():
+    return RunnableLambda(lambda p: AIMessage(content="", additional_kwargs={"code": "def testMethod():\n    pass", "command_id": "test-command-id"}))
 
-@pytest.fixture(scope="session")
-    )
+
+@pytest.fixture(scope="function")
+def dummy_llm_tool():
+    return RunnableLambda(lambda p: AIMessage(content="", tool_calls=[{"id": "call_abc123", "name": "dummy_tool", "args": {"method": "testMethod", "id": "test-command-id"}, "type": "tool"}]))
 
 
 @pytest.fixture(scope="session")
