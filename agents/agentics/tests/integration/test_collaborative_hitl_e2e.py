@@ -2,13 +2,13 @@ import pytest
 import sys
 from dataclasses import asdict
 
-from agents.agentics.src.collaborative_generator import CollaborativeGenerator
-from agents.agentics.src.hitl_node import HITLNode
-from agents.agentics.src.state_adapters import (
+from src.collaborative_generator import CollaborativeGenerator
+from src.hitl_node import HITLNode
+from src.state_adapters import (
     StateToCodeGenerationStateAdapter,
     CodeGenerationStateToStateAdapter,
 )
-from agents.agentics.src.state import CodeGenerationState
+from src.state import CodeGenerationState
 
 from langgraph.graph import StateGraph
 from langgraph.checkpoint.memory import MemorySaver
@@ -19,11 +19,15 @@ class TestCollaborativeHITLE2E:
     """Integration tests for CollaborativeGenerator, HITLNode, state adapters, and checkpointer."""
 
     def test_collaborative_generator(self, dummy_llm, dummy_state):
-        """Test CollaborativeGenerator.generate_collaboratively produces validation history."""
+        """Test CollaborativeGenerator.generate_collaboratively with refinement loops (dummy_llm causes validation failures)."""
         coll_gen = CollaborativeGenerator(dummy_llm)
         result = coll_gen.generate_collaboratively(dummy_state)
-        assert len(result.validation_history) > 0
+        assert result.generated_code is not None
+        assert result.generated_tests is not None
+        assert len(result.validation_history) == 3
         assert result.validation_results is not None
+        assert not result.validation_results.success
+        assert result.feedback.get('max_iterations_exceeded') is True
 
     def test_hitl_node(self, dummy_llm, dummy_state, monkeypatch):
         """Test HITLNode with monkeypatched input captures human_feedback."""

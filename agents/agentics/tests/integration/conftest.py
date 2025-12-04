@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "../..", "src")))
 """
 Pytest configuration and fixtures for integration tests.
 
@@ -43,16 +46,6 @@ def integration_config():
     }
 
 
-@pytest.fixture(scope="function")
-
-
-@pytest.fixture(scope="function")
-
-
-@pytest.fixture(scope="function")
-
-
-@pytest.fixture(scope="function")
 def integration_test_isolation():
     """Ensure integration tests don't interfere with each other."""
     # Reset any global state that might persist between tests
@@ -81,14 +74,17 @@ import os
 import requests
 from langchain_core.runnables import RunnableLambda
 from langchain_core.messages import AIMessage
-from agents.agentics.src.models import CodeSpec, TestSpec
-from agents.agentics.src.state import CodeGenerationState
-from agents.agentics.src.config import AgenticsConfig
+from src.models import CodeSpec, TestSpec
+from src.state import CodeGenerationState
+from src.config import AgenticsConfig
 from langchain_ollama import OllamaLLM
+
+import json
+import logging
+from langgraph.checkpoint.memory import MemorySaver
 
 
 @pytest.fixture(scope="function")
-@pytest.mark.integration
 def temp_project_dir():
     """
     Temporary project directory for tool tests (e.g., read/write_file).
@@ -104,16 +100,6 @@ def temp_project_dir():
 
 
 @pytest.fixture(scope="function")
-
-
-@pytest.fixture(scope="function")
-
-
-@pytest.fixture(scope="function")
-
-
-@pytest.fixture(scope="function")
-@pytest.mark.integration
 def dummy_state():
     """Minimal empty CodeGenerationState instance, no dummy LLM."""
     code_spec = CodeSpec(language="")
@@ -141,7 +127,6 @@ def dummy_llm_tool():
 
 
 @pytest.fixture(scope="session")
-@pytest.mark.integration
 def real_ollama_config():
     """Real AgenticsConfig with OLLAMA_HOST, fail if not set or unhealthy."""
     if not os.getenv("OLLAMA_HOST"):
@@ -157,3 +142,60 @@ def real_ollama_config():
     except Exception:
         pytest.skip("Ollama server or code model unhealthy")
     return config
+
+
+@pytest.fixture(scope="function")
+def env_var_fixture(monkeypatch):
+    """Mock environment variables for integration tests (e.g., OLLAMA_HOST)."""
+    monkeypatch.setenv("OLLAMA_HOST", "http://mock-ollama:11434")
+    yield
+
+
+@pytest.fixture(scope="session")
+def checkpointer():
+    """MemorySaver checkpointer for langgraph workflows."""
+    return MemorySaver()
+
+
+@pytest.fixture(scope="function")
+def npm_mock_dir():
+    """
+    Temporary npm project directory with package.json for npm/jest tool tests.
+    """
+    temp_dir = tempfile.mkdtemp()
+    pkg_path = os.path.join(temp_dir, "package.json")
+    package_data = {
+        "name": "mock-npm-project",
+        "version": "1.0.0",
+        "scripts": {
+            "test": "jest"
+        },
+        "devDependencies": {
+            "jest": "^29.0.0"
+        }
+    }
+    with open(pkg_path, "w") as f:
+        json.dump(package_data, f, indent=2)
+    yield temp_dir
+    shutil.rmtree(temp_dir)
+
+
+@pytest.fixture(scope="function")
+def caplog_config(caplog):
+    """Configure caplog for agentics monitoring/logging tests."""
+    caplog.set_level(logging.DEBUG)
+    yield caplog
+
+
+@pytest.fixture(scope="function")
+def parallel_dummy_agents(dummy_state):
+    """List of dummy agents for parallel processing integration tests."""
+    class DummyAgent:
+        def __init__(self, name):
+            self.name = name
+
+        def process(self, state):
+            """Dummy process method appending to history."""
+            return state.with_history([f"Processed by {self.name}"])
+
+    return [DummyAgent(f"parallel_agent_{i}") for i in range(3)]

@@ -1,10 +1,9 @@
 import pytest
 import dataclasses
 
-from agents.agentics.src.state import CodeGenerationState
-from agents.agentics.src.base_agent import BaseAgent
+from src.state import CodeGenerationState
+from src.base_agent import BaseAgent
 
-from agents.agentics.tests.integration.conftest import dummy_state, real_ollama_config
 
 
 @pytest.mark.integration

@@ -10,6 +10,9 @@ from src.circuit_breaker import CircuitBreakerOpenException
 from src.error_recovery_agent import ErrorRecoveryAgent
 from src.agentics import create_composable_workflow
 
+from typing import Dict, Any
+from src.base_agent import BaseAgent, AgentType
+
 
 @pytest.fixture
 def composable_workflow():
@@ -280,3 +283,5 @@ class TestErrorRecoveryIntegration:
         # Verify success rate calculation
         success_rate = success_count / total_attempts
         assert success_rate == 2/3  # 2 out of 3 recoveries succeeded
+
+# TestErrorRecoveryFullCycle class incomplete, removed for collection

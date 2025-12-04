@@ -3,12 +3,12 @@ from dataclasses import asdict
 from typing import List
 from langchain_ollama import OllamaLLM
 
-from ...src.agent_composer import AgentComposer, WorkflowConfig
-from ...src.base_agent import BaseAgent
-from ...src.tool_integrated_agent import ToolIntegratedAgent
-from ...src.tools import read_file_tool, list_files_tool, write_file_tool
-from ...src.circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
-from ...src.state import State
+from src.agent_composer import AgentComposer, WorkflowConfig
+from src.base_agent import BaseAgent
+from src.tool_integrated_agent import ToolIntegratedAgent
+from src.tools import read_file_tool, list_files_tool, write_file_tool
+from src.circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
+from src.state import State
 
 
 @pytest.mark.integration
@@ -88,6 +88,7 @@ async def test_tool_binding_in_workflow(
 
         def bind_tools(self, tools):
             self._num_tools_bound = len(tools)
+            self.tools = tools
             return self
 
         def process(self, state: State) -> State:
@@ -106,6 +107,8 @@ async def test_tool_binding_in_workflow(
         agent_names=["bindable"], tool_names=[tool.name for tool in tools_to_use]
     )
     workflow = composer.create_workflow("tool_binding_test", config)
+    assert hasattr(agent, 'tools')
+    assert len(agent.tools) == num_tools
     result = await workflow.ainvoke(initial_state)
 
     assert result.get("num_tools_bound") == num_tools

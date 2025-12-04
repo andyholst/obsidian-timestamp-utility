@@ -2,10 +2,10 @@ import pytest
 import os
 from dataclasses import asdict
 from langchain_core.runnables import RunnableLambda
-from agents.agentics.src.agent_composer import AgentComposer, WorkflowConfig
-from agents.agentics.src.tool_integrated_agent import ToolIntegratedAgent
-from agents.agentics.src.tools import read_file_tool, write_file_tool, list_files_tool
-from agents.agentics.src.config import AgenticsConfig
+from src.agent_composer import AgentComposer, WorkflowConfig
+from src.tool_integrated_agent import ToolIntegratedAgent
+from src.tools import read_file_tool, write_file_tool, list_files_tool
+from src.config import AgenticsConfig
 from langchain_ollama import OllamaLLM
 
 

@@ -1,11 +1,11 @@
 import pytest
 from dataclasses import asdict
 
-from agents.agentics.src.code_generator_agent import CodeGeneratorAgent
-from agents.agentics.src.llm_validator import LLMResponseValidator
-from agents.agentics.src.code_validator import LLMCodeValidationPipeline
-from agents.agentics.src.models import CodeSpec, TestSpec
-from agents.agentics.src.state import CodeGenerationState
+from src.code_generator_agent import CodeGeneratorAgent
+from src.llm_validator import LLMResponseValidator
+from src.code_validator import LLMCodeValidationPipeline
+from src.models import CodeSpec, TestSpec
+from src.state import CodeGenerationState
 
 from langchain_core.messages import AIMessage
 

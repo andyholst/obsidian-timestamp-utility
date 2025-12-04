@@ -6,7 +6,7 @@ from typing import Dict, Any, List
 from langchain.tools import BaseTool
 from langchain_ollama import OllamaLLM
 from src.tool_integrated_agent import ToolIntegratedAgent
-from src.tools import read_file_tool, write_file_tool, list_files_tool
+from src.tools import read_file_tool, write_file_tool, list_files_tool, npm_search_tool
 from src.circuit_breaker import CircuitBreakerOpenException
 
 @pytest.mark.integration
@@ -126,27 +126,65 @@ class TestToolIntegratedAgentIntegration:
         finally:
             self.teardown_temp_project()
 
-    def test_scenario4_llm_tool_augmented_prompt(self):
-        """Scenario 4: LLM tool-augmented prompt; assert tool context included."""
+    @pytest.mark.parametrize(
+        "tool_list, expected_desc_snippets",
+        [
+            ([read_file_tool], ["Read the content of a file"]),
+            ([write_file_tool], ["Write content to a file"]),
+            ([read_file_tool, list_files_tool], ["Read the content of a file", "List files and directories"]),
+            ([npm_search_tool], ["Search for npm packages"]),
+        ],
+        ids=["read_file", "write_file", "read_list", "npm_search"]
+    )
+    def test_tool_augmented_prompt_parametrized(self, tool_list, expected_desc_snippets):
+        """Enhanced: Parametrized test for _create_tool_augmented_prompt - LLM sees tool descriptions/context."""
         temp_dir = self.setup_temp_project()
         try:
-            # LLM that "sees" tool context in prompt (simulate by fixed response)
-            def prompt_aware_llm(input):
-                # Simulate seeing tool context in prompt
-                assert "Available Tools" in str(input)  # From _create_tool_augmented_prompt
-                return AIMessage(content="tools context confirmed")
+            def prompt_checker(prompt):
+                assert "Available Tools:" in prompt
+                for i, tool in enumerate(tool_list):
+                    assert tool.name in prompt
+                    snippet = expected_desc_snippets[i]
+                    assert snippet in prompt
+                return AIMessage(content="tool augmented prompt confirmed")
 
-            llm = RunnableLambda(prompt_aware_llm)
+            llm = RunnableLambda(prompt_checker)
 
-            tools = [read_file_tool]
-            agent = ToolIntegratedAgent(llm, tools)
+            agent = ToolIntegratedAgent(llm, tool_list)
 
             state = {"prompt_test": True}
             result = agent.process(state)
 
-            assert "tools context confirmed" in result["tool_integrated_response"]
+            assert "tool augmented prompt confirmed" in result["tool_integrated_response"]
         finally:
             self.teardown_temp_project()
 
-@pytest.mark.integration
-def test_single_tool
+    def test_direct_tool_augmented_prompt_creation(self):
+        """Direct integration test for _create_tool_augmented_prompt - verifies LLM sees exact tool context."""
+        def dummy_llm(prompt):
+            # This won't be called, but for init
+            return "dummy"
+
+        # Test with file and npm tools
+        tools = [read_file_tool, npm_search_tool]
+        agent = ToolIntegratedAgent(dummy_llm, tools, name="prompt_direct_test")
+
+        state = {"direct_prompt_test": True}
+        tool_context = agent._gather_tool_context(state)
+
+        prompt = agent._create_tool_augmented_prompt(state, tool_context)
+
+        # Verify base prompt
+        base_expected = f"Process the following state: {{'direct_prompt_test': True}}"
+        assert base_expected in prompt
+
+        # Verify tool section structure
+        assert "\n\nAvailable Tools:\n" in prompt
+        assert "- read_file_tool: Read the content of a file" in prompt
+        assert "- npm_search_tool: Search for npm packages" in prompt
+        assert "When you need to use a tool, respond with a tool call." in prompt
+
+        # Test empty tools
+        empty_agent = ToolIntegratedAgent(dummy_llm, [])
+        empty_prompt = empty_agent._create_tool_augmented_prompt(state, {})
+        assert "\n\nAvailable Tools:" not in empty_prompt  # No tool section

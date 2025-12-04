@@ -10,8 +10,8 @@ from pathlib import Path
 
 import asyncio
 
-from agents.agentics.src.agentics import AgenticsApp
-from agents.agentics.src.config import AgenticsConfig
+from src.agentics import AgenticsApp
+from src.config import AgenticsConfig
 
 
 @pytest.mark.integration
