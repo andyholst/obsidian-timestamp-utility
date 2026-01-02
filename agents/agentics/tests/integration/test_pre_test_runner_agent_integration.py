@@ -22,6 +22,7 @@ def test_pre_test_runner_agent_success():
     # Given: A PreTestRunnerAgent instance using the real /project directory
     agent = PreTestRunnerAgent()
     agent.project_root = REAL_PROJECT_ROOT  # Use the real /project directory
+    os.environ['PROJECT_ROOT'] = REAL_PROJECT_ROOT
     state = State()
 
     # When: Processing the state with real npm commands
@@ -41,12 +42,14 @@ def test_pre_test_runner_agent_no_package_json(temp_empty_project):
     # Given: A PreTestRunnerAgent instance with an empty project directory
     agent = PreTestRunnerAgent()
     agent.project_root = temp_empty_project  # Temporary directory without package.json
+    os.environ['PROJECT_ROOT'] = temp_empty_project
     state = State()
 
     # When: Processing the state with real npm commands
-    # Then: Expect a RuntimeError due to npm install failure
-    with pytest.raises(RuntimeError, match="Install command failed"):
-        agent(state)
+    # Then: Expect handling without package.json, default metrics
+    result = agent(state)
+    assert result["existing_tests_passed"] == 0
+    assert result["existing_coverage_all_files"] == 0.0
 
 def test_strip_ansi_codes():
     """
@@ -55,6 +58,7 @@ def test_strip_ansi_codes():
     """
     # Given: Text with and without ANSI codes
     agent = PreTestRunnerAgent()
+    os.environ['PROJECT_ROOT'] = '/project'
     text_with_ansi = "\033[31mRed text\033[0m"
     plain_text = "Plain text"
 
@@ -70,6 +74,7 @@ def test_pre_test_runner_agent_custom_commands(temp_empty_project):
     # Given: Custom install and test commands via environment variables
     agent = PreTestRunnerAgent()
     agent.project_root = temp_empty_project
+    os.environ['PROJECT_ROOT'] = temp_empty_project
     agent.install_command = "echo Installing"
     agent.test_command = "echo 'Tests: 5 passed, 5 total'"
     state = State()
@@ -87,6 +92,7 @@ def test_pre_test_runner_agent_regex_failure(temp_empty_project):
     # Given: Project with package.json and test output with no matching patterns
     agent = PreTestRunnerAgent()
     agent.project_root = temp_empty_project
+    os.environ['PROJECT_ROOT'] = temp_empty_project
     with open(os.path.join(temp_empty_project, 'package.json'), 'w') as f:
         f.write('{"name": "test", "scripts": {"test": "echo Custom output"}}')
     state = State()

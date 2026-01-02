@@ -30,27 +30,21 @@ from src.exceptions import AgenticsError, ServiceUnavailableError
 class TestConfigurationIntegration:
     """Integration tests for configuration management with full application context."""
 
-    @pytest.fixture
+    @pytest.fixture(autouse=True)
     async def clean_app_state(self):
         """Clean up global state before and after tests."""
+        import src.config
+        import src.services
         # Store original state
-        original_config = globals().get('_config', None)
-        original_service_manager = globals().get('_service_manager', None)
-
+        original_config = src.config._config
+        original_service_manager = src.services._service_manager
         # Clean up
-        from src.config import _config
-        from src.services import _service_manager
-        from src.agentics import _service_manager as app_service_manager
-
-        globals()['_config'] = None
-        globals()['_service_manager'] = None
-        app_service_manager = None
-
+        src.config._config = None
+        src.services._service_manager = None
         yield
-
-        # Restore or clean up
-        globals()['_config'] = original_config
-        globals()['_service_manager'] = original_service_manager
+        # Restore
+        src.config._config = original_config
+        src.services._service_manager = original_service_manager
 
     @pytest.mark.integration
     async def test_full_application_initialization_with_configuration_loading(self, clean_app_state):

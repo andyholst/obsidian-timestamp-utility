@@ -5,7 +5,7 @@ from langchain_core.tools import BaseTool
 from .base_agent import BaseAgent
 from .state import State
 from .config import LOGGER_LEVEL
-from .tools import ToolExecutor
+from .tool_executor import ToolExecutor
 
 
 class ToolIntegratedAgent(BaseAgent):

@@ -15,6 +15,7 @@ class State(TypedDict, total=False):
     relevant_code_files: List[Dict[str, str]]
     relevant_test_files: List[Dict[str, str]]
     available_dependencies: List[str]
+    installed_deps: List[str]
     post_integration_tests_passed: int
     post_integration_coverage_all_files: float
     coverage_improvement: float
@@ -37,6 +38,7 @@ class CodeGenerationState:
     test_spec: TestSpec
     implementation_steps: List[str] = field(default_factory=list)
     npm_packages: List[str] = field(default_factory=list)
+    installed_deps: List[str] = field(default_factory=list)
     manual_implementation_notes: str = ""
     generated_code: Optional[str] = None
     generated_tests: Optional[str] = None
@@ -50,6 +52,16 @@ class CodeGenerationState:
     history: List[Dict[str, Any]] = field(default_factory=list)
     validation_history: List[Dict[str, Any]] = field(default_factory=list)
     existing_tests_passed: int = 0
+    test_errors: List[Dict[str, str]] = field(default_factory=list)
+    test_log_path: Optional[str] = None
+    recovery_attempt: int = 0
+    recovery_confidence: float = 100.0
+    recovery_explanation: Optional[str] = None
+    existing_coverage_all_files: float = field(default=0.0)
+    post_integration_tests_passed: int = field(default=0)
+    post_integration_coverage_all_files: float = field(default=0.0)
+    coverage_improvement: float = field(default=0.0)
+    tests_improvement: int = field(default=0)
 
     def with_code(self, code: str, method_name: Optional[str] = None, command_id: Optional[str] = None) -> 'CodeGenerationState':
         """Return new state with generated code"""
@@ -65,6 +77,17 @@ class CodeGenerationState:
         return CodeGenerationState(
             **{k: v for k, v in self.__dict__.items() if k != 'generated_tests'},
             generated_tests=tests
+        )
+
+    def with_recovery(self, errors: List[Dict[str, str]], log_path: str, attempt: int, confidence: float, explanation: Optional[str] = None) -> 'CodeGenerationState':
+        """Return new state with recovery information"""
+        return CodeGenerationState(
+            **{k: v for k, v in self.__dict__.items() if k not in ['test_errors', 'test_log_path', 'recovery_attempt', 'recovery_confidence', 'recovery_explanation']},
+            test_errors=errors,
+            test_log_path=log_path,
+            recovery_attempt=attempt,
+            recovery_confidence=confidence,
+            recovery_explanation=explanation
         )
 
     def with_validation_results(self, results: ValidationResults) -> 'CodeGenerationState':
@@ -96,6 +119,26 @@ class CodeGenerationState:
         return CodeGenerationState(
             **{k: v for k, v in self.__dict__.items() if k != 'validation_history'},
             validation_history=validation_history
+        )
+
+    def with_post_metrics(self, tests_passed: int, coverage_all_files: float, existing_tests_passed: int, existing_coverage_all_files: float) -> 'CodeGenerationState':
+        """Return new state with post-integration metrics"""
+        tests_improvement = tests_passed - existing_tests_passed
+        coverage_improvement = coverage_all_files - existing_coverage_all_files
+        return CodeGenerationState(
+            **{k: v for k, v in self.__dict__.items() if k not in ['post_integration_tests_passed', 'post_integration_coverage_all_files', 'coverage_improvement', 'tests_improvement']},
+            post_integration_tests_passed=tests_passed,
+            post_integration_coverage_all_files=coverage_all_files,
+            coverage_improvement=coverage_improvement,
+            tests_improvement=tests_improvement,
+        )
+
+    def with_recovery_update(self, confidence: float, explanation: str) -> 'CodeGenerationState':
+        """Update recovery confidence and explanation"""
+        return CodeGenerationState(
+            **{k: v for k, v in self.__dict__.items() if k not in ['recovery_confidence', 'recovery_explanation']},
+            recovery_confidence=confidence,
+            recovery_explanation=explanation,
         )
 
     def get_audit_trail(self) -> List[Dict[str, Any]]:

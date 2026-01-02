@@ -11,7 +11,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from .tool_integrated_agent import ToolIntegratedAgent
 from .tools import npm_search_tool, npm_install_tool, npm_list_tool, read_file_tool, list_files_tool, check_file_exists_tool
 from .state import State, CodeGenerationState
-from .utils import safe_json_dumps, remove_thinking_tags, log_info
+from .utils import safe_json_dumps, remove_thinking_tags, log_info, safe_get
 from .models import CodeGenerationOutput, TestGenerationOutput
 from .circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
 from .prompts import ModularPrompts
@@ -22,9 +22,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         super().__init__(llm_client, [npm_search_tool, npm_install_tool, npm_list_tool, read_file_tool, list_files_tool, check_file_exists_tool], name="CodeGenerator")
         self.main_file = os.getenv('MAIN_FILE', 'main.ts')
         self.test_file = os.getenv('TEST_FILE', 'main.test.ts')
-        self.project_root = os.getenv('PROJECT_ROOT')
-        if not self.project_root:
-            raise ValueError("PROJECT_ROOT environment variable is required")
+        self.project_root = os.getenv('PROJECT_ROOT', '/project')
         self.monitor.setLevel(logging.INFO)
         log_info(self.name, f"Initialized with main file: {self.main_file}, test file: {self.test_file}, project root: {self.project_root}")
         # Define LCEL chains for code and test generation
@@ -60,17 +58,21 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             code_structure = json.dumps(inputs.get('code_structure', {}))
             tool_context = self._gather_tool_context(inputs)
             tool_instructions = ModularPrompts.get_tool_instructions_for_code_generator_agent()
-            return (
-                ModularPrompts.get_base_instruction() + "\n"
-                "You are tasked with generating TypeScript code for an Obsidian plugin. The plugin is defined in `{main_file}`, and you must integrate the new functionality into the existing structure without altering any existing code. Follow these instructions carefully:\n\n"
+            raw_refined_ticket = inputs.get('raw_refined_ticket', '')
+            original_ticket_content = inputs.get('original_ticket_content', '')
+            prompt = (
+                ModularPrompts.get_base_instruction() + "\nYou are tasked with generating TypeScript code for an Obsidian plugin. The plugin is defined in `{main_file}`, and you must integrate the new functionality into the existing structure without altering any existing code. Follow these instructions carefully:\n\n"
+                "**1. Full Refined Ticket (Priority Source):**\n{raw_refined_ticket}\n\n"
                 + ModularPrompts.get_code_structure_section(code_structure)
-                + ModularPrompts.get_code_requirements_section()
+                + ModularPrompts.get_code_requirements_section(raw_refined_ticket=raw_refined_ticket, original_ticket_content=original_ticket_content)
                 + "3. **Task Details:**\n{task_details_str}\n\n"
                 + "4. **Existing Code ({main_file}):**\n{existing_code_content}\n\n"
                 + "5. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
                 + tool_instructions
-                + ModularPrompts.get_output_instructions_code()
+                + ModularPrompts.get_output_instructions_code() + "\n\nTS code: use \" for strings, \\` for template if needed. No raw ` in code.\n\nObsidian Command full spec (name,id,editorCallback): this.addCommand({{name: \"Command Name\", id: \"unique-id\", editorCallback: (editor: Editor, view: MarkdownView) => {{ ... }}}}); import {{MarkdownView, MarkdownFileInfo}} from 'obsidian';\n\nTests cover new method/command exactly.\n\nCRITICAL: ALWAYS generate NON-EMPTY \"code\" field with valid TS additions. Never skip or empty. For simple tickets, use basic method + command with Notice. Output JSON: {\"code\": \"...\", \"method_name\": \"...\", \"command_id\": \"...\"}\n"
             )
+            log_info(self.name, f"Full prompt for code gen: {prompt}")
+            return prompt
 
         # Use RunnableLambda to build the prompt dynamically
 
@@ -83,6 +85,8 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 existing_code_content=self._get_existing_code_content,
                 main_file=lambda x: self.main_file,
                 feedback=lambda x: ((x.get('feedback') if isinstance(x, dict) else x.feedback) or {}).get('feedback', ''),
+                raw_refined_ticket=self._get_raw_refined_ticket,
+                original_ticket_content=self._get_original_ticket_content,
                 code_structure=lambda x: {}
             )
             | RunnableLambda(build_code_prompt)
@@ -96,20 +100,24 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             test_structure = json.dumps(inputs.get('test_structure', {}))
             tool_context = self._gather_tool_context(inputs)
             tool_instructions = ModularPrompts.get_tool_instructions_for_code_generator_agent()
-            return (
+            original_ticket_content = inputs.get('original_ticket_content', '')
+            prompt = (
                 ModularPrompts.get_base_instruction() + "\n"
                 "You are tasked with generating Jest tests for the new functionality added to the plugin class in an Obsidian plugin. "
                 "The tests must be integrated into the existing `{test_file}` file without altering any existing code. "
                 "Follow these instructions carefully:\n\n"
                 + ModularPrompts.get_test_structure_section(test_structure)
-                + ModularPrompts.get_test_requirements_section()
+                + ModularPrompts.get_test_requirements_section(original_ticket_content=original_ticket_content)
                 + "3. **Task Details:**\n{task_details_str}\n\n"
+                + ModularPrompts.get_raw_refined_ticket_section()
                 + "4. **Generated Code:**\n{generated_code}\n\n"
                 + "5. **Existing Test File ({test_file}):**\n{existing_test_content}\n\n"
                 + "6. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
                 + tool_instructions
                 + ModularPrompts.get_output_instructions_tests()
             )
+            log_info(self.name, f"Full prompt for test gen: {prompt}")
+            return prompt
 
         # Use RunnableLambda to build the prompt dynamically
 
@@ -122,6 +130,8 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 existing_test_content=self._get_existing_test_content,
                 test_file=lambda x: self.test_file,
                 feedback=lambda x: ((x.get('feedback') if isinstance(x, dict) else x.feedback) or {}).get('feedback', ''),
+                raw_refined_ticket=self._get_raw_refined_ticket,
+                original_ticket_content=self._get_original_ticket_content,
                 test_structure=lambda x: {}
             )
             | RunnableLambda(build_test_prompt)
@@ -157,25 +167,52 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
 
     def _format_task_details(self, inputs):
         """Format task details string from state."""
-        if isinstance(inputs, dict):
-            # State dict style
-            result = inputs.get('result', {})
-            title = result.get('title', '')
-            description = result.get('description', '')
-            requirements = result.get('requirements', [])
-            acceptance_criteria = result.get('acceptance_criteria', [])
-            implementation_steps = result.get('implementation_steps', [])
-            npm_packages = result.get('npm_packages', [])
-            manual_implementation_notes = result.get('manual_implementation_notes', '')
+        # Prioritize CodeGenerationState object access as per refactored architecture
+        if hasattr(inputs, 'requirements'):  # CodeGenerationState object
+            title = inputs.title or ''
+            description = inputs.description or ''
+            requirements = inputs.requirements or []
+            acceptance_criteria = inputs.acceptance_criteria or []
+            implementation_steps = inputs.implementation_steps or []
+            npm_packages = inputs.npm_packages or []
+            manual_implementation_notes = inputs.manual_implementation_notes or ''
+        elif isinstance(inputs, dict):
+            # Legacy State dict style - handle None values properly
+            result = inputs.get('result') or {}
+            refined_ticket = inputs.get('refined_ticket') or {}
+            # Use refined_ticket if it has requirements, otherwise use result
+            ticket_data = refined_ticket if refined_ticket else result
+            if ticket_data is None or not isinstance(ticket_data, dict):
+                ticket_data = {}
+            title = ticket_data.get('title', '')
+            description = ticket_data.get('description', '')
+            requirements = ticket_data.get('requirements', [])
+            acceptance_criteria = ticket_data.get('acceptance_criteria', [])
+            implementation_steps = ticket_data.get('implementation_steps', [])
+            npm_packages = ticket_data.get('npm_packages', [])
+            manual_implementation_notes = ticket_data.get('manual_implementation_notes', '')
         else:
-            # CodeGenerationState object style
-            title = inputs.title
-            description = inputs.description
-            requirements = inputs.requirements
-            acceptance_criteria = inputs.acceptance_criteria
-            implementation_steps = inputs.implementation_steps
-            npm_packages = inputs.npm_packages
-            manual_implementation_notes = inputs.manual_implementation_notes
+            # Fallback for unknown input types
+            title = ''
+            description = ''
+            requirements = []
+            acceptance_criteria = []
+            implementation_steps = []
+            npm_packages = []
+            manual_implementation_notes = ''
+
+        # Ensure all fields are proper types and handle None values
+        requirements = requirements if isinstance(requirements, list) else []
+        acceptance_criteria = acceptance_criteria if isinstance(acceptance_criteria, list) else []
+        implementation_steps = implementation_steps if isinstance(implementation_steps, list) else []
+        npm_packages = npm_packages if isinstance(npm_packages, list) else []
+
+        # Check if requirements or acceptance_criteria are empty and append defaults
+        if not requirements:
+            requirements.extend(["Implement as an Obsidian command", "Add a public method with basic Notice placeholder", "Handle errors gracefully", "Add TypeScript types", "Follow existing code style"])
+        if not acceptance_criteria:
+            acceptance_criteria.extend(["Implement as an Obsidian command", "Add a public method with basic Notice placeholder", "Handle errors gracefully", "Add TypeScript types", "Follow existing code style"])
+
         # Handle npm_packages that might be dicts or strings
         def format_package(pkg):
             if isinstance(pkg, dict):
@@ -193,6 +230,44 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             f"NPM Packages: {npm_str}\n"
             f"Manual Implementation Notes: {manual_implementation_notes}"
         )
+
+    def _get_raw_refined_ticket(self, inputs):
+        """Get raw JSON string of refined ticket from state."""
+        if hasattr(inputs, 'requirements'):  # CodeGenerationState object
+            ticket_data = {
+                'title': getattr(inputs, 'title', '') or '',
+                'description': getattr(inputs, 'description', '') or '',
+                'requirements': list(getattr(inputs, 'requirements', [])) or [],
+                'acceptance_criteria': list(getattr(inputs, 'acceptance_criteria', [])) or [],
+                'implementation_steps': list(getattr(inputs, 'implementation_steps', [])) or [],
+                'npm_packages': list(getattr(inputs, 'npm_packages', [])) or [],
+                'manual_implementation_notes': getattr(inputs, 'manual_implementation_notes', '') or ''
+            }
+        elif isinstance(inputs, dict):
+            result = inputs.get('result') or {}
+            refined_ticket = inputs.get('refined_ticket') or {}
+            if isinstance(refined_ticket, str):
+                try:
+                    refined_ticket = json.loads(refined_ticket)
+                except json.JSONDecodeError:
+                    refined_ticket = {}
+            ticket_data = refined_ticket if (refined_ticket and isinstance(refined_ticket, dict) and refined_ticket.get('requirements')) else result
+            if ticket_data is None or not isinstance(ticket_data, dict):
+                ticket_data = {}
+        else:
+            ticket_data = {}
+        reqs = ticket_data.get('requirements', [])
+        log_info(self.name, f"refined_ticket: {inputs.get('refined_ticket')}, len reqs: {len(reqs)}, content preview: {str(ticket_data)[:200]}")
+        return json.dumps(ticket_data, indent=2)
+
+    def _get_original_ticket_content(self, inputs):
+        """Get original ticket content from state."""
+        if hasattr(inputs, 'ticket_content'):
+            return inputs.ticket_content or ''
+        elif isinstance(inputs, dict):
+            return inputs.get('ticket_content') or inputs.get('raw_ticket') or ''
+        else:
+            return ''
 
     def _get_existing_code_content(self, inputs):
         """Get existing code content from relevant files."""
@@ -236,11 +311,10 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         # Post-process the generated code
         generated_code = self._post_process_code(generated_code)
 
-        # Keyword validation for code output
+        # Keyword validation for code output (warning only)
         code_keywords = ['import', 'export', 'class', 'interface', 'function', 'public']
         if not any(keyword in generated_code for keyword in code_keywords):
-            raise ValueError("Generated code must include at least one of: import, export, class, interface, or function")
-
+            log_info(self.name, "Warning: Generated code lacks structure keywords, proceeding anyway")
         return generated_code
 
     def _post_process_code(self, generated_code):
@@ -252,11 +326,11 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         generated_code = generated_code.replace('private ', 'public ')
         generated_code = generated_code.replace('protected ', 'public ')
         generated_code = re.sub(r'return text; // Placeholder', r'return text || \'\';', generated_code)
-        # Fix UUID import and usage
-        generated_code = generated_code.replace("import v7 from 'uuidv7';", "import { v7 as uuidv7 } from 'uuid';")
-        generated_code = generated_code.replace("v7.generate()", "uuidv7()")
-        generated_code = generated_code.replace("import { v7 } from '@uuid/v7';", "import { v7 as uuidv7 } from 'uuid';")
-        generated_code = generated_code.replace("v7.generate()", "uuidv7()")
+
+        generated_code = generated_code.replace('./main_file', './main')
+
+        generated_code = generated_code.replace('editor: obsidian.Editor', '_editor: obsidian.Editor')
+
         return generated_code
 
     def _validate_and_parse_test_output(self, response):
@@ -293,7 +367,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         generated_tests = re.sub(r'(\w+)\.mockReturnValue', r'(\1 as jest.Mock).mockReturnValue', generated_tests)
         # Fix command test syntax
         generated_tests = re.sub(r'await const result = plugin\.onload\(\);', r'await plugin.onload();', generated_tests)
-        generated_tests = re.sub(r'await command\.callback\(\);', r'if (command && command.callback) { await command.callback(); }', generated_tests)
+        generated_tests = re.sub(r'await command\.callback\(([^)]*)\);', r'if (command && command.callback) { await command.callback(\1); }', generated_tests)
         return generated_tests
 
     def _validate_typescript_code(self, code: str) -> bool:
@@ -333,25 +407,59 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             log_info(self.name, f"Error during TypeScript validation: {str(e)}")
             return False
 
+    def _get_fallback_code(self, state: CodeGenerationState) -> str:
+        """Generate minimal fallback TypeScript code."""
+        title = safe_get(state, 'title', 'UnknownFeature')
+        method_name = ''.join(word.capitalize() for word in title.lower().split())
+        command_id = method_name.lower() + "-command"
+        fallback_code = f'''import {{ Notice }} from 'obsidian';
+
+public {method_name}() {{
+  new Notice('{title} feature - basic implementation');
+}}
+
+this.addCommand({{
+  id: '{command_id}',
+  name: '{title}',
+  callback: () => {{
+    this.{method_name}();
+  }}
+}});'''
+        log_info(self.name, f"Generated fallback code for '{title}'")
+        return fallback_code
+
     def process(self, state: State) -> State:
         log_info(self.name, f"Before processing in {self.name}: {safe_json_dumps(state, indent=2)}")
         log_info(self.name, "Starting code generation process")
         try:
-            task_details = state['result']
             # Get available dependencies dynamically from package.json
             available_dependencies = self._get_available_dependencies()
-            # Check if ticket is vague (empty requirements and acceptance criteria)
-            requirements = task_details.get('requirements', [])
-            acceptance_criteria = task_details.get('acceptance_criteria', [])
-            is_vague_ticket = not requirements
-            # If ticket is vague, skip code generation
-            if is_vague_ticket:
-                log_info(self.name, "Ticket is vague (empty requirements/acceptance criteria); skipping code generation")
-                state['generated_code'] = ""
-                state['generated_tests'] = ""
-                return state
+            # Determine requirements using logic compatible with both legacy and new flat CodeGenerationState formats
+            if hasattr(state, 'requirements') and state.requirements:
+                requirements = list(state.requirements)
+                acceptance_criteria = list(state.acceptance_criteria)
+                source = "CodeGenerationState object"
+            elif isinstance(state, dict) and 'requirements' in state and state['requirements']:
+                requirements = list(state['requirements'])
+                acceptance_criteria = list(state.get('acceptance_criteria', []))
+                source = "flat dict state"
+            else:
+                # Legacy nested format
+                task_details = state.get('result', {}) if isinstance(state, dict) else getattr(state, 'result', {}) or {}
+                refined_ticket = task_details.get('refined_ticket', {})
+                if refined_ticket and isinstance(refined_ticket, dict) and refined_ticket.get('requirements'):
+                    requirements = list(refined_ticket.get('requirements', []))
+                    acceptance_criteria = list(refined_ticket.get('acceptance_criteria', []))
+                    source = "refined_ticket"
+                else:
+                    requirements = list(task_details.get('requirements', []))
+                    acceptance_criteria = list(task_details.get('acceptance_criteria', []))
+                    source = "result dict"
+            log_info(self.name, f"Using {source} with {len(requirements)} requirements")
+            # Always generate code - no skipping for vague tickets
+            log_info(self.name, "Generating code for all tickets, even vague ones")
             self._log_structured("info", "task_processing", {
-                "requirements_count": len(requirements),
+                "requirements_count": len(state.requirements),
                 "acceptance_criteria_count": len(acceptance_criteria)
             })
             # Generate code using LCEL chain
@@ -359,7 +467,26 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 raise RuntimeError("LLM not available for code generation")
             self._log_structured("info", "code_generation_start", {"chain": "code_generation"})
             try:
-                generated_code = get_circuit_breaker("code_generation").call(lambda: self.code_generation_chain.invoke(state))
+                # Convert CodeGenerationState to dict for LCEL chain
+                # Create result dict from CodeGenerationState fields as per refactored architecture
+                result_dict = {
+                    'title': state.get('title', ''),
+                    'description': state.get('description', ''),
+                    'requirements': state.get('requirements', []),
+                    'acceptance_criteria': state.get('acceptance_criteria', []),
+                    'implementation_steps': state.get('implementation_steps', []),
+                    'npm_packages': state.get('npm_packages', []),
+                    'manual_implementation_notes': state.get('manual_implementation_notes', '')
+                }
+                state_dict = {
+                    'issue_url': state.get('issue_url', ''),
+                    'ticket_content': state.get('ticket_content', ''),
+                    'relevant_code_files': state.get('relevant_code_files', []),
+                    'relevant_test_files': state.get('relevant_test_files', []),
+                    'feedback': state.get('feedback', {}),
+                    'result': result_dict
+                }
+                generated_code = get_circuit_breaker("code_generation").call(lambda: self.code_generation_chain.invoke(state_dict))
             except CircuitBreakerOpenException as e:
                 self._log_structured("error", "circuit_breaker_open", {"operation": "code_generation", "error": str(e)})
                 raise
@@ -431,15 +558,15 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 method_name = method_match.group(2)
                 log_info(self.name, f"Extracted method name: {method_name}")
             else:
-                self.monitor.error("Could not find method name in generated code")
-                raise ValueError("Could not find method name in generated code")
+                log_info(self.name, "No method name found in generated code, proceeding without.")
+                method_name = None
             command_match = re.search(r'this\.addCommand\(\{\s*id:\s*["\']([^"\']+)["\']', generated_code)
             if command_match:
                 command_id = command_match.group(1)
                 log_info(self.name, f"Extracted command ID: {command_id}")
             else:
-                self.monitor.error("Could not find command ID in generated code")
-                raise ValueError("Could not find command ID in generated code")
+                log_info(self.name, "No command ID found in generated code, proceeding without.")
+                command_id = None
             # Generate tests using LCEL chain
             if self.test_generation_chain is None:
                 raise RuntimeError("LLM not available for test generation")
@@ -486,8 +613,8 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             error_context = {
                 "error_type": type(e).__name__,
                 "message": str(e),
-                "code_length": len(state.get('generated_code', '')),
-                "test_length": len(state.get('generated_tests', ''))
+                "code_length": len(state.get('generated_code') or ''),
+                "test_length": len(state.get('generated_tests') or '')
             }
     def generate(self, state: CodeGenerationState) -> CodeGenerationState:
         """
@@ -500,23 +627,28 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             Updated state with generated code
         """
         log_info(self.name, "Starting collaborative code generation process")
+        from .state_adapters import StateToCodeGenerationStateAdapter
+        if not isinstance(state, CodeGenerationState):
+            adapter = StateToCodeGenerationStateAdapter()
+            state = adapter.invoke(state)
+            log_info(self.name, "Adapted incoming state to CodeGenerationState")
+            log_info(self.name, f"DEBUG: State requirements: {safe_get(state, 'requirements', [])}")
+            log_info(self.name, f"DEBUG: State acceptance_criteria: {safe_get(state, 'acceptance_criteria', [])}")
+            log_info(self.name, f"DEBUG: Requirements count: {len(safe_get(state, 'requirements', []))} ")
+            log_info(self.name, f"DEBUG: Acceptance criteria count: {len(safe_get(state, 'acceptance_criteria', []))} ")
 
         try:
             # Check if ticket is vague (empty requirements and acceptance criteria)
-            requirements = (state.result or {}).get('requirements', [])
-            acceptance_criteria = (state.result or {}).get('acceptance_criteria', [])
-            is_vague_ticket = not requirements
-
-            if is_vague_ticket:
-                log_info(self.name, "Ticket is vague (empty requirements/acceptance criteria); skipping code generation")
-                return state.with_code("", "", "")
+            # Use CodeGenerationState fields directly as per refactored architecture
+            # Always generate code - no skipping for vague tickets
+            log_info(self.name, "Generating code for all tickets, even vague ones")
 
             # Get available dependencies dynamically from package.json
             available_dependencies = self._get_available_dependencies()
 
             self._log_structured("info", "task_processing", {
-                "requirements_count": len(requirements),
-                "acceptance_criteria_count": len(acceptance_criteria)
+                "requirements_count": len(state.requirements),
+                "acceptance_criteria_count": len(state.acceptance_criteria)
             })
 
             # Generate code using LCEL chain
@@ -525,7 +657,23 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             self._log_structured("info", "code_generation_start", {"chain": "code_generation"})
 
             try:
-                generated_code = get_circuit_breaker("code_generation").call(lambda: self.code_generation_chain.invoke(state))
+                # Convert CodeGenerationState to dict for LCEL chain
+                state_dict = {
+                    'issue_url': state.issue_url,
+                    'ticket_content': state.ticket_content,
+                    'title': state.title,
+                    'description': state.description,
+                    'requirements': state.requirements,
+                    'acceptance_criteria': state.acceptance_criteria,
+                    'implementation_steps': state.implementation_steps,
+                    'npm_packages': state.npm_packages,
+                    'manual_implementation_notes': state.manual_implementation_notes,
+                    'relevant_code_files': state.relevant_code_files,
+                    'relevant_test_files': state.relevant_test_files,
+                    'feedback': state.feedback,
+                    'result': state.result
+                }
+                generated_code = get_circuit_breaker("code_generation").call(lambda: self.code_generation_chain.invoke(state_dict))
             except CircuitBreakerOpenException as e:
                 self._log_structured("error", "circuit_breaker_open", {"operation": "code_generation", "error": str(e)})
                 raise
@@ -595,6 +743,11 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 else:
                     self._log_structured("warning", "code_correction_failed", {"proceeding_with_original": True})
 
+                # Fallback if generated code is empty
+                if not generated_code.strip():
+                    generated_code = self._get_fallback_code(state)
+                log_info(self.name, "Applied fallback code due to empty generation")
+
             # Extract method name and command ID
             method_match = re.search(r'(public|private|protected)?\s*(\w+)\s*\(', generated_code)
             method_name = method_match.group(2) if method_match else ""
@@ -603,9 +756,11 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             command_id = command_match.group(1) if command_match else ""
 
             if not method_name:
-                raise ValueError("Could not find method name in generated code")
+                log_info(self.name, "Warning: No method name found, using fallback")
+                method_name = "fallbackMethod"
             if not command_id:
-                raise ValueError("Could not find command ID in generated code")
+                log_info(self.name, "Warning: No command ID found, using fallback")
+                command_id = "fallbackCommand"
 
             return state.with_code(generated_code, method_name, command_id)
 

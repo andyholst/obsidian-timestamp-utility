@@ -3,7 +3,7 @@ import logging
 import re
 import json
 from .tool_integrated_agent import ToolIntegratedAgent
-from .tools import read_file_tool, check_file_exists_tool, write_file_tool
+from .tools import read_file_tool, check_file_exists_tool, write_file_tool, npm_install_tool
 from .state import State
 from .utils import safe_json_dumps, remove_thinking_tags, log_info
 from .prompts import ModularPrompts
@@ -12,9 +12,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
         super().__init__(llm_client, [read_file_tool, check_file_exists_tool, write_file_tool], "CodeIntegrator")
         # Configurable project root and file extensions
-        self.project_root = os.getenv('PROJECT_ROOT')
-        if not self.project_root:
-            raise ValueError("PROJECT_ROOT environment variable is required")
+        self.project_root = os.getenv('PROJECT_ROOT', '/project')
         self.code_ext = os.getenv('CODE_FILE_EXTENSION', '.ts')
         self.test_ext = os.getenv('TEST_FILE_EXTENSION', '.test.ts')
         self.llm = llm_client
@@ -28,6 +26,50 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         log_info(self.name, f"Before processing in {self.name}: {safe_json_dumps(state, indent=2)}")
         log_info(self.name, "Starting code integration process")
         try:
+            # Handle proposed JS dependencies first
+            proposed_js_deps = state.get('proposed_js_deps', [])
+            installed_deps = []
+            if proposed_js_deps:
+                log_info(self.name, f"Found {len(proposed_js_deps)} proposed JS deps: {proposed_js_deps}")
+                package_json_path = os.path.join(self.project_root, 'package.json')
+                if check_file_exists_tool(package_json_path):
+                    package_json_str = read_file_tool(package_json_path)
+                    try:
+                        package_json = json.loads(package_json_str)
+                        dependencies = package_json.setdefault('dependencies', {})
+                        added_deps = []
+                        for pkg in proposed_js_deps:
+                            if pkg not in dependencies:
+                                dependencies[pkg] = '*'
+                                added_deps.append(pkg)
+                                log_info(self.name, f"Added {pkg} to package.json dependencies")
+                        if added_deps:
+                            package_json['dependencies'] = dependencies
+                            new_package_json_str = json.dumps(package_json, indent=2)
+                            write_file_tool(package_json_path, new_package_json_str)
+                            log_info(self.name, f"Updated package.json with new deps: {added_deps}")
+                        # Install the proposed deps
+                        for pkg in proposed_js_deps:
+                            try:
+                                npm_install_tool(
+                                    package_name=pkg,
+                                    is_dev=False,
+                                    save_exact=True,
+                                    cwd=self.project_root
+                                )
+                                installed_deps.append(pkg)
+                                log_info(self.name, f"Installed {pkg}")
+                            except Exception as e:
+                                log_info(self.name, f"Failed to install {pkg}: {str(e)}")
+                    except json.JSONDecodeError as e:
+                        log_info(self.name, f"Invalid package.json: {str(e)}")
+                    except Exception as e:
+                        log_info(self.name, f"Error handling deps: {str(e)}")
+                else:
+                    log_info(self.name, f"package.json not found at {package_json_path}, skipping deps install")
+                state['installed_deps'] = installed_deps
+                log_info(self.name, f"Dependency handling complete. Installed: {installed_deps}")
+
             task_details = state['result']
             relevant_code_files = state.get('relevant_code_files', [])
             relevant_test_files = state.get('relevant_test_files', [])
@@ -140,15 +182,22 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             "2. **New Code to Integrate:**\n"
             f"{new_code}\n\n"
             "3. **Integration Rules:**\n"
+            "   **CRITICAL: Integrate EXACT new code from section 2 VERBATIM into TimestampPlugin class (methods) or onload (commands). Do NOT change it.**\n"
+            "   - Generate precise integrated code:\n"
+            "   - Valid TS syntax, no unterminated template literals/strings.\n"
+            "   - Obsidian API: TFile.extension (not .ext), mock Notice/Plugin as in __mocks__/obsidian.ts.\n"
+            "     - Mock functions: use jest.fn().\n"
+            "     - No unused variables/imports.\n"
+            "     - Preserve existing code structure.\n"
             "   - Add new methods or properties to the `TimestampPlugin` class.\n"
             "   - Add new commands within the `onload` method using `this.addCommand`.\n"
             "   - Preserve all existing imports, methods, and commands.\n"
             "   - Add only necessary new imports that are not already present.\n"
             "   - Ensure the code is properly formatted and uses TypeScript syntax.\n"
-            "   - Do not remove or alter any existing code.\n\n"
+            "   - Do not remove or alter any existing code.\n   3.5 **Repair TS Errors:** Fix editorCallback sig (Editor+ctx:MarkdownView|MarkdownFileInfo; cast view=ctx as MarkdownView; use 'editor'; no unused; string/number;\n\n"
             f"{tool_instructions}\n\n"
             "4. **Output Instructions:**\n"
-            f"   - Your response must contain only the updated TypeScript code for `main{self.code_ext}`.\n"
+            "   - Your response must contain only the updated TypeScript code for `main{self.code_ext}`.\n"
             "   - The code should start with the import statements and end with the closing brace of the class.\n"
             "   - Do not include any comments, explanations, or additional text outside the code itself.\n"
             "   - Do not add any markers or comments indicating the start or end of the updated code.\n"
@@ -156,37 +205,9 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             "   - The response must consist solely of the code, with no additional lines or text before or after.\n"
             "   - The first line of your response should be a TypeScript import statement or the beginning of the class.\n\n"
             "5. **Output:**\n"
-            f"   - Provide the complete updated TypeScript code for `main{self.code_ext}` with the new code integrated."
-        )
-        prompt = (
-            "/think\n"
-            f"You are integrating new TypeScript code into an existing Obsidian plugin file (`main{self.code_ext}`). "
-            "The new code must be added to the `TimestampPlugin` class without modifying any existing code. "
-            "Follow these instructions carefully:\n\n"
-            "1. **Existing Code:**\n"
-            f"{existing_content}\n\n"
-            "2. **New Code to Integrate:**\n"
-            f"{new_code}\n\n"
-            "3. **Integration Rules:**\n"
-            "   - Add new methods or properties to the `TimestampPlugin` class.\n"
-            "   - Add new commands within the `onload` method using `this.addCommand`.\n"
-            "   - Preserve all existing imports, methods, and commands.\n"
-            "   - Add only necessary new imports that are not already present.\n"
-            "   - Ensure the code is properly formatted and uses TypeScript syntax.\n"
-            "   - Do not remove or alter any existing code.\n\n"
-            "4. **Output Instructions:**\n"
-            f"   - Your response must contain only the updated TypeScript code for `main{self.code_ext}`.\n"
-            "   - The code should start with the import statements and end with the closing brace of the class.\n"
-            "   - Do not include any comments, explanations, or additional text outside the code itself.\n"
-            "   - Do not add any markers or comments indicating the start or end of the updated code.\n"
-            "   - Do not include any lines containing the word 'typescript'.\n"
-            "   - The response must consist solely of the code, with no additional lines or text before or after.\n"
-            "   - The first line of your response should be a TypeScript import statement or the beginning of the class.\n\n"
-            "5. **Output:**\n"
-            f"   - Provide the complete updated TypeScript code for `main{self.code_ext}` with the new code integrated."
+            "   - Provide the complete updated TypeScript code for `main{self.code_ext}` with the new code integrated."
         )
         log_info(self.name, f"Code integration prompt length: {len(prompt)}")
-        log_info(self.name, f"Code integration prompt: {prompt}")
         response = self.llm.invoke(prompt)
         clean_response = remove_thinking_tags(response)
         updated_content = self.remove_unwanted_lines(clean_response.strip())
@@ -196,20 +217,33 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
 
     def integrate_tests_manually(self, existing_content: str, new_tests: str) -> str:
         """
-        Manually integrate new tests into the existing test file by handling imports and placing describe blocks at the top.
+        Manually integrate new tests into the existing test file by handling imports and placing describe blocks inside existing describe.
+        Always use '../main' import for TimestampPlugin.
         """
         log_info(self.name, "Starting manual test integration")
         existing_lines = existing_content.split('\n')
-        new_test_lines = new_tests.split('\n')
 
         # Remove any lines containing "typescript" or "javascript" from new test content
+        new_test_lines = new_tests.split('\n')
         new_test_lines = [line for line in new_test_lines if 'typescript' not in line.lower() and 'javascript' not in line.lower()]
+        new_tests = '\n'.join(new_test_lines)
         log_info(self.name, f"New test lines after removing unwanted lines: {len(new_test_lines)}")
         log_info(self.name, f"Filtered new test lines: {new_test_lines}")
 
+        # Strip outer describe('TimestampPlugin') if present to avoid duplicates
+        match = re.search(r"describe\('TimestampPlugin',\s*\(\)\s*=>\s*\{(.*)\}\);\s*$", new_tests, re.DOTALL)
+        if match:
+            new_tests = match.group(1).strip()
+            log_info(self.name, "Stripped outer describe block from new tests")
+
         # Extract import lines from new test content
-        new_imports = [line for line in new_test_lines if line.strip().startswith('import')]
+        new_imports = [line for line in new_tests.split('\n') if line.strip().startswith('import')]
         log_info(self.name, f"Extracted {len(new_imports)} import lines from new tests: {new_imports}")
+
+        # Force TimestampPlugin import to '../main'
+        for i, imp in enumerate(new_imports):
+            if 'TimestampPlugin' in imp:
+                new_imports[i] = "import TimestampPlugin from '../main';"
 
         # Find the end of the import section in existing content
         import_end_idx = 0
@@ -228,8 +262,8 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         if unique_new_imports:
             existing_lines = existing_lines[:import_end_idx] + unique_new_imports + [''] + existing_lines[import_end_idx:]
 
-        # Prepare new describe blocks
-        describe_blocks = [line for line in new_test_lines if not line.strip().startswith('import')]
+        # Prepare new describe blocks (inner content)
+        describe_blocks = [line for line in new_tests.split('\n') if not line.strip().startswith('import')]
 
         # Try to find the start of the top-level describe block
         describe_start_idx = -1
@@ -269,14 +303,20 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         return updated_content
 
     def remove_unwanted_lines(self, content: str) -> str:
-        """Remove any line that contains the words 'typescript' or 'javascript' (case-insensitive)."""
+        """Remove lines containing 'typescript'/'javascript' (case-insens.) or only '```'."""
         lines = content.split('\n')
-        filtered_lines = [line for line in lines if 'typescript' not in line.lower() and 'javascript' not in line.lower()]
+        filtered_lines = [line for line in lines if 'typescript' not in line.lower() and 'javascript' not in line.lower() and line.strip() != '```']
         removed_count = len(lines) - len(filtered_lines)
-        log_info(self.name, f"Removed {removed_count} lines containing 'typescript' or 'javascript'")
+        log_info(self.name, f"Removed {removed_count} unwanted lines (typescript/js/```)")
         filtered_content = '\n'.join(filtered_lines)
         log_info(self.name, f"Filtered content: {filtered_content}")
         return filtered_content
+
+    def strip_markdown_blocks(self, content: str) -> str:
+        """Remove markdown code blocks like ```typescript ... ```"""
+        pattern = r'```(?:typescript|javascript|js)?\\s*\\n[\\s\\S]*?\\n```'
+        cleaned = re.sub(pattern, '', content, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        return cleaned
 
     def generate_filename(self, task_description: str, task_title: str) -> str:
         """
@@ -315,11 +355,12 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             return filename
 
     def extract_content(self, text: str) -> str:
-        """Extract content directly from raw text since no markdown blocks are used."""
+        """Extract code content: strip thinking tags, markdown blocks, trim."""
         log_info(self.name, "Extracting content from raw text")
         log_info(self.name, f"Input text length: {len(text)}")
         log_info(self.name, f"Input text: {text}")
         clean_text = remove_thinking_tags(text)
+        clean_text = self.strip_markdown_blocks(clean_text)
         log_info(self.name, f"Extracted content length: {len(clean_text)}")
         log_info(self.name, f"Extracted content: {clean_text}")
         return clean_text.strip()

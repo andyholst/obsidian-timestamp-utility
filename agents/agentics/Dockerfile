@@ -3,7 +3,7 @@ FROM python:3.10-slim AS base
 # Install Node.js 22.x and npm
 RUN apt-get update && apt-get install -y curl && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
+    apt-get install -y nodejs git && \
     node --version && npm --version && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -18,7 +18,11 @@ ARG HOST_GID=1000
 # Copy and install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
-    rm -rf ~/.cache/pip
+    rm -rf ~/.cache/pip && \
+    mkdir -p /tmp/.cache/huggingface && \
+    chown -R ${HOST_UID}:${HOST_GID} /tmp/.cache/huggingface
+ENV HF_HOME=/tmp/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/tmp/.cache/huggingface
 
 WORKDIR /app
 
@@ -29,4 +33,3 @@ RUN groupadd -r appgroup -g ${HOST_GID} && useradd -r -u ${HOST_UID} -g appgroup
 RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
-USER appuser

@@ -207,17 +207,20 @@ class AsyncTaskManager:
 
     async def execute_batch(self, tasks: List[Callable], *args, **kwargs) -> List[Any]:
         """Execute multiple tasks concurrently with error handling"""
-        async def execute_single_task(task_func):
+        async def execute_single_task(task):
             try:
-                if asyncio.iscoroutinefunction(task_func):
-                    return await self.execute_with_semaphore(task_func, *args, **kwargs)
+                # Check if task is already a coroutine
+                if asyncio.iscoroutine(task):
+                    return await self.execute_with_semaphore(lambda: task)
+                elif asyncio.iscoroutinefunction(task):
+                    return await self.execute_with_semaphore(task, *args, **kwargs)
                 else:
                     # Run sync function in thread pool
                     loop = asyncio.get_event_loop()
-                    return await loop.run_in_executor(None, task_func, *args, **kwargs)
+                    return await loop.run_in_executor(None, task, *args, **kwargs)
             except Exception as e:
                 self.monitor.error(f"Batch task failed: {str(e)}")
-                return {"error": str(e), "task": task_func.__name__}
+                return {"error": str(e), "task": getattr(task, '__name__', str(task))}
 
         # Execute all tasks concurrently
         results = await asyncio.gather(

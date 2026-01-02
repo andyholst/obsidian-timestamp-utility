@@ -5,7 +5,7 @@ langchain-core==0.*
 pytest
 pytest-mock
 langgraph==0.*
-sentence-transformers
+sentence-transformers==3.1.1
 aiohttp
 mcp
 tenacity

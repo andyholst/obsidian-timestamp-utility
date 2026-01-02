@@ -65,7 +65,7 @@ _monitor = structured_log(__name__)
 _mcp_client = None
 
 
-def _init_global_services():
+async def _init_global_services():
     """Initialize global services and clients."""
     global _service_manager, _mcp_client, _config
 
@@ -73,13 +73,13 @@ def _init_global_services():
         _config = init_config()
 
     if _service_manager is None:
-        _service_manager = init_services(_config)
+        _service_manager = await init_services(_config)
 
     if _mcp_client is None:
         _mcp_client = init_mcp_client()
 
 
-def check_services() -> Dict[str, bool]:
+async def check_services() -> Dict[str, bool]:
     """
     Check the health status of all services.
 
@@ -87,7 +87,7 @@ def check_services() -> Dict[str, bool]:
         Dictionary mapping service names to health status.
     """
     if _service_manager is None:
-        _init_global_services()
+        await _init_global_services()
 
     return _service_manager.check_services_health()
 
@@ -105,10 +105,12 @@ async def create_composable_workflow(github_client=None, llm_reasoning=None, llm
     Returns:
         Initialized ComposableWorkflows instance.
     """
+    if _service_manager is None:
+        await _init_global_services()
     # Use provided overrides or defaults
-    ollama_reasoning = llm_reasoning or (_service_manager.ollama_reasoning if _service_manager and hasattr(_service_manager, 'ollama_reasoning') else None)
-    ollama_code = llm_code or (_service_manager.ollama_code if _service_manager and hasattr(_service_manager, 'ollama_code') else None)
-    github_client = github_client or (_service_manager.github if _service_manager and hasattr(_service_manager, 'github') else None)
+    ollama_reasoning = llm_reasoning or (_service_manager.ollama_reasoning._client if _service_manager and hasattr(_service_manager, 'ollama_reasoning') else None)
+    ollama_code = llm_code or (_service_manager.ollama_code._client if _service_manager and hasattr(_service_manager, 'ollama_code') else None)
+    github_client = github_client or (_service_manager.github._client if _service_manager and hasattr(_service_manager, 'github') else None)
 
     # Get MCP tools if available and not overridden
     if mcp_tools is None and _mcp_client:
@@ -150,6 +152,7 @@ class AgenticsApp:
         self.composable_workflows = None
         self.batch_processor = get_batch_processor()
         self.monitor = _monitor
+        self.lock = asyncio.Lock()
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -242,7 +245,8 @@ class AgenticsApp:
             """Process a single issue asynchronously."""
             try:
                 self.monitor.info("batch_issue_started", {"issue_url": issue_url})
-                result = await self.composable_workflows.process_issue(issue_url)
+                async with self.lock:
+                    result = await self.composable_workflows.process_issue(issue_url)
                 self.monitor.info("batch_issue_completed", {"issue_url": issue_url})
                 return {
                     "issue_url": issue_url,
@@ -297,7 +301,8 @@ class AgenticsApp:
         log_info(__name__, f"Processing issue: {issue_url}")
 
         try:
-            result = await self.composable_workflows.process_issue(issue_url)
+            async with self.lock:
+                result = await self.composable_workflows.process_issue(issue_url)
             self.monitor.info("issue_processing_completed", {"issue_url": issue_url})
             log_info(__name__, f"Successfully processed issue: {issue_url}")
             return result

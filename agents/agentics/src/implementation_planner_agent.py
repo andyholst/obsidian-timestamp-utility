@@ -35,8 +35,7 @@ class ImplementationPlannerAgent(BaseAgent):
                 "Analyze the following ticket and provide detailed implementation guidance. "
                 "Research and suggest existing npm packages that can support the implementation. "
                 "For each requirement, specify if it can be implemented using an npm package, manually, or a combination. "
-                "Return only a JSON object with the additional fields: "
-                "'implementation_steps' (list of detailed steps), 'npm_packages' (list of package names with brief descriptions), 'manual_implementation_notes' (string). "
+                "Return ONLY valid JSON with these exact fields. Schema example: {{\\\"implementation_steps\\\": [\\\"detailed step 1\\\", \\\"step 2\\\"], \\\"npm_packages\\\": [\\\"uuidv7 (UUIDv7 generation)\\\"], \\\"manual_implementation_notes\\\": \\\"notes\\\"}}. "
                 "Do not include the original fields in the response. Do not include any additional text, code blocks, or explanations.\n\n"
                 "Title: {title}\n"
                 "Description: {description}\n"
@@ -65,7 +64,12 @@ class ImplementationPlannerAgent(BaseAgent):
         result = parse_json_response(clean_response)
         log_info(self.logger, f"Parsed result: {result}")
 
-        # Merge with original
+        # Merge with original, preserving requirements and acceptance criteria
         enhanced = refined_ticket.copy()
         enhanced.update(result)
+        # Preserve original requirements and acceptance criteria, append any new ones from planner
+        enhanced['title'] = refined_ticket.get('title', '')
+        enhanced['description'] = refined_ticket.get('description', '')
+        enhanced['requirements'] = refined_ticket.get('requirements', []) + result.get('requirements', [])
+        enhanced['acceptance_criteria'] = refined_ticket.get('acceptance_criteria', []) + result.get('acceptance_criteria', [])
         return enhanced

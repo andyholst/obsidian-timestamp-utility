@@ -14,10 +14,18 @@ fi
 # Compose commands in the Makefile start with -f followed by a file in docker-compose-files/
 if [ "$1" = "-f" ] && [ -n "$2" ] && [[ "$2" == docker-compose-files/* ]]; then
     # Compose command: use 'compose' subcommand
-    if [ "$runtime" = "nerdctl" ]; then
-        exec nerdctl compose "$@"
+    if [[ "$3" == "run" ]]; then
+        if [ "$runtime" = "nerdctl" ]; then
+            exec nerdctl compose "$1" "$2" run --interactive=false "${@:4}"
+        else
+            exec docker compose "$1" "$2" run --interactive=false "${@:4}"
+        fi
     else
-        exec docker compose "$@"
+        if [ "$runtime" = "nerdctl" ]; then
+            exec nerdctl compose "$@"
+        else
+            exec docker compose "$@"
+        fi
     fi
 else
     # Direct command: pass straight to nerdctl or docker

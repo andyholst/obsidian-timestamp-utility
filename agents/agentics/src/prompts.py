@@ -1,30 +1,60 @@
+import logging
+import json
+from .utils import log_info
+
 class ModularPrompts:
     """Modular prompt components following LangChain best practices."""
 
     @staticmethod
     def get_base_instruction():
-        return "You are an expert TypeScript developer for Obsidian plugins. IMPORTANT: Respond ONLY with valid code, no explanations, no markdown, no thinking content."
+        return (
+            "You are an expert TypeScript developer specializing in Obsidian plugins. CRITICAL: You MUST implement ONLY the exact functionality described in the Task Details section below. Do NOT implement any unrelated functionality, such as swapCase, string reversal, or any other features unless explicitly requested in the task details. CRITICAL: Do NOT modify, delete, or fiddle with any existing code or tests. Generate and output ONLY brand new code and test additions strictly for the specified feature. Existing code and tests shall remain untouched. "
+            "Use proper TypeScript syntax: include type annotations, interfaces, and classes. Follow Obsidian plugin patterns: extend obsidian.Plugin, use onload() for commands with this.addCommand(), handle editor content with editor.replaceSelection() for insertion at cursor, and ensure all code is syntactically valid TypeScript. "
+            "Respond ONLY with valid code, no explanations, no markdown, no thinking content. "
+            "IMPORTANT: Follow the exact requirements and implementation steps specified in the task details - do not deviate or add extra features."
+            "CRITICAL: Use correct Obsidian API calls:\n"
+            "- Get active editor: const view = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView); if (!view) { new obsidian.Notice('No active note.'); return; } const editor = view.editor;\n"
+            "- Insert at cursor: editor.replaceSelection;\n"
+            "- Show message: new obsidian.Notice('message');\n"
+            "- Do not use getActiveTextEditor, App.instance, setValue for insertion, createErrorModal;\n"
+            "- NEVER redefine full class or onload(). Provide ONLY insertable snippets. Match EXACTLY existing patterns from examples below.\n"
+            "CRITICAL: TS strings use '; no ` backticks except template literals.\n\n"
+        )
 
     @staticmethod
     def get_code_structure_section(code_structure: str):
         return f"1. **Existing Code Structure:**\n - Classes: {code_structure}\n - The plugin class extends `obsidian.Plugin`.\n - Commands are added in the `onload` method using `this.addCommand`.\n - Helper functions and modals may be defined outside the class.\n\n"
 
     @staticmethod
-    def get_code_requirements_section():
-        return (
+    def get_code_requirements_section(raw_refined_ticket: str = "", original_ticket_content: str = ""):
+        base = (
             "2. **New Code Requirements:**\n"
             " - Add a new public method to the plugin class with a name derived from the task title.\n"
-            " - The method should have the signature: public {{method_name}}(text: string | null | undefined): string\n"
+            " - The method should have the signature: public {method_name}(): string if no input param needed (e.g., generators). Otherwise public {method_name}(text?: string): string\n"
             " - Implement the method to process the text according to the task details, following the implementation steps, using the suggested npm packages, or implementing manually as noted. Handle null and undefined inputs by returning an empty string.\n"
             " - Ensure the method is public and does not use `private` or `protected` keywords.\n"
-            " - Add a new command using `this.addCommand` within the `onload` method that gets the current editor content using ctx.editor.getValue(), calls this method with the content, and sets the editor content to the result using ctx.editor.setValue(result). Use the correct signature: editorCallback: (editor: obsidian.Editor, ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => void\n"
+            " - Add new command in `onload()` matching task:\n  - Insert/gen tasks: `this.addCommand({ id: '{command_id}', editorCallback: (editor: obsidian.Editor, ctx: MarkdownView | MarkdownFileInfo) => { editor.replaceSelection(this.{method_name}()); new obsidian.Notice('Done'); } })`\n  - Rename/file tasks: `this.addCommand({ id: '{command_id}', callback: () => { const file = this.app.workspace.getActiveFile(); if (!file) { new obsidian.Notice('No file'); return; } const p = file.parent!.path; this.app.fileManager.renameFile(file, `${p}/${this.{method_name}()}_${file.basename}.${file.extension}`); } })`\n - Null guards: `file!.parent!.path` after check, `?.` chaining, `if (!obj) return;`.\n"
             " - Reuse existing imports (e.g., `import * as obsidian from 'obsidian';`).\n"
             " - If npm packages are suggested and available, add the necessary imports for them.\n"
             " - Do not redefine existing classes, interfaces, methods, or functions.\n"
             " - Do not add new imports, modals, or external dependencies unless specified in the npm packages and available.\n"
             " - You may include single-line comments (//) above new methods to describe their purpose, but do not add any other comments or explanations.\n"
-            " - Keep the code simple and focused on the task; do not add complex features unless specified.\n\n"
+            " - Keep the code simple and focused on the task; do not add complex features unless specified.\n"
+            " - Before generating, proactively use validate_obsidian_api and validate_npm_package tools from api_validation_tools.py. If invalid, use alternatives like app.notice or manual DOM.\n"
+            " - Ensure code satisfies all acceptance criteria exactly. If vague, default to basic command + method with app.workspace.currentFile notice.\n"
+            " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n"
         )
+        if raw_refined_ticket:
+            formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
+            base += f"\n\n{formatted_section}"
+            log_info("ModularPrompts", f"Raw refined ticket section: {formatted_section}")
+            log_info("ModularPrompts", f"Requirements from refined_ticket: {raw_refined_ticket.get('requirements', []) if isinstance(raw_refined_ticket, dict) else 'not dict'}")
+            # Include full original content if preserved
+            if 'full_original_content' in raw_refined_ticket:
+                base += f"\n\nFull Original Ticket Content:\n{raw_refined_ticket['full_original_content']}"
+        if original_ticket_content:
+            base += f"\n\nOriginal ticket content for reference: {original_ticket_content}. Use this if refined fields are incomplete."
+        return base
 
     @staticmethod
     def get_test_structure_section(test_structure: str):
@@ -39,19 +69,39 @@ class ModularPrompts:
         )
 
     @staticmethod
-    def get_test_requirements_section():
-        return (
+    def get_test_requirements_section(raw_refined_ticket: str = "", original_ticket_content: str = ""):
+        base = (
+            "IMPORTANT: For generated tests, EXACTLY match existing test style in src/__tests__/*.test.ts:\n"
+            "- Use global describe, it, expect, beforeEach WITHOUT any import from 'jest'.\n"
+            "- Mock Obsidian using patterns from src/__mocks__/obsidian.ts.\n"
+            "- Avoid obsidian.Manifest or undefined types; use 'any' or mock consistently.\n"
+            "- Use jest.fn() for mocks where appropriate.\n\n"
             "2. **New Test Requirements:**\n"
             " - Generate exactly two `describe` blocks:\n"
             " - One for the method `{method_name}` added to the plugin class.\n"
             " - One for the command `{command_id}` added via `this.addCommand`.\n"
             " - For the method test, call `plugin.{method_name}('test input')` to use the real implementation and check the result (e.g., expect it to return a string or call mockEditor).\n"
             " - For the command test, execute `mockCommands['{command_id}'].callback()` to trigger the command, which should call `{method_name}` and interact with `mockEditor`.\n"
-            " - Match the style of existing tests (e.g., async tests with `await plugin.onload()`, checking `mockEditor.replaceSelection`).\n"
+            " - Match the style of existing tests (e.g., async tests with `await plugin.onload()`, expect(mockEditor.replaceSelection).toHaveBeenCalledWith(result)).\n"
             " - Only generate tests for `{method_name}` and `{command_id}`, as these are the new additions.\n"
             " - Do not access private methods or non-existent properties on the plugin.\n"
-            " - Do not use jest.spyOn on plugin methods.\n\n"
+            " - Do not use jest.spyOn on plugin methods.\n"
+            " - IMPORTANT: Do not use `plugin.commandIds` or any property access for command IDs; always use string literals like `'{command_id}'` in `mockCommands['{command_id}']`.\n"
+            "- Use `new TimestampPlugin(mockApp, {} as any)` matching existing tests. Mock `obsidian.Editor` completely: define `mockEditor` with **all** methods from Obsidian Editor API as `jest.fn()` - see [`src/__tests__/main.test.ts`](src/__tests__/main.test.ts:14) for exact mock (getDoc, refresh, setValue, replaceSelection, getValue, getLine, lineCount, etc. all `jest.fn()` with appropriate mocks like getValue: jest.fn(() => "")). Use `button.onclick = () => {}` for modals (lowercase). Match **EXACTLY** the method and command names specified in the Task Details and Generated Code sections. Follow [`src/__mocks__/obsidian.ts`](src/__mocks__/obsidian.ts) for other mocks.\n"
+             " - Tests must comprehensively cover code implementation. Ensure code satisfies all acceptance criteria exactly. If vague, default to basic command + method with app.workspace.currentFile notice.\n"
+             " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n\n"
         )
+        if raw_refined_ticket:
+            formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
+            base += f"\n\n{formatted_section}"
+            log_info("ModularPrompts", f"Raw refined ticket section: {formatted_section}")
+            log_info("ModularPrompts", f"Requirements from refined_ticket: {raw_refined_ticket.get('requirements', []) if isinstance(raw_refined_ticket, dict) else 'not dict'}")
+            # Include full original content if preserved
+            if 'full_original_content' in raw_refined_ticket:
+                base += f"\n\nFull Original Ticket Content:\n{raw_refined_ticket['full_original_content']}"
+        if original_ticket_content:
+            base += f"\n\nOriginal ticket content for reference: {original_ticket_content}. Use this if refined fields are incomplete."
+        return base
 
     @staticmethod
     def get_output_instructions_code():
@@ -74,6 +124,10 @@ class ModularPrompts:
             " - MUST include 'describe(' and 'it(' or 'test(' keywords.\n"
             " - Valid Jest syntax only."
         )
+    @staticmethod
+    def get_raw_refined_ticket_section():
+        return "**Full Raw Refined Ticket (JSON):**\n```json\n{raw_refined_ticket}\n```\n\n"
+
     @staticmethod
     def get_tool_instructions_for_code_extractor_agent():
         return (
@@ -138,6 +192,36 @@ class ModularPrompts:
         )
 
     @staticmethod
+    def get_collaborative_generation_prompt(code_structure: str, test_structure: str, method_name: str, command_id: str, main_file: str, test_file: str, raw_refined_ticket: str = "", original_ticket_content: str = ""):
+        """Generate prompt for collaborative code and test generation."""
+        formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
+        log_info("ModularPrompts", f"Raw refined ticket section: {formatted_section}")
+        return (
+            f"{ModularPrompts.get_base_instruction()}\n\n"
+            f"{ModularPrompts.get_code_structure_section(code_structure)}\n"
+            f"{ModularPrompts.get_code_requirements_section(raw_refined_ticket, original_ticket_content)}\n"
+            f"{ModularPrompts.get_test_structure_section(test_structure)}\n"
+            f"{ModularPrompts.get_test_requirements_section(raw_refined_ticket, original_ticket_content)}\n"
+            "3. **Collaborative Generation Requirements:**\n"
+            " - Generate both the TypeScript code additions and the Jest test additions together in a single response.\n"
+            " - First, output the complete code additions for {main_file}, starting directly with the new method and command.\n"
+            " - Then, output the complete test additions for {test_file}, starting with the two describe blocks.\n"
+            " - Ensure code and tests are mutually consistent: tests must validate the exact implementation in the code.\n"
+            " - Use cross-validation: code should pass the generated tests, and tests should accurately reflect the code's behavior.\n"
+            " - Follow iterative refinement: if initial generation has issues, refine both code and tests collaboratively.\n\n"
+            "4. **Task Details:**\n"
+            "{{task_details}}\n\n"
+            f"{formatted_section}"
+            "5. **Output Format:**\n"
+            " - Start with: // CODE ADDITIONS FOR {main_file}\n"
+            " - Follow with the exact code to add.\n"
+            " - Then: // TEST ADDITIONS FOR {test_file}\n"
+            " - Follow with the exact test code.\n"
+            " - NO extra text, explanations, or markdown.\n"
+            " - Ensure all code is valid TypeScript and Jest syntax."
+        )
+
+    @staticmethod
     def get_tool_instructions_for_post_test_runner_agent():
         return (
             "7. **Available Tools:**\n"
@@ -152,4 +236,23 @@ class ModularPrompts:
             "- Use npm_run_tool to execute the test script and capture output for analysis.\n"
             "- Use write_file_tool to save detailed test failure logs when tests fail.\n"
             "- Always handle tool failures gracefully and provide meaningful error messages.\n\n"
+        )
+
+    @staticmethod
+    def get_ticket_clarity_evaluation_prompt():
+        return (
+            "Return only valid JSON on the first line. No thinking, no explanations, no markdown.\n\n"
+            "Evaluate the clarity of the following ticket and provide a JSON object with 'is_clear' (boolean) and 'suggestions' (list of strings).\n\n"
+            "Ticket:\n{ticket_content}\n\n"
+            "JSON:"
+        )
+
+    @staticmethod
+    def get_ticket_clarity_improvements_prompt():
+        return (
+            "Return only valid JSON on the first line. No thinking, no explanations, no markdown.\n\n"
+            "CRITICAL: Refine ticket to structured JSON.\n\n"
+            "Ticket:\n{ticket_content}\n\n"
+            "Suggestions:\n{suggestions}\n\n"
+            "JSON:"
         )

@@ -11,11 +11,12 @@ from src.composable_workflows import ComposableWorkflows
 from src.agentics import AgenticsApp, create_composable_workflow
 from src.performance import get_batch_processor, get_task_manager
 
+import time
 
 @pytest.fixture
-def composable_workflow():
+async def composable_workflow():
     """Fixture for real ComposableWorkflows instance."""
-    return create_composable_workflow()
+    return await create_composable_workflow()
 
 
 class TestParallelProcessingIntegration:
@@ -236,4 +237,26 @@ class TestParallelProcessingIntegration:
         monitoring_data = composable_workflow.get_monitoring_data()
 
         # Verify monitoring data is available
+    @pytest.mark.integration
+    def test_concurrent_futures_parallel_timing(self):
+        """Test concurrent.futures for parallel agent execution with timing assertion."""
+        def slow_agent_task(agent_id):
+            time.sleep(1)
+            return f"agent_{agent_id}_completed"
+        
+        start_time = time.time()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            futures = [executor.submit(slow_agent_task, i) for i in range(4)]
+            results = [future.result() for future in concurrent.futures.as_completed(futures)]
+        end_time = time.time()
+        
+        duration = end_time - start_time
+        
+        # 4 tasks in parallel should take ~1s not 4s
+        assert duration &lt; 2.0, f"Concurrent execution took too long: {duration:.2f}s (expected &lt;2.0s)"
+        assert len(results) == 4
+        assert all("agent_" in r for r in results)
+        # Order independence verification
+        agent_ids = [r.split('_')[1] for r in results]
+        assert set(agent_ids) == set(['0', '1', '2', '3'])
         assert isinstance(monitoring_data, dict)
