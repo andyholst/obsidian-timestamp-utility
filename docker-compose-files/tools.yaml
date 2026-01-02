@@ -3,6 +3,8 @@ services:
     build:
       context: ..
       dockerfile: docker-files/npm/Dockerfile
+    stdin_open: false
+    tty: false
     volumes:
     - ../:/app
     working_dir: /app

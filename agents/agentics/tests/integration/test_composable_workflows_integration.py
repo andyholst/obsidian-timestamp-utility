@@ -16,7 +16,6 @@ import pytest
 import os
 import json
 import re
-from sentence_transformers import SentenceTransformer, util
 
 # Import the composable workflow components
 from src.composable_workflows import ComposableWorkflows
@@ -24,12 +23,18 @@ from src.agentics import create_composable_workflow, check_services
 from src.state import CodeGenerationState
 from src.agent_composer import WorkflowConfig
 
-# Load sentence transformer for semantic similarity
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Regex pattern to match function definitions
+import asyncio
+import time
+from langchain_core.runnables import RunnableParallel, RunnableLambda
+from src.state import CodeGenerationState
 FUNCTION_PATTERN = re.compile(r'\bfunction\b|\bclass\b|=>')
 
+@pytest.fixture(scope="session")
+def sentence_model():
+    from sentence_transformers import SentenceTransformer
+    return SentenceTransformer('all-MiniLM-L6-v2', cache_folder="/tmp/.cache/huggingface")
 # Helper function to calculate semantic similarity
 def calculate_semantic_similarity(expected_text, actual_text):
     """Calculate semantic similarity between two texts."""
@@ -65,10 +70,11 @@ class TestComposableWorkflowsIntegration:
     @pytest.fixture
     def composable_workflow(self):
         """Fixture for real ComposableWorkflows instance."""
-        return create_composable_workflow()
+        return asyncio.run(create_composable_workflow())
 
     @pytest.mark.integration
-    def test_composable_workflows_initialization(self, composable_workflow):
+    def test_composable_workflows_initialization(self, composable_workflow, sentence_model):
+        self.model = sentence_model
         """Test that ComposableWorkflows initializes correctly with all components."""
         # Verify workflows are created
         assert composable_workflow.issue_processing_workflow is not None
@@ -261,7 +267,7 @@ class TestComposableWorkflowsIntegration:
     @pytest.mark.integration
     def test_create_composable_workflow_function(self):
         """Test the create_composable_workflow factory function."""
-        workflow = create_composable_workflow()
+        workflow = asyncio.run(create_composable_workflow())
 
         # Verify it's a ComposableWorkflows instance
         assert isinstance(workflow, ComposableWorkflows)
@@ -327,6 +333,36 @@ class TestComposableWorkflowsIntegration:
         ticket = result["refined_ticket"]
         assert "title" in ticket
         assert "requirements" in ticket
+    @pytest.mark.integration
+    def test_lcel_parallel_agent_simulation(self, dummy_state):
+        """Test LCEL parallel execution with dummy agents simulating concurrent processing."""
+        async def agent1_process(state):
+            await asyncio.sleep(1)
+            return state.__dict__ | {"agent": "agent1", "result": "completed", "timestamp": time.time()}
+        
+        async def agent2_process(state):
+            await asyncio.sleep(1)
+            return state.__dict__ | {"agent": "agent2", "result": "completed", "timestamp": time.time()}
+        
+        parallel_workflow = RunnableParallel(
+            branch1=RunnableLambda(agent1_process),
+            branch2=RunnableLambda(agent2_process)
+        )
+        
+        start_time = time.time()
+        result = asyncio.run(parallel_workflow.ainvoke(dummy_state))
+        end_time = time.time()
+        
+        duration = end_time - start_time
+        
+        # Parallel execution should complete in roughly 1s, not 2s sequential
+        assert duration &lt; 1.5, f"Parallel execution took too long: {duration:.2f}s (expected &lt;1.5s)"
+        
+        assert "branch1" in result
+        assert "branch2" in result
+        assert result["branch1"]["agent"] == "agent1"
+        assert result["branch2"]["agent"] == "agent2"
+        assert abs(result["branch1"]["timestamp"] - result["branch2"]["timestamp"]) &lt; 0.5  # timestamps close
 
         # Verify code and tests were generated (from code generation phase)
         assert len(result["generated_code"]) > 0

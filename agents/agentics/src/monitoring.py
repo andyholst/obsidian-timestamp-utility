@@ -130,6 +130,8 @@ class StructuredLogger(logging.Logger):
 
         # Use parent class logging method
         super().log(level, message)
+        # Duplicate to root logger for pytest caplog visibility
+        logging.getLogger().log(level, message)
 
     def log(self, level: int, msg: str, *args, **kwargs):
         """Override log method to support structured logging"""

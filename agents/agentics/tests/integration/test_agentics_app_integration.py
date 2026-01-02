@@ -211,11 +211,9 @@ class TestAgenticsAppIntegration:
         invalid_urls = ["https://invalid-url/issues/1"]
         mixed_urls = valid_urls + invalid_urls
 
-        batch_result = await agentics_app.process_issues_batch(mixed_urls)
-
-        # Should handle mixed success/failure gracefully
-        assert batch_result["total_issues"] == len(mixed_urls)
-        assert batch_result["successful"] + batch_result["failed"] == len(mixed_urls)
+        # Should raise ValidationError for invalid URLs in batch
+        with pytest.raises(ValidationError):
+            await agentics_app.process_issues_batch(mixed_urls)
 
     @pytest.mark.integration
     async def test_configuration_loading_and_validation(self):
@@ -233,7 +231,7 @@ class TestAgenticsAppIntegration:
             # Test configuration validation
             with patch.dict(os.environ, {'GITHUB_TOKEN': ''}):
                 with pytest.raises(Exception):  # ConfigValidationError
-                    AgenticsConfig()
+                    init_config(AgenticsConfig())
 
             with patch.dict(os.environ, {'OLLAMA_HOST': 'invalid-url'}):
                 with pytest.raises(Exception):  # ConfigValidationError

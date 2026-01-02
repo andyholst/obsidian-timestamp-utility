@@ -7,7 +7,7 @@ from src.state import State
 # Path to the real project directory mounted in the test environment
 REAL_PROJECT_ROOT = '/project'
 
-def test_post_test_runner_agent_success():
+def test_post_test_runner_agent_success(dummy_llm):
     """
     Test that PostTestRunnerAgent successfully runs npm install and npm test
     in the real /project directory, which is mounted in the test environment.

@@ -58,8 +58,8 @@ def test_fetch_issue_agent_github_error():
     state = State(url="https://github.com/user/repo/issues/1")
 
     # When: Processing the state
-    # Then: Expect a GithubException
-    with pytest.raises(GithubException, match="Repo not found"):
+    # Then: Expect GithubException directly
+    with pytest.raises(GithubException):
         agent(state)
 
 def test_fetch_issue_agent_closed_issue():

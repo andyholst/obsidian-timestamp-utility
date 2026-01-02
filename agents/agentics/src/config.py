@@ -59,6 +59,13 @@ class AgenticsConfig(BaseModel):
             raise ConfigValidationError("OLLAMA_HOST must be a valid HTTP/HTTPS URL")
         return model
 
+    @field_validator('github_token')
+    @classmethod
+    def validate_github_token(cls, v: Optional[str]) -> str:
+        if v is None or str(v).strip() == "":
+            raise ValueError("GITHUB_TOKEN must be a non-empty string")
+        return v
+
     def get_reasoning_llm_config(self) -> LLMConfig:
         """Get configuration for reasoning LLM."""
         return LLMConfig(
@@ -104,8 +111,9 @@ def init_config(config: Optional[AgenticsConfig] = None) -> AgenticsConfig:
     global _config
     if config is None:
         config = AgenticsConfig()
-    if config.github_token is None:
-        raise ConfigValidationError("GITHUB_TOKEN environment variable is required")
+    logging.debug(f"init_config: github_token = {repr(config.github_token)}")
+    if config.github_token is None or config.github_token == '':
+        raise ConfigValidationError("GITHUB_TOKEN environment variable is required and cannot be empty")
     _config = config
 
     # Setup logging with the configured level

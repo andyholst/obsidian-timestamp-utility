@@ -116,51 +116,37 @@ def check_file_exists_tool(file_path: str) -> bool:
 @tool
 def npm_search_tool(package_name: str, limit: int = 5) -> str:
     """
-    Search for npm packages and return suggestions with descriptions.
+    Search for npm packages and return version info.
 
     Args:
-        package_name: Name or keyword to search for
-        limit: Maximum number of results to return (default: 5)
+        package_name: Name of the package to search for
 
     Returns:
-        JSON string with package suggestions including name, description, and version
+        Dict with 'version' key
     """
-    import subprocess
+    from functools import lru_cache
+    import requests
     import json
-    try:
-        # Use npm search command
-        result = subprocess.run(
-            ['npm', 'search', package_name, '--json'],
-            capture_output=True, text=True, timeout=30
-        )
 
-        if result.returncode == 0:
-            try:
-                packages = json.loads(result.stdout)
-                if isinstance(packages, list):
-                    # Limit results and format
-                    limited_packages = packages[:limit]
-                    formatted_results = []
-                    for pkg in limited_packages:
-                        formatted_results.append({
-                            'name': pkg.get('name', ''),
-                            'description': pkg.get('description', ''),
-                            'version': pkg.get('version', ''),
-                            'keywords': pkg.get('keywords', [])
-                        })
-                    return json.dumps(formatted_results, indent=2)
-                else:
-                    return json.dumps([packages], indent=2)
-            except json.JSONDecodeError:
-                return f"Raw search results for '{package_name}': {result.stdout[:500]}"
-        else:
-            return f"npm search failed: {result.stderr}"
-    except Exception as e:
-        return f"Error searching npm packages: {str(e)}"
+    @lru_cache(maxsize=128)
+    def _search(package_name: str) -> dict:
+        try:
+            url = f"https://registry.npmjs.org/-/v1/search?text={package_name}&size=1"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if 'objects' in data and data['objects']:
+                    version = data['objects'][0]['package']['version']
+                    return json.dumps([{'name': package_name, 'version': version}])
+        except Exception as e:
+            pass
+        return json.dumps([])
+
+    return _search(package_name)
 
 
 @tool
-def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: bool = False) -> str:
+def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: bool = False, cwd: str = "") -> str:
     """
     Install an npm package or all dependencies if no package specified.
 
@@ -168,11 +154,13 @@ def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: b
         package_name: Name of the package to install (empty string to install all dependencies)
         is_dev: Whether to install as dev dependency (default: False)
         save_exact: Whether to save exact version (default: False)
+        cwd: Working directory to run the command in (default: project root)
 
     Returns:
         Success message or error details
     """
     import subprocess
+    import os
     try:
         cmd = ['npm', 'install']
         if is_dev:
@@ -182,7 +170,11 @@ def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: b
         if package_name:
             cmd.append(package_name)
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        # Set working directory - default to project root if not provided
+        project_root = os.getenv('PROJECT_ROOT', '/project')
+        cwd_path = cwd if cwd else project_root
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=cwd_path)
 
         if result.returncode == 0:
             if package_name:
@@ -199,7 +191,7 @@ def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: b
 
 
 @tool
-def npm_list_tool(depth: int = 0) -> str:
+def npm_list_tool(depth: int = 0, cwd: str = "") -> str:
     """
     List installed npm packages.
 
@@ -209,6 +201,7 @@ def npm_list_tool(depth: int = 0) -> str:
     Returns:
         JSON string with installed packages information
     """
+    import os
     import subprocess
     import json
     try:
@@ -216,7 +209,9 @@ def npm_list_tool(depth: int = 0) -> str:
         if depth > 0:
             cmd.extend(['--depth', str(depth)])
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        project_root = os.getenv('PROJECT_ROOT', '/project')
+        cwd_path = cwd if cwd else project_root
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=cwd_path)
 
         if result.returncode == 0:
             try:
@@ -231,7 +226,7 @@ def npm_list_tool(depth: int = 0) -> str:
 @tool
 def write_file_tool(file_path: str, content: str) -> str:
     """
-    Write content to a file from the project root.
+    Write content to a file.
 
     Args:
         file_path: Relative path to the file from project root
@@ -241,35 +236,51 @@ def write_file_tool(file_path: str, content: str) -> str:
         Success message or error details
     """
     import os
+    from .monitoring import structured_log
+    monitor = structured_log("write_file_tool")
     project_root = os.getenv('PROJECT_ROOT', '/project')
     full_path = os.path.join(project_root, file_path)
     try:
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
+        monitor.info("File written successfully")
         return f"Successfully wrote to {file_path}"
     except Exception as e:
+        monitor.error(f"Error writing to file {file_path}: {str(e)}")
         return f"Error writing to file {file_path}: {str(e)}"
 
 
 @tool
-def npm_run_tool(script: str, args: str = "") -> str:
+def npm_run_tool(script: str, args: str = "", cwd: str = "") -> str:
     """
     Run an npm script.
 
     Args:
         script: The npm script to run (e.g., 'test', 'build')
         args: Additional arguments for the script
+        cwd: Working directory to run the command in (default: project root)
 
     Returns:
         Output of the npm run command or error details
     """
     import subprocess
+    import os
     try:
         cmd = ['npm', 'run', script]
         if args:
             cmd.extend(args.split())
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+        # Set working directory - default to project root if not provided
+        project_root = os.getenv('PROJECT_ROOT', '/project')
+        cwd_path = cwd if cwd else project_root
+
+        # Add logging to validate cwd
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"npm_run_tool: Running in cwd: {cwd_path}, cmd: {cmd}")
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=cwd_path)
         if result.returncode == 0:
             return result.stdout
         else:
@@ -278,7 +289,66 @@ def npm_run_tool(script: str, args: str = "") -> str:
         return f"Error running npm script {script}: {str(e)}"
 
 
+@tool
+def typescript_typecheck_tool(cwd: str = "") -> str:
+    """
+    Perform TypeScript typecheck using `npx tsc --noEmit`.
+    Args:
+        cwd: Working directory to run the command in (default: project root).
+    
+    Returns:
+        "TypeScript typecheck passed." if successful.
+    
+    Raises:
+        CompileError if there are TypeScript errors.
+    """
+    import os
+    import subprocess
+    import logging
+    from .exceptions import CompileError
+    
+    project_root = os.getenv('PROJECT_ROOT', '/project')
+    cwd_path = cwd if cwd else project_root
+    
+    cmd = ['npx', 'tsc', '--noEmit']
+    logger = logging.getLogger(__name__)
+    logger.info(f"typescript_typecheck_tool: Running in cwd: {cwd_path}, cmd: {cmd}")
+    
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=cwd_path)
+    if result.returncode == 0:
+        return "TypeScript typecheck passed."
+    else:
+        logger.warning(f"tsc stdout: {result.stdout[:1000]}")
+        logger.warning(f"tsc stderr: {result.stderr[:1000]}")
+        raise CompileError(f"TypeScript errors:\\nSTDOUT:\\n{result.stdout}\\nSTDERR:\\n{result.stderr}")
+
+@tool
+def execute_command_tool(command: str, cwd: str = "") -> str:
+    """
+    Execute a CLI command.
+
+    Args:
+        command: The command to execute
+        cwd: Working directory to run the command in (default: project root)
+
+    Returns:
+        Output of the command or error details
+    """
+    import subprocess
+    import os
+    try:
+        project_root = os.getenv('PROJECT_ROOT', '/project')
+        cwd_path = cwd if cwd else project_root
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60, cwd=cwd_path)
+        if result.returncode == 0:
+            return result.stdout
+        else:
+            return f"Command failed: {result.stderr}"
+    except Exception as e:
+        return f"Error executing command: {str(e)}"
+
+
 # Export tools for use by agents
-__all__ = ['ToolExecutor', 'read_file_tool', 'list_files_tool', 'check_file_exists_tool', 'npm_search_tool', 'npm_install_tool', 'npm_list_tool', 'write_file_tool', 'npm_run_tool']
+__all__ = ['ToolExecutor', 'read_file_tool', 'list_files_tool', 'check_file_exists_tool', 'npm_search_tool', 'npm_install_tool', 'npm_list_tool', 'write_file_tool', 'npm_run_tool', 'typescript_typecheck_tool', 'execute_command_tool']
 
 

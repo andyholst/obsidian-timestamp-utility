@@ -11,6 +11,7 @@ os.environ['PROJECT_ROOT'] = '/tmp/test_project'
 import pytest
 import os
 import time
+import asyncio
 from github import GithubException
 
 from src.agentics import create_composable_workflow, check_services, AgenticsApp
@@ -25,7 +26,7 @@ class TestEdgeCasesAndMonitoringIntegration:
     @pytest.fixture
     def workflow_system(self):
         """Fixture for real workflow system."""
-        return create_composable_workflow()
+        return asyncio.run(create_composable_workflow())
 
 
     @pytest.mark.integration
@@ -267,25 +268,27 @@ class TestEdgeCasesAndMonitoringIntegration:
         # Verify workflow completed
         assert result is not None
 
+    @pytest.mark.asyncio
     @pytest.mark.integration
-    def test_error_context_preservation_for_debugging(self, workflow_system):
+    async def test_error_context_preservation_for_debugging(self, workflow_system):
         """Test that error context is preserved for debugging purposes."""
         # Use invalid URL to trigger error
         issue_url = "https://invalid-url/issues/1"
 
         # Execute and expect error
         with pytest.raises(Exception):
-            workflow_system.process_issue(issue_url)
+            await workflow_system.process_issue(issue_url)
 
+    @pytest.mark.asyncio
     @pytest.mark.integration
-    def test_backward_compatibility_wrapper(self):
+    async def test_backward_compatibility_wrapper(self, workflow_system):
         """Test the backward compatibility wrapper maintains old interface."""
         # Test the app wrapper
         test_repo_url = os.getenv("TEST_ISSUE_URL")
         assert test_repo_url is not None, "TEST_ISSUE_URL environment variable is required"
         initial_state = {"url": f"{test_repo_url}/issues/1"}
 
-        result = app.invoke(initial_state)
+        result = await workflow_system.full_workflow.ainvoke(initial_state, config={"configurable": {"thread_id": "test_thread"}})
 
         # Verify wrapper works
         assert result is not None

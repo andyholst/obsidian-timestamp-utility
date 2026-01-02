@@ -146,6 +146,19 @@ class ProcessLLMAgent(BaseAgent):
         log_info(self.name, f"Before processing in {self.name}: {safe_json_dumps(state, indent=2)}")
         log_info(self.name, "Starting LLM processing with LCEL chain")
 
+        # Bypass re-processing if refined_ticket is already structured
+        if 'refined_ticket' in state:
+            refined = state['refined_ticket']
+            if isinstance(refined, dict) and all(key in refined for key in ['title', 'description', 'requirements', 'acceptance_criteria']):
+                # Ensure all expected keys with defaults
+                refined.setdefault('implementation_steps', [])
+                refined.setdefault('npm_packages', [])
+                refined.setdefault('manual_implementation_notes', '')
+                state['result'] = refined
+                log_info(self.name, f"Bypassed LLM re-processing using refined_ticket. Reqs len: {len(refined.get('requirements', []))}, AC len: {len(refined.get('acceptance_criteria', []))}")
+                log_info(self.name, f"After bypass in {self.name}: {safe_json_dumps(state, indent=2)}")
+                return state
+
         # Check cache first
         ticket_content = state.get('refined_ticket', state.get('ticket_content', ''))
         if isinstance(ticket_content, dict):

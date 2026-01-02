@@ -10,8 +10,8 @@ import json
 
 from src.test_suite import (
     LLMTestSuiteValidator,
-    TestSuiteValidationResult,
-    TestSuiteRiskLevel,
+    SuiteValidationResult,
+    SuiteRiskLevel,
     validate_llm_test_suite,
     generate_test_suite_report
 )
@@ -219,7 +219,7 @@ class TextProcessor:
         )
 
         # Assert
-        assert isinstance(result, TestSuiteValidationResult)
+        assert isinstance(result, SuiteValidationResult)
         assert result.code_hash
         assert result.test_hash
         assert result.overall_score >= 0
@@ -248,7 +248,7 @@ class TextProcessor:
         )
 
         # Assert
-        assert isinstance(result, TestSuiteValidationResult)
+        assert isinstance(result, SuiteValidationResult)
         assert result.overall_score >= 0
         assert result.overall_score <= 100
 
@@ -346,8 +346,8 @@ describe('TextProcessor', () => {
     def test_global_functions(self, sample_typescript_code, sample_typescript_tests):
         """Test global convenience functions"""
         # Act
-        result = validate_llm_test_suite(sample_typescript_code, sample_typescript_tests)
-        report = generate_test_suite_report(sample_typescript_code, sample_typescript_tests, result)
+        result, report = validate_llm_test_suite(sample_typescript_code, sample_typescript_tests)
+        report2 = generate_test_suite_report(sample_typescript_code, sample_typescript_tests, result[0])
 
         # Assert
         assert isinstance(result, TestSuiteValidationResult)
@@ -376,7 +376,7 @@ describe('TextProcessor', () => {
     def test_comprehensive_validation_workflow(self, test_suite_validator, sample_typescript_code, sample_typescript_tests):
         """Test the complete validation workflow end-to-end"""
         # Act
-        result = validate_llm_test_suite(
+        result, _ = validate_llm_test_suite(
             sample_typescript_code,
             sample_typescript_tests,
             context={

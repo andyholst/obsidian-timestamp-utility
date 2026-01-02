@@ -253,3 +253,16 @@ def init_unit_test_config():
         github_token=os.getenv("GITHUB_TOKEN", "test_token"),
         ollama_host="http://localhost:11434"
     ))
+
+def pytest_collection_finish(session):
+    print(f"\n=== Collected {len(session.items)} tests before running ===")
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    stats = terminalreporter.stats
+    passed = len(stats.get('passed', []))
+    failed = len(stats.get('failed', []))
+    error = len(stats.get('error', []))
+    xpassed = len(stats.get('xpassed', []))
+    xfailed = len(stats.get('xfailed', []))
+    run_count = passed + failed + error + xpassed + xfailed
+    print(f"\n=== Actually ran {run_count} tests ({passed} passed, {failed} failed, {error} error, {xpassed} xpassed, {xfailed} xfailed) ===")

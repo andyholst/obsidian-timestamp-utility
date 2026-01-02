@@ -18,6 +18,7 @@ class TestSpec:
     test_type: str = "unit"
     coverage_requirements: Optional[dict] = None
 
+TestSpec.__test__ = False
 
 @dataclass(frozen=True)
 class ValidationResults:

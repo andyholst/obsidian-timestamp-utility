@@ -58,3 +58,13 @@ class BatchProcessingError(AgenticsError):
 class HealthCheckError(AgenticsError):
     """Raised when health checks fail."""
     pass
+
+
+class TestRecoveryNeeded(AgenticsError):
+    """Raised when tests fail and recovery is needed."""
+    pass
+
+
+class CompileError(AgenticsError):
+    """Raised when TypeScript compilation fails."""
+    pass

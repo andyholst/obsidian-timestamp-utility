@@ -32,7 +32,7 @@ except ImportError:
     parent_dir = os.path.dirname(current_dir)
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
-    
+
     try:
         from utils import log_info
         from monitoring import structured_log
@@ -953,6 +953,119 @@ class LLMCodeValidationPipeline:
                 report.warnings.append("Improve error handling patterns")
             if not report.pattern_validation.state_management:
                 report.suggestions.append("Implement proper state management patterns")
+
+
+class PostGenValidator:
+    """Post-generation validator for fixing imports and enforcing class names in generated JS/TS code"""
+
+    def __init__(self):
+        self.monitor = structured_log(__name__)
+
+    def validate_and_fix(self, code: str, state: Dict[str, Any]) -> None:
+        """Validate and fix generated code, output to state['validated_code']"""
+        fixed_code = code
+
+        # Fix missing imports
+        fixed_code = self._fix_missing_imports(fixed_code, state)
+
+        # Enforce class names
+        fixed_code = self._enforce_class_names(fixed_code, state)
+
+        # Validate coverage
+        self._validate_coverage(fixed_code, state)
+
+        # Log changes
+        changes = self._log_changes(code, fixed_code)
+        if changes:
+            self.monitor.info(f"PostGenValidator changes: {changes}")
+
+        state['validated_code'] = fixed_code
+
+    def _fix_missing_imports(self, code: str, state: Dict[str, Any]) -> str:
+        """Add missing imports from state"""
+        missing_imports = state.get('missing_imports', [])
+        if not missing_imports:
+            return code
+
+        # Check if already present
+        lines = code.split('\n')
+        existing_imports = set()
+        for line in lines:
+            if line.strip().startswith('import'):
+                existing_imports.add(line.strip())
+
+        new_imports = []
+        for imp in missing_imports:
+            if imp not in existing_imports:
+                new_imports.append(imp)
+
+        if not new_imports:
+            return code
+
+        # Find insertion point (after existing imports or at top)
+        insert_idx = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith('import'):
+                insert_idx = i + 1
+            elif line.strip() and not line.strip().startswith('//'):
+                break
+
+        # Insert new imports
+        for imp in reversed(new_imports):
+            lines.insert(insert_idx, imp)
+
+        return '\n'.join(lines)
+
+    def _enforce_class_names(self, code: str, state: Dict[str, Any]) -> str:
+        """Enforce expected class names via rename"""
+        expected_classes = state.get('expected_classes', [])
+        if not expected_classes:
+            return code
+
+        # Find class definitions
+        class_pattern = r'class\s+(\w+)'
+        matches = re.findall(class_pattern, code)
+
+        if not matches:
+            return code
+
+        # If multiple classes or mismatch, rename the first one to expected[0]
+        # For simplicity, assume one class, rename if not matching
+        current_class = matches[0]
+        if current_class not in expected_classes:
+            expected = expected_classes[0]
+            # Replace class name
+            code = re.sub(rf'\bclass\s+{re.escape(current_class)}\b', f'class {expected}', code)
+            # Replace constructor and other references if needed (simplified)
+            code = re.sub(rf'\bnew\s+{re.escape(current_class)}\b', f'new {expected}', code)
+
+        return code
+
+    def _validate_coverage(self, code: str, state: Dict[str, Any]) -> None:
+        """Validate that expected classes are present"""
+        expected_classes = state.get('expected_classes', [])
+        class_pattern = r'class\s+(\w+)'
+        found_classes = set(re.findall(class_pattern, code))
+
+        missing = set(expected_classes) - found_classes
+        if missing:
+            self.monitor.warning(f"Missing expected classes: {missing}")
+
+    def _log_changes(self, original: str, fixed: str) -> str:
+        """Log changes made"""
+        if original == fixed:
+            return ""
+        # Simple diff: count lines changed
+        orig_lines = set(original.split('\n'))
+        fixed_lines = set(fixed.split('\n'))
+        added = fixed_lines - orig_lines
+        removed = orig_lines - fixed_lines
+        changes = []
+        if added:
+            changes.append(f"Added: {len(added)} lines")
+        if removed:
+            changes.append(f"Removed: {len(removed)} lines")
+        return "; ".join(changes)
 
 
 # Global instances

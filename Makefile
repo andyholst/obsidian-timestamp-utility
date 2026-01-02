@@ -15,7 +15,7 @@ HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 export HOST_UID HOST_GID
 
-.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs create-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite check-secrets lint-python
+.PHONY: all build-image build-app test-app release changelog clean clean-oci clean-cache clean-logs create-logs stop-containers test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast check-deps check-github test-agents build-image-agents run-agentics generate-requirements start-mcp stop-mcp check-mcp check-mcp-start test-agents-unit-verbose test-agents-integration-verbose test-agents-unit-fail-verbose test-agents-integration-fail-verbose test-agents-unit-watch test-agents-integration-watch validate-test-suite collect-tests collect-executed check-secrets lint-python test-agents-e2e fix-perms
 
 all: build-app test-app release
 
@@ -45,8 +45,9 @@ release: clean build-app
 		test -f release/release-timestamp-utility-$(TAG).zip || { echo "Release zip not created"; exit 1; }
 
 clean: clean-cache clean-logs stop-containers
-		@echo "🧹 Cleaning up build artifacts..."
-		rm -rf release dist
+	@echo "🧹 Cleaning up build artifacts..."
+	rm -rf release dist
+	find . -name "*.txt" -not -path "*/node_modules/*" -not -path "*/agents/agentics/*" -delete
 
 clean-oci: clean clean-logs
 		@echo "🧹 Stopping and removing all containers..."
@@ -69,7 +70,7 @@ clean-logs:
 		find . -name "*.log" -type f -delete
 
 create-logs:
-		mkdir -p logs/failed logs/success && chmod -R 777 logs && ln -sf $(PWD)/logs agents/agentics/logs
+		rm -rf logs && mkdir -p logs/failed logs/success && chmod -R 777 logs && ln -sf $(PWD)/logs agents/agentics/logs
 
 stop-containers:
 		./scripts/containerd_wrapper.sh -f docker-compose-files/agents.yaml down --remove-orphans
@@ -86,32 +87,52 @@ build-image-agents:
 		env HOST_UID=$(HOST_UID) HOST_GID=$(HOST_GID) $(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) build; \
 	fi
 
-run-agentics: build-image-agents check-deps
+run-agentics: build-image-agents check-deps check-github
 	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans agentics
+test-agents-unit: fix-perms
+	mkdir -p results && chmod 777 results
+	$(MAKE) collect-tests TYPE=unit
+	mv collected_tests_unit.txt results/collected_tests_unit.txt
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans -e TEST_FILTER="$(TEST_FILTER)" unit-test-agents bash -c "mkdir -p /project/results && cd /app && python -m pytest tests/unit/ -vv -s --tb=long $${TEST_FILTER} 2>&1 | tee /project/results/executed_tests_unit.txt"
+	cp results/collected_tests_unit.txt .
+	cp results/executed_tests_unit.txt .
+	$(MAKE) collect-executed TYPE=unit
+	mv executed_list_unit.txt results/executed_list_unit.txt
 
-test-agents-unit: build-image-agents check-deps
-	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans -e TEST_FILTER="$(TEST_FILTER)" unit-test-agents
 
 
 # Run unit tests using mocks only, without external dependencies (no GITHUB_TOKEN, Ollama, or MCP required)
-test-agents-unit-mock: build-image-agents
-	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans -e TEST_FILTER="$(TEST_FILTER)" unit-test-agents
+test-agents-unit-mock:
+	$(MAKE) collect-tests TYPE=unit-mock
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans -e TEST_FILTER="$(TEST_FILTER)" unit-test-agents sh -c "cd /app && python -m pytest tests/unit/ -vv -s --tb=long \${TEST_FILTER} | tee /project/executed_tests_unit_mock.txt"
+	$(MAKE) collect-executed TYPE=unit-mock
 
 check-deps:
-	@if [ -z "${GITHUB_TOKEN}" ]; then echo "GITHUB_TOKEN not set. Export it with: export GITHUB_TOKEN=your_token"; exit 1; fi
 	@curl -f http://localhost:11434/api/tags > /dev/null || (echo "Ollama not running"; exit 1)
-	@curl -f -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/user > /dev/null 2>&1 || (echo "GitHub token invalid or API unreachable"; exit 1)
 	@$(MAKE) check-mcp-start || exit 1
 
+check-github:
+	@if [ -z "${GITHUB_TOKEN}" ]; then echo "GITHUB_TOKEN not set. Export it with: export GITHUB_TOKEN=your_token"; exit 1; fi
+	@curl -f -H "Authorization: token ${GITHUB_TOKEN}" https://api.github.com/user > /dev/null 2>&1 || (echo "GitHub token invalid or API unreachable"; exit 1)
+
 # Run full integration tests with real LLM calls, requiring external dependencies (GITHUB_TOKEN, Ollama, MCP)
-test-agents-integration: build-image-agents check-deps
+test-agents-integration: fix-perms
+	mkdir -p results && chmod 777 results
+	$(MAKE) collect-tests TYPE=integration
+	mv collected_tests_integration.txt results/collected_tests_integration.txt
 	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans \
 		-e TEST_FILTER="$(INTEGRATION_TEST_FILTER)" \
 		-e OLLAMA_TIMEOUT="$(OLLAMA_TIMEOUT)" \
-		integration-test-agents
+		integration-test-agents bash -c "mkdir -p /project/results && cd /app && python -m pytest tests/integration/ -vv -s --tb=long $${TEST_FILTER} 2>&1 | tee /project/results/executed_tests_integration.txt"
+	cp results/collected_tests_integration.txt .
+	cp results/executed_tests_integration.txt .
+	$(MAKE) collect-executed TYPE=integration
+	mv executed_list_integration.txt results/executed_list_integration.txt
 
-test-agents-integration-fast: INTEGRATION_TEST_FILTER=--maxfail=1 -k "not slow"
+test-agents-integration-fast: INTEGRATION_TEST_FILTER = --maxfail=1 -k "not slow"
 test-agents-integration-fast: test-agents-integration
+test-agents-e2e: INTEGRATION_TEST_FILTER = "-m e2e"
+test-agents-e2e: test-agents-integration
 
 test-agents: lint-python test-agents-unit-mock test-agents-integration validate-test-suite
 
@@ -139,10 +160,10 @@ test-agents-unit-verbose: build-image-agents check-deps
 	echo "🏁 Verbose unit tests completed with exit code: $$exitcode"; \
 	exit $$exitcode
 
-test-agents-integration-verbose: build-image-agents check-deps
+test-agents-integration-verbose: build-image-agents check-deps check-github
 	@echo "🚀 Starting verbose integration tests..."
 	$(MAKE) create-logs
-	@$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans integration-test-agents-verbose 2>&1 | tee logs/$(shell date -u +%Y-%m-%d_%H%M%S)_integration_tests_verbose_output.txt; \
+	@$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans -e TEST_FILTER="" -e OLLAMA_TIMEOUT="$(OLLAMA_TIMEOUT)" integration-test-agents-verbose 2>&1 | tee logs/$(shell date -u +%Y-%m-%d_%H%M%S)_integration_tests_verbose_output.txt; \
 	exitcode=$${PIPESTATUS[0]}; \
 	echo "🏁 Verbose integration tests completed with exit code: $$exitcode"; \
 	exit $$exitcode
@@ -153,7 +174,7 @@ test-agents-unit-fail-verbose: build-image-agents check-deps
 	echo "🏁 Verbose unit fail tests completed with exit code: $$exitcode"; \
 	exit $$exitcode
 
-test-agents-integration-fail-verbose: build-image-agents check-deps
+test-agents-integration-fail-verbose: build-image-agents check-deps check-github
 	@echo "🚀 Starting verbose integration tests with last failed..."
 	@$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans -e TEST_FILTER="--last-failed" integration-test-agents-verbose 2>&1 | tee logs/$(shell date -u +%Y-%m-%d_%H%M%S)_integration_tests_fail_verbose_output.txt; \
 	exitcode=$${PIPESTATUS[0]}; \
@@ -164,12 +185,36 @@ test-agents-unit-watch: build-image-agents
 		$(MAKE) create-logs
 		env HOST_UID=$(HOST_UID) HOST_GID=$(HOST_GID) $(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) up unit-test-agents-watch
 
-test-agents-integration-watch: build-image-agents check-deps
+test-agents-integration-watch: build-image-agents check-deps check-github
 	$(MAKE) create-logs
 	env HOST_UID=$(HOST_UID) HOST_GID=$(HOST_GID) $(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) up integration-test-agents-watch
 
-validate-test-suite: build-image-agents check-deps
+validate-test-suite: build-image-agents check-deps check-github
 	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm validate-test-suite
+
+collect-tests:
+	@if [ "$(TYPE)" = "unit" ] || [ "$(TYPE)" = "unit-mock" ]; then \
+		SERVICE=unit-test-agents; \
+	else \
+		SERVICE=integration-test-agents; \
+		if [ "$(TYPE)" != "integration" ]; then \
+			echo "TYPE must be unit, unit-mock or integration" >&2; \
+			exit 1; \
+		fi; \
+	fi; \
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans $$SERVICE python /app/src/collect_tests.py $(TYPE)
+
+collect-executed:
+	@if [ "$(TYPE)" = "unit" ] || [ "$(TYPE)" = "unit-mock" ]; then \
+		SERVICE=unit-test-agents; \
+	else \
+		SERVICE=integration-test-agents; \
+		if [ "$(TYPE)" != "integration" ]; then \
+			echo "TYPE must be unit, unit-mock or integration" >&2; \
+			exit 1; \
+		fi; \
+	fi; \
+	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm --remove-orphans $$SERVICE python /app/src/parse_executed_tests.py $(TYPE)
 
 check-secrets:
 	$(CONTAINER_RUNTIME) run --rm -v $(PWD):/app trufflesecurity/trufflehog:latest filesystem /app --fail --only-verified
@@ -177,3 +222,5 @@ check-secrets:
 lint-python:
 	$(CONTAINERD_CMD) -f $(DOCKER_COMPOSE_FILE_PYTHON) run --rm unit-test-agents bash -c "ruff check /app/src /app/tests && black --check /app/src /app/tests"
 
+fix-perms:
+	chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} . node_modules src

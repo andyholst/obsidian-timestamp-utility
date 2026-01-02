@@ -30,7 +30,7 @@ from .utils import log_info
 from .monitoring import structured_log
 
 
-class TestSuiteRiskLevel(Enum):
+class SuiteRiskLevel(Enum):
     """Risk levels for test suite validation"""
     LOW = "low"
     MEDIUM = "medium"
@@ -84,7 +84,7 @@ class LangChainCompliance:
 
 
 @dataclass
-class TestSuiteValidationResult:
+class SuiteValidationResult:
     """Comprehensive test suite validation result"""
     timestamp: datetime = field(default_factory=datetime.now)
     code_hash: str = ""
@@ -102,7 +102,7 @@ class TestSuiteValidationResult:
 
     # Quality Metrics
     overall_score: float = 0.0
-    risk_level: TestSuiteRiskLevel = TestSuiteRiskLevel.LOW
+    risk_level: SuiteRiskLevel = SuiteRiskLevel.LOW
 
     # Recommendations
     critical_issues: List[str] = field(default_factory=list)
@@ -279,7 +279,7 @@ try {{
                     "preset": "ts-jest",
                     "testEnvironment": "node",
                     "collectCoverage": True,
-                    "coverageReporters": ["json", "text"],
+                    "coverageReporters": ["json-summary", "text"],
                     "testTimeout": self.execution_timeout,
                     "setupFilesAfterEnv": []
                 }
@@ -320,6 +320,16 @@ try {{
                     text=True,
                     timeout=self.execution_timeout / 1000
                 )
+
+                print(f"DEBUG_JEST: returncode={result.returncode}")
+                print(f"DEBUG_JEST: stdout_len={len(result.stdout)}")
+                print(f"DEBUG_JEST: stderr_len={len(result.stderr)}")
+                print(f"DEBUG_JEST: stdout_snip={result.stdout[:500]}")
+
+                coverage_dir = os.path.join(temp_dir, 'coverage')
+                print(f"DEBUG_COVERAGE: coverage_dir_exists={os.path.exists(coverage_dir)}")
+                if os.path.exists(coverage_dir):
+                    print(f"DEBUG_COVERAGE: coverage_files={os.listdir(coverage_dir)}")
 
                 execution_time = time.time() - start_time
 
@@ -392,7 +402,18 @@ try {{
             # Try to parse JSON output
             if stdout:
                 result_data = json.loads(stdout)
+                # Parse top-level Jest summary for error cases
+                num_runtime_errors = result_data.get('numRuntimeErrorTestSuites', 0)
+                num_failed_suites = result_data.get('numFailedTestSuites', 0)
+                num_failed_tests_summary = result_data.get('numFailedTests', 0)
+                num_total_tests = result_data.get('numTotalTests', 0)
+                num_passed_tests = result_data.get('numPassedTests', 0)
+                num_skipped_tests = result_data.get('numPendingTests', 0) + result_data.get('numSkippedTests', 0)
+                
+                # Parse detailed test results if available
+                detailed_parsed = False
                 if 'testResults' in result_data:
+                    detailed_parsed = True
                     for test_file in result_data['testResults']:
                         for test_result in test_file['assertionResults']:
                             metrics['total'] += 1
@@ -400,17 +421,49 @@ try {{
                                 metrics['passed'] += 1
                             elif test_result['status'] == 'failed':
                                 metrics['failed'] += 1
-                                metrics['errors'].append(test_result.get('failureMessages', ['Unknown error'])[0])
-                            elif test_result['status'] == 'skipped':
+                                if test_result.get('failureMessages'):
+                                    metrics['errors'].append(test_result['failureMessages'][0])
+                            elif test_result['status'] in ['skipped', 'pending']:
                                 metrics['skipped'] += 1
+                
+                if not detailed_parsed:
+                    metrics['total'] = num_total_tests + num_runtime_errors + num_failed_suites
+                    metrics['passed'] = num_passed_tests
+                    metrics['failed'] = num_failed_tests_summary + num_runtime_errors + num_failed_suites
+                    metrics['skipped'] = num_skipped_tests
+                
+                # Extract errors from stderr always
+                if stderr.strip():
+                    error_lines = []
+                    for line in stderr.splitlines()[-10:]:
+                        stripped = line.strip()
+                        if stripped and ('error' in stripped.lower() or 'fail' in stripped.lower() or 'referenceerror' in stripped.lower()):
+                            error_lines.append(stripped)
+                    metrics['errors'].extend(error_lines[:3])
+                
+                # Deduplicate and limit errors
+                unique_errors = list(dict.fromkeys(metrics['errors']))  # preserve order
+                metrics['errors'] = unique_errors[:5]
 
             # Parse coverage from coverage report
             coverage_file = os.path.join(temp_dir, 'coverage', 'coverage-summary.json')
+            print(f"DEBUG_PARSE: coverage_file={coverage_file}, exists={os.path.exists(coverage_file)}")
             if os.path.exists(coverage_file):
                 with open(coverage_file, 'r') as f:
                     coverage_data = json.load(f)
+                    print(f"DEBUG_PARSE: coverage_data={str(coverage_data)[:1000]}")
                     if 'total' in coverage_data and 'lines' in coverage_data['total']:
-                        metrics['coverage'] = coverage_data['total']['lines'].get('pct', 0.0)
+                        pct = coverage_data['total']['lines'].get('pct', 0.0)
+                        if isinstance(pct, str):
+                            if pct == 'Unknown':
+                                metrics['coverage'] = 0.0
+                            else:
+                                try:
+                                    metrics['coverage'] = float(pct)
+                                except (ValueError, TypeError):
+                                    metrics['coverage'] = 0.0
+                        else:
+                            metrics['coverage'] = float(pct)
 
         except (json.JSONDecodeError, KeyError):
             # Fallback to regex parsing
@@ -950,7 +1003,7 @@ class TestSuiteReporter:
         self,
         code: str,
         tests: str,
-        validation_result: TestSuiteValidationResult,
+        validation_result: SuiteValidationResult,
         code_validator_report: ValidationReport = None
     ) -> str:
         """Generate a comprehensive markdown report"""
@@ -981,7 +1034,7 @@ class TestSuiteReporter:
 
         return '\n'.join(report_sections)
 
-    def _generate_header(self, result: TestSuiteValidationResult) -> str:
+    def _generate_header(self, result: SuiteValidationResult) -> str:
         """Generate report header"""
         return f"""# Comprehensive Test Suite Validation Report
 
@@ -1011,7 +1064,7 @@ The generated code and tests were validated using the LLM Code Validation Framew
 
 """
 
-    def _generate_execution_section(self, result: TestSuiteValidationResult) -> str:
+    def _generate_execution_section(self, result: SuiteValidationResult) -> str:
         """Generate execution results section"""
         total_tests = result.test_execution.total_tests
         passed_tests = result.test_execution.passed_tests
@@ -1038,7 +1091,7 @@ The generated code and tests were validated using the LLM Code Validation Framew
 
 """
 
-    def _generate_relationship_section(self, result: TestSuiteValidationResult) -> str:
+    def _generate_relationship_section(self, result: SuiteValidationResult) -> str:
         """Generate test-code relationship section"""
         return f"""## Test-Code Relationship Analysis
 
@@ -1051,7 +1104,7 @@ The generated code and tests were validated using the LLM Code Validation Framew
 
 """
 
-    def _generate_compliance_section(self, result: TestSuiteValidationResult) -> str:
+    def _generate_compliance_section(self, result: SuiteValidationResult) -> str:
         """Generate LangChain compliance section"""
         return f"""## LangChain Best Practices Compliance
 
@@ -1064,7 +1117,7 @@ The generated code and tests were validated using the LLM Code Validation Framew
 
 """
 
-    def _generate_recommendations_section(self, result: TestSuiteValidationResult) -> str:
+    def _generate_recommendations_section(self, result: SuiteValidationResult) -> str:
         """Generate recommendations section"""
         sections = ["## Recommendations\n"]
 
@@ -1118,14 +1171,14 @@ class LLMTestSuiteValidator:
         tests: str,
         context: Dict[str, Any] = None,
         include_code_validator: bool = True
-    ) -> TestSuiteValidationResult:
+    ) -> SuiteValidationResult:
         """Run complete test suite validation"""
 
         context = context or {}
         code_hash = self._generate_hash(code)
         test_hash = self._generate_hash(tests)
 
-        result = TestSuiteValidationResult(
+        result = SuiteValidationResult(
             code_hash=code_hash,
             test_hash=test_hash
         )
@@ -1181,7 +1234,7 @@ class LLMTestSuiteValidator:
         self,
         code: str,
         tests: str,
-        validation_result: TestSuiteValidationResult,
+        validation_result: SuiteValidationResult,
         code_validator_report: ValidationReport = None
     ) -> str:
         """Generate detailed markdown report"""
@@ -1196,7 +1249,7 @@ class LLMTestSuiteValidator:
 
     def _calculate_overall_score(
         self,
-        result: TestSuiteValidationResult,
+        result: SuiteValidationResult,
         code_validator_report: ValidationReport = None
     ) -> float:
         """Calculate overall test suite score"""
@@ -1225,7 +1278,7 @@ class LLMTestSuiteValidator:
 
         return min(100.0, max(0.0, score))
 
-    def _score_execution_results(self, result: TestSuiteValidationResult) -> float:
+    def _score_execution_results(self, result: SuiteValidationResult) -> float:
         """Score execution results (0-100)"""
         score = 0.0
         log_info(__name__, f"Scoring execution - total_tests: {result.test_execution.total_tests}, passed: {result.test_execution.passed_tests}")
@@ -1248,7 +1301,7 @@ class LLMTestSuiteValidator:
         log_info(__name__, f"Execution score: {score}")
         return score
 
-    def _score_relationship(self, result: TestSuiteValidationResult) -> float:
+    def _score_relationship(self, result: SuiteValidationResult) -> float:
         """Score test-code relationship (0-100)"""
         score = 0.0
 
@@ -1267,20 +1320,20 @@ class LLMTestSuiteValidator:
 
         return score
 
-    def _assess_risk_level(self, score: float) -> TestSuiteRiskLevel:
+    def _assess_risk_level(self, score: float) -> SuiteRiskLevel:
         """Assess risk level based on score"""
         if score >= 80:
-            return TestSuiteRiskLevel.LOW
+            return SuiteRiskLevel.LOW
         elif score >= 60:
-            return TestSuiteRiskLevel.MEDIUM
+            return SuiteRiskLevel.MEDIUM
         elif score >= 40:
-            return TestSuiteRiskLevel.HIGH
+            return SuiteRiskLevel.HIGH
         else:
-            return TestSuiteRiskLevel.CRITICAL
+            return SuiteRiskLevel.CRITICAL
 
     def _generate_recommendations(
         self,
-        result: TestSuiteValidationResult,
+        result: SuiteValidationResult,
         code_validator_report: ValidationReport = None
     ):
         """Generate recommendations based on validation results"""
@@ -1324,7 +1377,7 @@ def validate_llm_test_suite(
     tests: str,
     context: Dict[str, Any] = None,
     include_code_validator: bool = True
-) -> Tuple[TestSuiteValidationResult, str]:
+) -> Tuple[SuiteValidationResult, str]:
     """Global function for test suite validation"""
     result, code_validator_report = test_suite_validator.validate_test_suite(code, tests, context, include_code_validator)
     report = generate_test_suite_report(code, tests, result, code_validator_report)
@@ -1333,7 +1386,7 @@ def validate_llm_test_suite(
 def generate_test_suite_report(
     code: str,
     tests: str,
-    validation_result: TestSuiteValidationResult,
+    validation_result: SuiteValidationResult,
     code_validator_report: ValidationReport = None
 ) -> str:
     """Global function for generating detailed reports"""

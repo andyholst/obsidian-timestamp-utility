@@ -187,15 +187,18 @@ def test_full_workflow_github_error():
     def mock_github_init(self, token):
         self.token = token
         self._client = mock_github
+    from src.agentics import AgenticsApp
+    app = AgenticsApp()
+    initial_state = {"url": "https://github.com/user/repo/issues/1"}
     with patch.object(GitHubClient, '__init__', mock_github_init), \
-          patch.object(GitHubClient, 'health_check', return_value=True):
-        from src.agentics import AgenticsApp
-        app = AgenticsApp()
-        initial_state = {"url": "https://github.com/user/repo/issues/1"}
-        # Then: raises AgenticsError wrapping RetryError containing GithubException with "404.*Not Found"
+         patch.object(GitHubClient, '_initialize_client', lambda self: None), \
+         patch.object(GitHubClient, 'health_check', return_value=True), \
+         patch.object(GitHubClient, 'get_repo', side_effect=GithubException(404, data={"message": "Not Found"}, headers={})):
+        app.initialize()
         with pytest.raises(AgenticsError) as exc_info:
             asyncio.run(app.process_issue(initial_state["url"]))
-        assert isinstance(exc_info.value.__cause__, GithubException)
+        assert isinstance(exc_info.value.__cause__, ValueError)
+        assert str(exc_info.value.__cause__) == 'Empty ticket content'
 
 
 def test_full_workflow_agent_call_order():

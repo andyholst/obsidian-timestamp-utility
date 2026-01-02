@@ -8,16 +8,25 @@ class HITLNode:
 
     def __call__(self, state):
         state_copy = state.copy()
-        # Skip HITL in test environments or non-interactive mode
-        if os.environ.get('CI') or 'pytest' in sys.argv[0] or not sys.stdout.isatty():
+        if os.environ.get('CI'):
+            state_copy["human_feedback"] = "Skipped in CI"
             return state_copy
 
-        score = state_copy.get("validation_score", 0)
+        elif bool(os.getenv('INTEGRATION_TEST')):
+            state_copy["human_feedback"] = "auto-approved for integration test"
+            return state_copy
+
+        validation_results = state_copy.get("validation_results", {})
+        score = validation_results.get("score", 0)
         if score < 80:
-            if os.environ.get('HITL_ENABLED') == 'true':
-                print("HITL Review Needed! State:", state_copy)
-                feedback = input("Enter feedback: ")
-                state_copy["human_feedback"] = feedback
-            else:
-                state_copy["human_feedback"] = "Automated: proceeding without review"
+            print(f"HITL Review Needed (score={score}/100)!")
+            print("Full state dump:")
+            print(state_copy)
+            try:
+                feedback = input("Human feedback (or Enter/EOF/Ctrl+C to proceed): ")
+            except (EOFError, KeyboardInterrupt):
+                feedback = "proceed"
+            if not feedback.strip():
+                feedback = "proceed"
+            state_copy["human_feedback"] = feedback
         return state_copy

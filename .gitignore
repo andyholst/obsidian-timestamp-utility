@@ -33,3 +33,4 @@ agentics_integration_tests_output.txt
 *.xml
 *.log
 *.txt
+agents/agentics/.cache/huggingface

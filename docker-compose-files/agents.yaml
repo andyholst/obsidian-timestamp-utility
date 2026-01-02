@@ -20,6 +20,7 @@ services:
 
   agentics:
     image: agentics
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     build:
       context: ../agents/agentics
       dockerfile: Dockerfile
@@ -42,7 +43,7 @@ services:
 
   validate-test-suite:
     image: agentics
-    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ../agents/agentics/src:/app/prod
       - ..:/project
@@ -59,7 +60,7 @@ services:
 
   unit-test-agents:
     image: agentics
-    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
@@ -76,19 +77,21 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
+      - MCP_SERVER_URL=http://localhost:3000
     command: ["bash", "-c", "cd /app && python -m pytest tests/unit/ -vv -s --tb=long $${TEST_FILTER}"]
     network_mode: host
 
   integration-test-agents:
     image: agentics
-    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    user: root
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
-      - ..:/project
+      - ..:/app
       - ../logs:/app/logs
+      - ../agents/agentics/.cache/huggingface:/tmp/.cache/huggingface
     environment:
-      - PROJECT_ROOT=/project
+      - PROJECT_ROOT=/app
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
       - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
@@ -100,17 +103,19 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
+      - MCP_SERVER_URL=http://localhost:3000
     command: ["bash", "-c", "cd /app && python -m pytest tests/integration/ -vv -s --tb=long $${TEST_FILTER}"]
     network_mode: host
 
   unit-test-agents-verbose:
     image: agentics
-    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
       - ..:/project
       - ../logs:/app/logs
+      - ../agents/agentics/.cache/huggingface:/tmp/.cache/huggingface
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
@@ -123,12 +128,17 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-    command: ["bash", "-c", "failed=0; for file in tests/unit/test_*.py; do base_file=\"$${file##*/}\"; base_file=\"$${base_file%.py}\"; tests=\"$$(python -m pytest --collect-only -q \"$$file\" | grep '::' | sed 's/.*:://')\"; if [ -z \"$$tests\" ]; then echo \"⚠️ No tests found in $$file\"; python -m pytest --collect-only -q \"$$file\"; continue; fi; echo \"🧪 Found tests: $$tests\"; for test in $$tests; do echo \"▶️ Running: $$test\"; timestamp=$(date -u +%Y-%m-%d_%H%M%S); logfile=\"/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt\"; python -m pytest -vv -s --tb=long \"$$file\" -k \"$$test\" $${TEST_FILTER} 2>&1 | tee \"$$logfile\"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo \"❌ FAILED: $$test\"; cat \"$$logfile\"; mv \"$$logfile\" \"/app/logs/failed/\"; failed=1; else echo \"✅ PASSED: $$test\"; mv \"$$logfile\" \"/app/logs/success/\"; fi; done; done; echo '🏁 Unit tests completed.'; exit $$failed"]
+      - MCP_SERVER_URL=http://localhost:3000
+    command:
+      - bash
+      - -c
+      - |
+        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/unit/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Unit tests completed.'; exit $$failed
     network_mode: host
 
   unit-test-agents-watch:
     image: agentics
-    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
@@ -146,18 +156,31 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-    command: ["watchmedo", "auto-restart", "--patterns=*.py", "--recursive", "/app/src", "/app/tests/unit", "--", "bash", "-c", "failed=0; for file in tests/unit/test_*.py; do base_file=\"$${file##*/}\"; base_file=\"$${base_file%.py}\"; tests=\"$$(python -m pytest --collect-only -q \"$$file\" | grep '::' | sed 's/.*:://')\"; if [ -z \"$$tests\" ]; then echo \"⚠️ No tests found in $$file\"; python -m pytest --collect-only -q \"$$file\"; continue; fi; echo \"🧪 Found tests: $$tests\"; for test in $$tests; do echo \"▶️ Running: $$test\"; timestamp=$(date -u +%Y-%m-%d_%H%M%S); logfile=\"/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt\"; python -m pytest -vv -s --tb=long \"$$file\" -k \"$$test\" $${TEST_FILTER} 2>&1 | tee \"$$logfile\"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo \"❌ FAILED: $$test\"; cat \"$$logfile\"; mv \"$$logfile\" \"/app/logs/failed/\"; failed=1; else echo \"✅ PASSED: $$test\"; mv \"$$logfile\" \"/app/logs/success/\"; fi; done; done; echo '🏁 Unit tests completed.'; exit $$failed"]
+      - MCP_SERVER_URL=http://localhost:3000
+    command:
+      - watchmedo
+      - auto-restart
+      - --patterns=*.py
+      - --recursive
+      - /app/src
+      - /app/tests/unit
+      - --
+      - bash
+      - -c
+      - |
+        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/unit/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Unit tests completed.'; exit $failed
     network_mode: host
     restart: unless-stopped
 
   integration-test-agents-verbose:
     image: agentics
-    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    user: root
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
       - ..:/project
       - ../logs:/app/logs
+      - ../agents/agentics/.cache/huggingface:/tmp/.cache/huggingface
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
@@ -171,12 +194,17 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-    command: ["bash", "-c", "failed=0; for file in tests/integration/test_*.py; do base_file=\"$${file##*/}\"; base_file=\"$${base_file%.py}\"; tests=\"$$(python -m pytest --collect-only -q \"$$file\" | grep '::' | sed 's/.*:://')\"; if [ -z \"$$tests\" ]; then echo \"⚠️ No tests found in $$file\"; python -m pytest --collect-only -q \"$$file\"; continue; fi; echo \"🧪 Found tests: $$tests\"; for test in $$tests; do echo \"▶️ Running: $$test\"; timestamp=$(date -u +%Y-%m-%d_%H%M%S); logfile=\"/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt\"; python -m pytest -vv -s --tb=long \"$$file\" -k \"$$test\" $${TEST_FILTER} 2>&1 | tee \"$$logfile\"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo \"❌ FAILED: $$test\"; cat \"$$logfile\"; mv \"$$logfile\" \"/app/logs/failed/\"; failed=1; else echo \"✅ PASSED: $$test\"; mv \"$$logfile\" \"/app/logs/success/\"; fi; done; done; echo '🏁 Integration tests completed.'; exit $$failed"]
+      - MCP_SERVER_URL=http://localhost:3000
+    command:
+      - bash
+      - -c
+      - |
+        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/integration/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Integration tests completed.'; exit $$failed
     network_mode: host
 
   integration-test-agents-watch:
     image: agentics
-    user: '${HOST_UID:-1000}:${HOST_GID:-1000}'
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
@@ -195,6 +223,17 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-    command: ["watchmedo", "auto-restart", "--patterns=*.py", "--recursive", "/app/src", "/app/tests/integration", "--", "bash", "-c", "failed=0; for file in tests/integration/test_*.py; do base_file=\"$${file##*/}\"; base_file=\"$${base_file%.py}\"; tests=\"$$(python -m pytest --collect-only -q \"$$file\" | grep '::' | sed 's/.*:://')\"; if [ -z \"$$tests\" ]; then echo \"⚠️ No tests found in $$file\"; python -m pytest --collect-only -q \"$$file\"; continue; fi; echo \"🧪 Found tests: $$tests\"; for test in $$tests; do echo \"▶️ Running: $$test\"; timestamp=$(date -u +%Y-%m-%d_%H%M%S); logfile=\"/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt\"; python -m pytest -vv -s --tb=long \"$$file\" -k \"$$test\" $${TEST_FILTER} 2>&1 | tee \"$$logfile\"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo \"❌ FAILED: $$test\"; cat \"$$logfile\"; mv \"$$logfile\" \"/app/logs/failed/\"; failed=1; else echo \"✅ PASSED: $$test\"; mv \"$$logfile\" \"/app/logs/success/\"; fi; done; done; echo '🏁 Integration tests completed.'; exit $$failed"]
+    command:
+      - watchmedo
+      - auto-restart
+      - --patterns=*.py
+      - --recursive
+      - /app/src
+      - /app/tests/integration
+      - --
+      - bash
+      - -c
+      - |
+        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/integration/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Integration tests completed.'; exit $$failed
     network_mode: host
     restart: unless-stopped
