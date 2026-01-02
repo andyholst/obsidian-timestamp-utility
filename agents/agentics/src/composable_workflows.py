@@ -30,6 +30,7 @@ from .dependency_installer_agent import DependencyInstallerAgent
 from .hitl_node import HITLNode
 from .code_generator_agent import CodeGeneratorAgent
 from .collaborative_generator import CollaborativeGenerator
+from .npm_build_test_agent import NpmBuildTestAgent
 from .feedback_agent import FeedbackAgent
 from .process_llm_agent import ProcessLLMAgent
 from .test_generator_agent import TestGeneratorAgent
@@ -106,6 +107,9 @@ class ComposableWorkflows:
         collaborative_gen = AgentAdapter(CollaborativeGenerator(self.llm_reasoning, self.llm_code))
         self.composer.register_agent("collaborative_generator", collaborative_gen)
 
+        npm_build_test_agent = AgentAdapter(NpmBuildTestAgent(self.llm_reasoning))
+        self.composer.register_agent("npm_build_test", npm_build_test_agent)
+
         # Integration & testing agents
         pre_test_agent = AgentAdapter(PreTestRunnerAgent())
         self.composer.register_agent("pre_test_runner", pre_test_agent)
@@ -138,9 +142,9 @@ class ComposableWorkflows:
         return StateToCodeGenerationStateAdapter() | raw_workflow | CodeGenerationStateToStateAdapter()
 
     def _create_code_generation_workflow(self) -> Runnable:
-        """Create CODE GENERATION workflow: extract -> collaborative generation."""
+        """Create CODE GENERATION workflow: extract -> collaborative generation -> npm build test."""
         config = WorkflowConfig(
-            agent_names=["code_extractor", "collaborative_generator"],
+            agent_names=["code_extractor", "collaborative_generator", "npm_build_test"],
             tool_names=[tool.name for tool in self.mcp_tools]
         )
         return self.composer.create_workflow("code_generation", config)

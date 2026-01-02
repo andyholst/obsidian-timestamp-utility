@@ -176,6 +176,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             "/think\n"
             f"You are integrating new TypeScript code into an existing Obsidian plugin file (`main{self.code_ext}`). "
             "The new code must be added to the `TimestampPlugin` class without modifying any existing code. "
+            "NEVER modify existing original files like src/main.ts or src/__tests__/main.test.ts. Only integrate newly generated code into new or existing non-original files. "
             "Follow these instructions carefully:\n\n"
             "1. **Existing Code:**\n"
             f"{existing_content}\n\n"

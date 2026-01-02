@@ -24,6 +24,7 @@ class CodeReviewerAgent(ToolIntegratedAgent):
             return (
                 "/think\n"
                 "You are a code reviewer analyzing generated TypeScript code and tests for an Obsidian plugin against ticket requirements and acceptance criteria. "
+                "NEVER modify existing original files like src/main.ts or src/__tests__/main.test.ts. Only review newly generated code into new or existing non-original files. "
                 "Provide feedback on alignment, bugs, improvements, and a tuned prompt for re-generation if needed. "
                 "Output a JSON with: 'is_aligned' (bool), 'feedback' (str: detailed issues/suggestions), 'tuned_prompt' (str: updated prompt for fixes, or empty if aligned), 'needs_fix' (bool).\n\n"
                 "Requirements: {requirements}\n"

@@ -256,3 +256,18 @@ class ModularPrompts:
             "Suggestions:\n{suggestions}\n\n"
             "JSON:"
         )
+
+    @staticmethod
+    def get_npm_build_test_fix_prompt():
+        return (
+            "You are an expert TypeScript and Jest developer. Analyze the following errors from npm build and test execution, and propose fixes to the generated code and tests.\n\n"
+            "Generated Code:\n{generated_code}\n\n"
+            "Generated Tests:\n{generated_tests}\n\n"
+            "Errors:\n{errors}\n\n"
+            "Propose specific fixes to the code and tests to resolve these errors. Output in JSON format:\n"
+            "{{\n"
+            "  \"code_fixes\": \"string with updated code\",\n"
+            "  \"test_fixes\": \"string with updated tests\",\n"
+            "  \"explanation\": \"brief explanation of fixes\"\n"
+            "}}"
+        )
