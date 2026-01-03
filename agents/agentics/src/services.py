@@ -5,7 +5,7 @@ from typing import Optional, Callable, Dict, Any
 from abc import ABC, abstractmethod
 
 from github import Github, Auth
-from langchain_ollama import OllamaLLM
+from langchain_ollama import ChatOllama
 from langchain.tools import Tool
 
 from .config import LLMConfig, get_config
@@ -40,13 +40,13 @@ class OllamaClient(ServiceClient):
     def __init__(self, config: LLMConfig):
         super().__init__("ollama")
         self.config = config
-        self._client: Optional[OllamaLLM] = None
+        self._client: Optional[ChatOllama] = None
         self._initialize_client()
 
     def _initialize_client(self) -> None:
         """Initialize the Ollama client."""
         try:
-            self._client = OllamaLLM(
+            self._client = ChatOllama(
                 model=self.config.model,
                 base_url=self.config.base_url,
                 temperature=self.config.temperature,
@@ -74,7 +74,7 @@ class OllamaClient(ServiceClient):
             response = await asyncio.get_event_loop().run_in_executor(
                 None, self._client.invoke, "Hello"
             )
-            return bool(response and len(response.strip()) > 0)
+            return bool(response and hasattr(response, 'content') and len(response.content.strip()) > 0)
         except Exception:
             return False
 
@@ -89,7 +89,8 @@ class OllamaClient(ServiceClient):
 
         @self.circuit_breaker.call
         def _invoke():
-            return self._client.invoke(prompt)
+            response = self._client.invoke(prompt)
+            return response.content if hasattr(response, 'content') else str(response)
 
         return _invoke()
 
@@ -192,10 +193,10 @@ class MCPClient(ServiceClient):
             raise MCPError("MCP service is not available")
 
         @self.circuit_breaker.call
-        def _get_context():
-            return self._client.get_context(query, max_tokens)
+        async def _get_context():
+            return await self._client.get_context(query, max_tokens)
 
-        return await asyncio.get_event_loop().run_in_executor(None, _get_context)
+        return await _get_context()
 
     async def store_memory(self, key: str, value: str) -> None:
         """Store memory in MCP."""
@@ -203,10 +204,10 @@ class MCPClient(ServiceClient):
             raise MCPError("MCP service is not available")
 
         @self.circuit_breaker.call
-        def _store_memory():
-            return self._client.store_memory(key, value)
+        async def _store_memory():
+            return await self._client.store_memory(key, value)
 
-        await asyncio.get_event_loop().run_in_executor(None, _store_memory)
+        await _store_memory()
 
     async def retrieve_memory(self, key: str) -> str:
         """Retrieve memory from MCP."""
@@ -214,10 +215,10 @@ class MCPClient(ServiceClient):
             raise MCPError("MCP service is not available")
 
         @self.circuit_breaker.call
-        def _retrieve_memory():
-            return self._client.retrieve_memory(key)
+        async def _retrieve_memory():
+            return await self._client.retrieve_memory(key)
 
-        return await asyncio.get_event_loop().run_in_executor(None, _retrieve_memory)
+        return await _retrieve_memory()
 
     async def get_tools(self) -> list:
         """Get MCP tools for LangChain integration."""

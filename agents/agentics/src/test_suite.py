@@ -1228,7 +1228,7 @@ class LLMTestSuiteValidator:
         # Phase 6: Generate recommendations
         self._generate_recommendations(result, code_validator_report)
 
-        return result, code_validator_report
+        return result
 
     def generate_detailed_report(
         self,
@@ -1379,7 +1379,17 @@ def validate_llm_test_suite(
     include_code_validator: bool = True
 ) -> Tuple[SuiteValidationResult, str]:
     """Global function for test suite validation"""
-    result, code_validator_report = test_suite_validator.validate_test_suite(code, tests, context, include_code_validator)
+    # Run validation
+    result = test_suite_validator.validate_test_suite(code, tests, context, include_code_validator)
+
+    # Get code validator report if needed for report generation
+    code_validator_report = None
+    if include_code_validator:
+        try:
+            code_validator_report = validate_generated_code(code, tests, context)
+        except Exception:
+            pass  # Report generation will handle None gracefully
+
     report = generate_test_suite_report(code, tests, result, code_validator_report)
     return result, report
 

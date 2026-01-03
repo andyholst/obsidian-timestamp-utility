@@ -18,9 +18,7 @@ except ImportError:
     class GithubException(Exception):
         pass
 # Define paths to the fixtures directory and JSON file
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
-FIXTURES_DIR = os.path.join(PROJECT_ROOT, 'agents', 'agentics', 'tests', 'fixtures')
-EXPECTED_TICKET_JSON_FILE = os.path.join(FIXTURES_DIR, 'expected_ticket.json')
+EXPECTED_TICKET_JSON_FILE = os.path.join(os.path.dirname(__file__), '..', 'fixtures', 'expected_ticket.json')
 # Load expected JSON from file
 with open(EXPECTED_TICKET_JSON_FILE, 'r') as f:
     EXPECTED_TICKET_JSON = json.load(f)

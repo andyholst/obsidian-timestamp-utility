@@ -272,7 +272,7 @@ describe('TextProcessor', () => {
         )
 
         # Assert
-        assert isinstance(result, TestSuiteValidationResult)
+        assert isinstance(result, SuiteValidationResult)
         assert result.langchain_compliance.lcel_usage  # Should detect LCEL usage
         assert result.langchain_compliance.error_handling_score > 0
         assert result.langchain_compliance.state_management_score > 0
@@ -323,7 +323,7 @@ describe('TextProcessor', () => {
         result = test_suite_validator.validate_test_suite("", "", include_code_validator=False)
 
         # Assert
-        assert isinstance(result, TestSuiteValidationResult)
+        assert isinstance(result, SuiteValidationResult)
         assert result.overall_score == 0.0
         assert result.risk_level == TestSuiteRiskLevel.CRITICAL
 
@@ -340,17 +340,17 @@ describe('TextProcessor', () => {
         )
 
         # Assert
-        assert isinstance(result, TestSuiteValidationResult)
+        assert isinstance(result, SuiteValidationResult)
         assert result.code_execution.success == False or result.test_execution.failed_tests > 0
 
     def test_global_functions(self, sample_typescript_code, sample_typescript_tests):
         """Test global convenience functions"""
         # Act
         result, report = validate_llm_test_suite(sample_typescript_code, sample_typescript_tests)
-        report2 = generate_test_suite_report(sample_typescript_code, sample_typescript_tests, result[0])
+        report2 = generate_test_suite_report(sample_typescript_code, sample_typescript_tests, result)
 
         # Assert
-        assert isinstance(result, TestSuiteValidationResult)
+        assert isinstance(result, SuiteValidationResult)
         assert isinstance(report, str)
         assert len(report) > 0
 
@@ -365,7 +365,7 @@ describe('TextProcessor', () => {
 
         for score, expected_risk in test_cases:
             # Create a mock result with specific score
-            result = TestSuiteValidationResult()
+            result = SuiteValidationResult()
             result.overall_score = score
 
             # Assess risk

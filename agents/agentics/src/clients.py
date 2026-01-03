@@ -3,7 +3,7 @@ import time
 from .monitoring import structured_log
 import logging
 from github import Github, Auth
-from langchain_ollama import OllamaLLM
+from langchain_ollama import ChatOllama
 
 # Environment variables
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
@@ -19,7 +19,7 @@ github = None
 # Initialize Ollama LLM clients
 monitor.info("Initializing Ollama LLM clients")
 
-class TimedOllamaLLM(OllamaLLM):
+class TimedOllamaLLM(ChatOllama):
     """Wrapper for OllamaLLM that adds timing logs"""
 
     def __init__(self, *args, model_name="", **kwargs):

@@ -26,7 +26,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         self.monitor.setLevel(logging.INFO)
         log_info(self.name, f"Initialized with main file: {self.main_file}, test file: {self.test_file}, project root: {self.project_root}")
         # Fix for code-reviewer code_generator_agent.py:39-53 issue: Bind tools in LCEL - Prevents invalid deps
-        self.llm_with_tools = self.llm.bind_tools(self.tools) if self.llm else None
+        self.llm_with_tools = self.llm.bind_tools(self.tools) if hasattr(self.llm, 'bind_tools') else self.llm
         # Define LCEL chains for code and test generation
         if self.llm_with_tools is not None:
             self.code_generation_chain = self._create_code_generation_chain()
@@ -92,7 +92,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             | RunnableLambda(build_code_prompt)
             | self.llm_with_tools.with_structured_output(CodeGenerationOutput)
             | RunnableLambda(self._post_process_structured_output)
-        ).with_retry(max_attempts=3, backoff_factor=2)
+        ).with_retry(stop_after_attempt=3, wait_exponential_jitter=True)
 
     def _create_test_generation_chain(self):
         """Create LCEL chain for test generation with modular prompts and structured output."""
@@ -135,7 +135,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             | RunnableLambda(build_test_prompt)
             | self.llm_with_tools.with_structured_output(TestGenerationOutput)
             | RunnableLambda(lambda x: x.tests)
-        ).with_retry(max_attempts=3, backoff_factor=2)
+        ).with_retry(stop_after_attempt=3, wait_exponential_jitter=True)
 
     def _create_code_correction_chain(self):
         """Create LCEL chain for code correction based on validation errors."""
