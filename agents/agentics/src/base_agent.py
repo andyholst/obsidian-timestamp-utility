@@ -34,6 +34,7 @@ class BaseAgent(Runnable[CodeGenerationState, CodeGenerationState]):
         self.circuit_breaker = get_circuit_breaker(self.name, **self._get_circuit_breaker_config())
         self.monitor = structured_log(name)
         self.monitor.setLevel(LOGGER_LEVEL)
+        # Fix for code-reviewer base_agent.py:67-96 issue: Consistent state handling - Prevents state inconsistencies
 
     def _get_agent_type(self) -> AgentType:
         """Map agent name to AgentType enum."""

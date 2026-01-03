@@ -25,8 +25,10 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         self.project_root = os.getenv('PROJECT_ROOT', '/project')
         self.monitor.setLevel(logging.INFO)
         log_info(self.name, f"Initialized with main file: {self.main_file}, test file: {self.test_file}, project root: {self.project_root}")
+        # Fix for code-reviewer code_generator_agent.py:39-53 issue: Bind tools in LCEL - Prevents invalid deps
+        self.llm_with_tools = self.llm.bind_tools(self.tools) if self.llm else None
         # Define LCEL chains for code and test generation
-        if self.llm is not None:
+        if self.llm_with_tools is not None:
             self.code_generation_chain = self._create_code_generation_chain()
             self.test_generation_chain = self._create_test_generation_chain()
             self.code_correction_chain = self._create_code_correction_chain()
@@ -53,7 +55,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             return []
 
     def _create_code_generation_chain(self):
-        """Create LCEL chain for code generation with modular prompts and output validation."""
+        """Create LCEL chain for code generation with modular prompts and structured output."""
         def build_code_prompt(inputs):
             code_structure = json.dumps(inputs.get('code_structure', {}))
             tool_context = self._gather_tool_context(inputs)
@@ -69,16 +71,14 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 + "4. **Existing Code ({main_file}):**\n{existing_code_content}\n\n"
                 + "5. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
                 + tool_instructions
-                + ModularPrompts.get_output_instructions_code() + "\n\nTS code: use \" for strings, \\` for template if needed. No raw ` in code.\n\nObsidian Command full spec (name,id,editorCallback): this.addCommand({{name: \"Command Name\", id: \"unique-id\", editorCallback: (editor: Editor, view: MarkdownView) => {{ ... }}}}); import {{MarkdownView, MarkdownFileInfo}} from 'obsidian';\n\nTests cover new method/command exactly.\n\nCRITICAL: ALWAYS generate NON-EMPTY \"code\" field with valid TS additions. Never skip or empty. For simple tickets, use basic method + command with Notice. Output JSON: {\"code\": \"...\", \"method_name\": \"...\", \"command_id\": \"...\"}\n"
+                + "6. **Output Instructions:**\nGenerate the code, method_name, and command_id directly. No JSON wrapper.\n\nTS code: use \" for strings, \\` for template if needed. No raw ` in code.\n\nObsidian Command full spec (name,id,editorCallback): this.addCommand({{name: \"Command Name\", id: \"unique-id\", editorCallback: (editor: Editor, view: MarkdownView) => {{ ... }}}}); import {{MarkdownView, MarkdownFileInfo}} from 'obsidian';\n\nTests cover new method/command exactly.\n\nCRITICAL: ALWAYS generate NON-EMPTY code with valid TS additions. Never skip or empty. For simple tickets, use basic method + command with Notice.\n"
             )
             log_info(self.name, f"Full prompt for code gen: {prompt}")
             return prompt
 
         # Use RunnableLambda to build the prompt dynamically
 
-        # Output parser for validation
-        code_parser = PydanticOutputParser(pydantic_object=CodeGenerationOutput)
-
+        # Fix for code-reviewer code_generator_agent.py:55-95 issue: Add Pydantic parsing to chains - Prevents malformed TS/imports
         return (
             RunnablePassthrough.assign(
                 task_details_str=self._format_task_details,
@@ -90,12 +90,12 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 code_structure=lambda x: {}
             )
             | RunnableLambda(build_code_prompt)
-            | self.llm
-            | RunnableLambda(self._validate_and_parse_code_output)
-        )
+            | self.llm_with_tools.with_structured_output(CodeGenerationOutput)
+            | RunnableLambda(self._post_process_structured_output)
+        ).with_retry(max_attempts=3, backoff_factor=2)
 
     def _create_test_generation_chain(self):
-        """Create LCEL chain for test generation with modular prompts and output validation."""
+        """Create LCEL chain for test generation with modular prompts and structured output."""
         def build_test_prompt(inputs):
             test_structure = json.dumps(inputs.get('test_structure', {}))
             tool_context = self._gather_tool_context(inputs)
@@ -114,16 +114,14 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 + "5. **Existing Test File ({test_file}):**\n{existing_test_content}\n\n"
                 + "6. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
                 + tool_instructions
-                + ModularPrompts.get_output_instructions_tests()
+                + "7. **Output Instructions:**\nGenerate the tests directly. No JSON wrapper.\n"
             )
             log_info(self.name, f"Full prompt for test gen: {prompt}")
             return prompt
 
         # Use RunnableLambda to build the prompt dynamically
 
-        # Output parser for validation
-        test_parser = PydanticOutputParser(pydantic_object=TestGenerationOutput)
-
+        # Fix for code-reviewer code_generator_agent.py:97-140 & test_generator_agent.py issue: Use structured output, not manual JSON - Prevents Jest failures
         return (
             RunnablePassthrough.assign(
                 task_details_str=self._format_task_details,
@@ -135,9 +133,9 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 test_structure=lambda x: {}
             )
             | RunnableLambda(build_test_prompt)
-            | self.llm
-            | RunnableLambda(self._validate_and_parse_test_output)
-        )
+            | self.llm_with_tools.with_structured_output(TestGenerationOutput)
+            | RunnableLambda(lambda x: x.tests)
+        ).with_retry(max_attempts=3, backoff_factor=2)
 
     def _create_code_correction_chain(self):
         """Create LCEL chain for code correction based on validation errors."""
@@ -293,21 +291,9 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                 return test_file.get('content', "")
         return ""
 
-    def _validate_and_parse_code_output(self, response):
-        """Validate and parse the LLM output for code generation."""
-        clean_response = remove_thinking_tags(response)
-        try:
-            # Try to parse as structured output
-            parsed = json.loads(clean_response)
-            if 'code' in parsed and 'method_name' in parsed and 'command_id' in parsed:
-                generated_code = parsed['code']
-            else:
-                # Fallback to treating as raw code
-                generated_code = clean_response.strip()
-        except json.JSONDecodeError:
-            # Not JSON, treat as raw code
-            generated_code = clean_response.strip()
-
+    def _post_process_structured_output(self, output: CodeGenerationOutput):
+        """Post-process the structured output for code generation."""
+        generated_code = output.code
         # Post-process the generated code
         generated_code = self._post_process_code(generated_code)
 
@@ -315,7 +301,11 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         code_keywords = ['import', 'export', 'class', 'interface', 'function', 'public']
         if not any(keyword in generated_code for keyword in code_keywords):
             log_info(self.name, "Warning: Generated code lacks structure keywords, proceeding anyway")
-        return generated_code
+        return {
+            'code': generated_code,
+            'method_name': output.method_name,
+            'command_id': output.command_id
+        }
 
     def _post_process_code(self, generated_code):
         """Post-process the generated code."""
@@ -333,31 +323,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
 
         return generated_code
 
-    def _validate_and_parse_test_output(self, response):
-        """Validate and parse the LLM output for test generation."""
-        clean_response = remove_thinking_tags(response)
-        try:
-            # Try to parse as structured output
-            parsed = json.loads(clean_response)
-            if 'tests' in parsed:
-                generated_tests = parsed['tests']
-            else:
-                # Fallback to treating as raw tests
-                generated_tests = clean_response.strip()
-        except json.JSONDecodeError:
-            # Not JSON, treat as raw tests
-            generated_tests = clean_response.strip()
 
-        # Post-process the generated tests
-        generated_tests = self._post_process_tests(generated_tests)
-
-        # Keyword validation for test output
-        if not (generated_tests.strip().startswith('describe(') and generated_tests.strip().endswith('});')):
-            raise ValueError("Generated tests must start with 'describe(' and end with '});'")
-        if 'describe(' not in generated_tests or ('it(' not in generated_tests and 'test(' not in generated_tests):
-            raise ValueError("Generated tests must include 'describe(' and 'it(' or 'test(' keywords")
-
-        return generated_tests
 
     def _post_process_tests(self, generated_tests):
         """Post-process the generated tests."""
@@ -486,7 +452,10 @@ this.addCommand({{
                     'feedback': state.get('feedback', {}),
                     'result': result_dict
                 }
-                generated_code = get_circuit_breaker("code_generation").call(lambda: self.code_generation_chain.invoke(state_dict))
+                generation_result = get_circuit_breaker("code_generation").call(lambda: self.code_generation_chain.invoke(state_dict))
+                generated_code = generation_result['code']
+                method_name = generation_result['method_name']
+                command_id = generation_result['command_id']
             except CircuitBreakerOpenException as e:
                 self._log_structured("error", "circuit_breaker_open", {"operation": "code_generation", "error": str(e)})
                 raise
@@ -552,21 +521,7 @@ this.addCommand({{
                     self._log_structured("warning", "code_correction_failed", {"proceeding_with_original": True})
             else:
                 self._log_structured("info", "code_validation_success", {"no_correction_needed": True})
-            # Extract method name and command ID
-            method_match = re.search(r'(public|private|protected)?\s*(\w+)\s*\(', generated_code)
-            if method_match:
-                method_name = method_match.group(2)
-                log_info(self.name, f"Extracted method name: {method_name}")
-            else:
-                log_info(self.name, "No method name found in generated code, proceeding without.")
-                method_name = None
-            command_match = re.search(r'this\.addCommand\(\{\s*id:\s*["\']([^"\']+)["\']', generated_code)
-            if command_match:
-                command_id = command_match.group(1)
-                log_info(self.name, f"Extracted command ID: {command_id}")
-            else:
-                log_info(self.name, "No command ID found in generated code, proceeding without.")
-                command_id = None
+            # Method name and command ID extracted from structured output
             # Generate tests using LCEL chain
             if self.test_generation_chain is None:
                 raise RuntimeError("LLM not available for test generation")

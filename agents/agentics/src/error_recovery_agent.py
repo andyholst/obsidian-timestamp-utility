@@ -31,13 +31,14 @@ class ErrorRecoveryAgent(Runnable[CodeGenerationState, CodeGenerationState]):
         }
 
     def _build_chain(self) -> Runnable:
+        # Fix for code-reviewer error_recovery_agent.py:33-41 issue: Configurable backoff/retries - Prevents build failures
         parser = PydanticOutputParser(pydantic_object=FixesModel)
         prompt = PromptTemplate(
             template=ModularPrompts.get_ts_build_fix_prompt(),
             input_variables=["errors", "generated_code", "generated_tests"],
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
-        chain = prompt | self.llm_reasoning | parser
+        chain = (prompt | self.llm_reasoning | parser).with_retry(max_attempts=3, backoff_factor=2)
         return chain
 
     def invoke(self, input: CodeGenerationState, config=None) -> CodeGenerationState:

@@ -19,6 +19,7 @@ class TestGeneratorAgent(BaseAgent):
     def __init__(self, llm_client):
         super().__init__("TestGenerator")
         self.llm = llm_client
+        self.llm_with_tools = self.llm.bind_tools([]) if self.llm else None  # No tools needed for test generation
         self.test_file = os.getenv('TEST_FILE', 'main.test.ts')
         self.project_root = os.getenv('PROJECT_ROOT', '/project')
         self.monitor.logger.setLevel(logging.INFO)
@@ -55,6 +56,7 @@ class TestGeneratorAgent(BaseAgent):
         # Output parser for validation
         test_parser = PydanticOutputParser(pydantic_object=TestGenerationOutput)
 
+        # Fix for code-reviewer code_generator_agent.py:97-140 & test_generator_agent.py issue: Use structured output, not manual JSON - Prevents Jest failures
         return (
             RunnableLambda(lambda x: x.__dict__)
             | RunnablePassthrough.assign(
@@ -67,9 +69,9 @@ class TestGeneratorAgent(BaseAgent):
                 test_structure=lambda x: {}
             )
             | RunnableLambda(build_test_prompt)
-            | self.llm
-            | RunnableLambda(self._validate_and_parse_test_output)
-        )
+            | self.llm_with_tools.with_structured_output(TestGenerationOutput)
+            | RunnableLambda(lambda x: self._post_process_tests(x.tests))
+        ).with_retry(max_attempts=3, backoff_factor=2)
 
     def _create_test_refinement_chain(self):
         """Create LCEL chain for test refinement based on validation feedback."""
@@ -205,24 +207,7 @@ class TestGeneratorAgent(BaseAgent):
         log_info(self.name, f"refined_ticket: {inputs.get('refined_ticket')}, len reqs: {len(reqs)}, content preview: {str(ticket_data)[:200]}")
         return json.dumps(ticket_data, indent=2)
 
-    def _validate_and_parse_test_output(self, response):
-        """Validate and parse the LLM output for test generation."""
-        clean_response = remove_thinking_tags(response)
-        try:
-            # Try to parse as structured output
-            parsed = json.loads(clean_response)
-            if 'tests' in parsed:
-                generated_tests = parsed['tests'] if parsed['tests'] is not None else clean_response.strip()
-            else:
-                # Fallback to treating as raw tests
-                generated_tests = clean_response.strip()
-        except json.JSONDecodeError:
-            # Not JSON, treat as raw tests
-            generated_tests = clean_response.strip()
 
-        # Post-process the generated tests
-        generated_tests = self._post_process_tests(generated_tests)
-        return generated_tests
 
     def _post_process_tests(self, raw_tests: str) -> str:
         """Post-process the generated tests."""

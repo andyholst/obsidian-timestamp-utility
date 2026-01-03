@@ -7,6 +7,7 @@ class ModularPrompts:
 
     @staticmethod
     def get_base_instruction():
+        # Fix for code-reviewer prompts.py:9-22 issue: Optimize prompts: concise, few-shot Obsidian TS examples, avoid hallucinations - Prevents invalid APIs
         return (
             "You are an expert TypeScript developer specializing in Obsidian plugins. CRITICAL: You MUST implement ONLY the exact functionality described in the Task Details section below. Do NOT implement any unrelated functionality, such as swapCase, string reversal, or any other features unless explicitly requested in the task details. CRITICAL: Do NOT modify, delete, or fiddle with any existing code or tests. Generate and output ONLY brand new code and test additions strictly for the specified feature. Existing code and tests shall remain untouched. "
             "Use proper TypeScript syntax: include type annotations, interfaces, and classes. Follow Obsidian plugin patterns: extend obsidian.Plugin, use onload() for commands with this.addCommand(), handle editor content with editor.replaceSelection() for insertion at cursor, and ensure all code is syntactically valid TypeScript. "
@@ -18,7 +19,38 @@ class ModularPrompts:
             "- Show message: new obsidian.Notice('message');\n"
             "- Do not use getActiveTextEditor, App.instance, setValue for insertion, createErrorModal;\n"
             "- NEVER redefine full class or onload(). Provide ONLY insertable snippets. Match EXACTLY existing patterns from examples below.\n"
-            "CRITICAL: TS strings use '; no ` backticks except template literals.\n\n"
+            "CRITICAL: TS strings use \"; no ` backticks except template literals.\n\n"
+            "**Few-shot Examples:**\n"
+            "Example 1: Add timestamp command\n"
+            "public addTimestamp() {\n"
+            "  const view = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);\n"
+            "  if (!view) { new obsidian.Notice('No active note.'); return; }\n"
+            "  const editor = view.editor;\n"
+            "  editor.replaceSelection(new Date().toISOString());\n"
+            "}\n\n"
+            "this.addCommand({\n"
+            "  id: 'add-timestamp',\n"
+            "  name: 'Add Timestamp',\n"
+            "  editorCallback: (editor: obsidian.Editor, view: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {\n"
+            "    this.addTimestamp();\n"
+            "  }\n"
+            "});\n\n"
+            "Example 2: Test for timestamp command\n"
+            "describe('addTimestamp', () => {\n"
+            "  let plugin: TimestampPlugin;\n"
+            "  beforeEach(async () => {\n"
+            "    plugin = new TimestampPlugin(mockApp, mockManifest);\n"
+            "    await plugin.onload();\n"
+            "  });\n"
+            "  it('should insert timestamp at cursor', () => {\n"
+            "    const command = mockCommands['add-timestamp'];\n"
+            "    expect(command).toBeDefined();\n"
+            "    if (command && command.callback) {\n"
+            "      command.callback(mockEditor, mockView);\n"
+            "      expect(mockEditor.replaceSelection).toHaveBeenCalledWith(expect.stringMatching(/\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}/));\n"
+            "    }\n"
+            "  });\n"
+            "});\n\n"
         )
 
     @staticmethod
