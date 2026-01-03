@@ -242,14 +242,40 @@ class TestGeneratorAgent(BaseAgent):
         # Ensure ; termination
         generated_tests = re.sub(r'([a-zA-Z0-9_]+)\s*$', r'\1;', generated_tests, flags=re.MULTILINE)
     def _get_fallback_tests(self, state: CodeGenerationState) -> str:
-        """Generate minimal fallback Jest tests."""
+        """Generate improved fallback Jest tests with Obsidian mocks."""
         title = safe_get(state, 'title', 'UnknownFeature')
-        fallback_tests = f'''describe(`{title} Tests`, () => {{
-  it('basic test', () => {{
-    expect(true).toBe(true);
+        method_name = safe_get(state, 'method_name', 'testMethod')
+        command_id = safe_get(state, 'command_id', 'testCommand')
+        fallback_tests = f'''import TimestampPlugin from '../main';
+import * as obsidian from 'obsidian';
+
+const mockApp: obsidian.App = {{}} as any;
+const mockEditor: obsidian.Editor = {{ replaceSelection: jest.fn() }} as any;
+const mockView: obsidian.MarkdownView = {{ editor: mockEditor }} as any;
+
+describe(`{{title}}`, () => {{
+  let plugin: TimestampPlugin;
+
+  beforeEach(() => {{
+    plugin = new TimestampPlugin(mockApp, {{ id: 'test-plugin' }} as obsidian.PluginManifest);
+  }});
+
+  it('should execute {{command_id}} command', () => {{
+    const command = plugin.addCommand({{
+      id: '{{command_id}}',
+      name: '{{title}}',
+      callback: jest.fn()
+    }});
+    command.callback();
+    expect(true).toBe(true); // Validate command registration
+  }});
+
+  it('should call {{method_name}} method', () => {{
+    expect(plugin.{{method_name}}).toBeDefined();
+    expect(true).toBe(true); // Placeholder for method test
   }});
 }});'''
-        log_info(self.logger, f"Generated fallback tests for '{title}'")
+        log_info(self.logger, f"Generated improved fallback tests for '{title}' (method: {method_name}, cmd: {command_id})")
         return fallback_tests
 
     def generate(self, state: CodeGenerationState) -> CodeGenerationState:

@@ -26,7 +26,9 @@ class DependencyInstallerAgent(BaseAgent):
 
         npm_packages = getattr(state, 'npm_packages', []) or state.get('npm_packages', [])
         if not npm_packages:
-            self.monitor.info("No npm_packages found in refined_ticket")
+            npm_packages = state.get('refined_ticket', {}).get('npm_packages', [])
+            self.monitor.info(f"Using refined_ticket.npm_packages ({len(npm_packages)} pkgs): {npm_packages}")
+        if not npm_packages:
             return state
 
         pkgs = []

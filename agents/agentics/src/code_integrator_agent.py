@@ -70,7 +70,11 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 state['installed_deps'] = installed_deps
                 log_info(self.name, f"Dependency handling complete. Installed: {installed_deps}")
 
-            task_details = state['result']
+            result = state.get('result')
+            if not result:
+                log_info(self.name, "INTEGRATOR_NO_RESULT_FALLBACK", extra={"keys": list(state.keys())})
+                result = state.get('refined_ticket', {})
+            task_details = result
             relevant_code_files = state.get('relevant_code_files', [])
             relevant_test_files = state.get('relevant_test_files', [])
 
