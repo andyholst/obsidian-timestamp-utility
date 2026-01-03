@@ -69,17 +69,29 @@ class BaseAgent(Runnable[CodeGenerationState, CodeGenerationState]):
 
     @track_agent_execution("base_agent")
     def __call__(self, state: CodeGenerationState) -> CodeGenerationState:
-        self.monitor.info("agent_start", {"agent": self.name})
+        try:
+            self.monitor.info("agent_start", {"agent": self.name})
+        except Exception as e:
+            print(f"Logging failed for agent_start: {e}")
         try:
             state = self.circuit_breaker.call(self._monitored_process, state)
-            self.monitor.info("agent_complete", {"agent": self.name})
+            try:
+                self.monitor.info("agent_complete", {"agent": self.name})
+            except Exception as e:
+                print(f"Logging failed for agent_complete: {e}")
             return state
         except CircuitBreakerOpenException as e:
-            self.monitor.error("circuit_breaker_open", {"agent": self.name, "error": str(e)})
+            try:
+                self.monitor.error("circuit_breaker_open", {"agent": self.name, "error": str(e)})
+            except Exception as log_e:
+                print(f"Logging failed for circuit_breaker_open: {log_e}")
             raise
         except Exception as e:
             error_context = self._create_error_context(state, e)
-            self.monitor.error("agent_error", error_context)
+            try:
+                self.monitor.error("agent_error", error_context)
+            except Exception as log_e:
+                print(f"Logging failed for agent_error: {log_e}")
             raise
 
     def _monitored_process(self, state: CodeGenerationState) -> CodeGenerationState:

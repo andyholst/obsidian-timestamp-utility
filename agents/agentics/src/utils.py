@@ -38,16 +38,9 @@ def remove_thinking_tags(text: str) -> str:
     monitor.info("remove_thinking_tags_complete", data={"output_length": len(cleaned_text)})
     return cleaned_text
 
-def log_info(component, msg, extra_data=None):
-    """Log a message at INFO or DEBUG level based on INFO_AS_DEBUG setting."""
-    monitor = structured_log(component)
-    data = {"message": msg}
-    if extra_data:
-        data["extra_data"] = extra_data
-    if INFO_AS_DEBUG:
-        monitor.debug("log_info", data=data)
-    else:
-        monitor.info("log_info", data=data)
+def log_info(name: str, msg: str, extra: dict = None, **kwargs):
+    from .monitoring import monitor
+    monitor.info(msg, extra={'agent': name, **(extra or {}), **kwargs})
 
 def parse_json_response(response: str, required_keys=None, fallback_defaults=None, llm_client=None, original_prompt=None, max_retries=3):
     """Parse JSON from LLM response with robust error handling, validation, and retries.
