@@ -11,6 +11,7 @@ class MCPClient:
     def __init__(self, bridge_url: str = "http://localhost:3000"):
         self.bridge_url = bridge_url
         self.logger = logging.getLogger("MCPClient")
+        self.monitor = structured_log("mcp_client")
         self.monitor.logger.setLevel(logging.INFO)
         self.session: Optional[aiohttp.ClientSession] = None
         log_info(self.logger, f"Initialized MCP client with bridge URL: {bridge_url}")

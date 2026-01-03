@@ -292,4 +292,4 @@ Code: {generated_code}
 
 Tests: {generated_tests}
 
-Output JSON: {{"code_fixes": "updated main.ts snippet", "test_fixes": "updated main.test.ts snippet", "explanation": "fixes"}}""".format(...)
+Output JSON: {{"code_fixes": "updated main.ts snippet", "test_fixes": "updated main.test.ts snippet", "explanation": "fixes"}}"""
