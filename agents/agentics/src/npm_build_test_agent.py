@@ -3,7 +3,6 @@ import re
 from typing import Dict, Any, Optional
 from langchain_core.runnables import Runnable
 from .tool_integrated_agent import ToolIntegratedAgent
-from .state import CodeGenerationState
 from .tools import execute_command_tool
 from .utils import log_info
 from .prompts import ModularPrompts
@@ -14,7 +13,7 @@ class NpmBuildTestAgent(ToolIntegratedAgent):
         super().__init__(llm_client, [execute_command_tool], "NpmBuildTestAgent")
         self.monitor.info("NpmBuildTestAgent initialized")
 
-    def process(self, state: CodeGenerationState) -> CodeGenerationState:
+    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Run npm build and test commands, parse errors, propose fixes if needed."""
         log_info(self.name, "Starting npm build and test execution")
 
@@ -34,18 +33,18 @@ class NpmBuildTestAgent(ToolIntegratedAgent):
                 # Update state with fixes
                 state = self._apply_fixes(state, fixes)
                 # Add error summary for error_recovery_agent
-                state.error_summary = {
+                state['error_summary'] = {
                     'npm_errors': errors,
                     'proposed_fixes': fixes,
                     'build_output': result
                 }
             else:
                 log_info(self.name, "No errors found, proceeding")
-                state.error_summary = None
+                state['error_summary'] = None
 
         except Exception as e:
             log_info(self.name, f"Error running npm commands: {str(e)}")
-            state.error_summary = {
+            state['error_summary'] = {
                 'npm_errors': [{'type': 'execution_error', 'message': str(e)}],
                 'proposed_fixes': [],
                 'build_output': str(e)
@@ -93,11 +92,11 @@ class NpmBuildTestAgent(ToolIntegratedAgent):
 
         return errors
 
-    def _propose_fixes(self, state: CodeGenerationState, errors: list) -> Dict[str, Any]:
+    def _propose_fixes(self, state: Dict[str, Any], errors: list) -> Dict[str, Any]:
         """Use LLM to propose fixes for the errors."""
         prompt = ModularPrompts.get_npm_build_test_fix_prompt().format(
-            generated_code=state.generated_code,
-            generated_tests=state.generated_tests,
+            generated_code=state.get('generated_code', ''),
+            generated_tests=state.get('generated_tests', ''),
             errors=errors
         )
         try:
@@ -110,15 +109,15 @@ class NpmBuildTestAgent(ToolIntegratedAgent):
         except Exception as e:
             log_info(self.name, f"Error proposing fixes: {str(e)}")
             return {
-                "code_fixes": state.generated_code,
-                "test_fixes": state.generated_tests,
+                "code_fixes": state.get('generated_code', ''),
+                "test_fixes": state.get('generated_tests', ''),
                 "explanation": "Failed to generate fixes"
             }
 
-    def _apply_fixes(self, state: CodeGenerationState, fixes: Dict[str, Any]) -> CodeGenerationState:
+    def _apply_fixes(self, state: Dict[str, Any], fixes: Dict[str, Any]) -> Dict[str, Any]:
         """Apply the proposed fixes to the state."""
         if 'code_fixes' in fixes:
-            state.generated_code = fixes['code_fixes']
+            state['generated_code'] = fixes['code_fixes']
         if 'test_fixes' in fixes:
-            state.generated_tests = fixes['test_fixes']
+            state['generated_tests'] = fixes['test_fixes']
         return state

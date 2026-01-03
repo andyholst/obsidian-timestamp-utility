@@ -44,14 +44,14 @@ class TestGeneratorAgent(BaseAgent):
                 "You are tasked with generating Jest tests for the new functionality added to the plugin class in an Obsidian plugin. "
                 "The tests must be integrated into the existing `{test_file}` file without altering any existing code. "
                 "Follow these instructions carefully:\n\n"
-                "**1. Full Refined Ticket (Priority Source):**\n{raw_refined_ticket}\n\n"
+                "**1. Full Refined Ticket (Priority Source):**\\n{raw_refined_ticket}\\n\\n"
                 + ModularPrompts.get_test_structure_section(test_structure)
                 + ModularPrompts.get_test_requirements_section(raw_refined_ticket=raw_refined_ticket, original_ticket_content=original_ticket_content)
-                + "3. **Task Details:**\n{task_details_str}\n\n"
-                + "4. **Generated Code:**\n{generated_code}\n\n"
-                + "5. **Existing Test File ({test_file}):**\n{existing_test_content}\n\n"
-                + "6. **Previous Feedback (Tune Accordingly):**\n{feedback}\n\n"
-                + ModularPrompts.get_output_instructions_tests() + "\n\nTS code: use \" for strings, \\` for template if needed. No raw ` in code.\n\nTests cover new method/command exactly, command callback with editor/view, method logic.\n\nCRITICAL: ALWAYS generate NON-EMPTY 'tests' field with valid Jest test code. Never skip or empty. Use basic describe/it blocks. Output JSON: {\"tests\": \"...\"}"
+                + "3. **Task Details:**\\n{task_details_str}\\n\\n"
+                + "4. **Generated Code:**\\n{generated_code}\\n\\n"
+                + "5. **Existing Test File ({test_file}):**\\n{existing_test_content}\\n\\n"
+                + "6. **Previous Feedback (Tune Accordingly):**\\n{feedback}\\n\\n"
+                + ModularPrompts.get_output_instructions_tests() + "\\n\\nTS code: use \\\" for strings, \\\\` for template if needed. No raw ` in code.\\n\\nTests cover new method/command exactly, command callback with editor/view, method logic.\\n\\nCRITICAL: ALWAYS generate NON-EMPTY 'tests' field with valid Jest test code. Never skip or empty. Use basic describe/it blocks. Output JSON: {\\\"tests\\\": \\\"...\\\"}\""
             )
             log_info(self.name, f"Full prompt for test gen: {prompt}")
             return prompt
@@ -80,13 +80,13 @@ class TestGeneratorAgent(BaseAgent):
         refinement_prompt_template = PromptTemplate(
             input_variables=["generated_tests", "validation_feedback", "generated_code", "task_details_str", "existing_test_content", "test_file"],
             template=(
-                "/think\n"
-                "You are refining Jest tests based on validation feedback. The tests must properly test the generated code and pass all validation checks.\n\n"
-                "Validation Feedback: {validation_feedback}\n\n"
-                "Generated Code: {generated_code}\n\n"
-                "Original Tests: {generated_tests}\n\n"
-                "Task Details: {task_details_str}\n\n"
-                "Existing Test File: {existing_test_content}\n\n"
+                "/think\\n"
+                "You are refining Jest tests based on validation feedback. The tests must properly test the generated code and pass all validation checks.\\n\\n"
+                "Validation Feedback: {validation_feedback}\\n\\n"
+                "Generated Code: {generated_code}\\n\\n"
+                "Original Tests: {generated_tests}\\n\\n"
+                "Task Details: {task_details_str}\\n\\n"
+                "Existing Test File: {existing_test_content}\\n\\n"
                 "Output only the refined Jest test code, no explanations."
             )
         )
@@ -150,12 +150,12 @@ class TestGeneratorAgent(BaseAgent):
             return str(pkg)
         npm_str = ', '.join(format_package(pkg) for pkg in npm_packages)
         return (
-            f"Title: {title}\n"
-            f"Description: {description}\n"
-            f"Requirements: {', '.join(requirements)}\n"
-            f"Acceptance Criteria: {', '.join(acceptance_criteria)}\n"
-            f"Implementation Steps: {', '.join(implementation_steps)}\n"
-            f"NPM Packages: {npm_str}\n"
+            f"Title: {title}\\n"
+            f"Description: {description}\\n"
+            f"Requirements: {', '.join(requirements)}\\n"
+            f"Acceptance Criteria: {', '.join(acceptance_criteria)}\\n"
+            f"Implementation Steps: {', '.join(implementation_steps)}\\n"
+            f"NPM Packages: {npm_str}\\n"
             f"Manual Implementation Notes: {manual_implementation_notes}"
         )
 
@@ -228,17 +228,19 @@ class TestGeneratorAgent(BaseAgent):
         generated_tests = self._post_process_tests(generated_tests)
         return generated_tests
 
-    def _post_process_tests(self, generated_tests):
+    def _post_process_tests(self, raw_tests: str) -> str:
         """Post-process the generated tests."""
         # Post-process generated tests to fix common issues
-        generated_tests = re.sub(r'expect\(plugin\.\w+\)\.toHaveBeenCalled\(\);', '', generated_tests)
+        generated_tests = re.sub(r'expect\(plugin\.\w+\)\.toHaveBeenCalled\(\);', '', raw_tests)
+        # Fix malformed mock syntax
+        generated_tests = re.sub(r'(\w+)\.\((\w+) as jest\.Mock\)', r'(\1.\2 as jest.Mock)', generated_tests)
         # Fix mock syntax
         generated_tests = re.sub(r'(\w+)\.mockReturnValue', r'(\1 as jest.Mock).mockReturnValue', generated_tests)
         # Fix command test syntax
         generated_tests = re.sub(r'await const result = plugin\.onload\(\);', r'await plugin.onload();', generated_tests)
         generated_tests = re.sub(r'await command\.callback\(\);', r'if (command && command.callback) { await command.callback(); }', generated_tests)
-        return generated_tests
-
+        # Ensure ; termination
+        generated_tests = re.sub(r'([a-zA-Z0-9_]+)\s*$', r'\1;', generated_tests, flags=re.MULTILINE)
     def _get_fallback_tests(self, state: CodeGenerationState) -> str:
         """Generate minimal fallback Jest tests."""
         title = safe_get(state, 'title', 'UnknownFeature')

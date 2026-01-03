@@ -356,12 +356,21 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             return filename
 
     def extract_content(self, text: str) -> str:
-        """Extract code content: strip thinking tags, markdown blocks, trim."""
+        """Extract code content: strip thinking tags, markdown blocks, parse JSON wrappers, trim."""
         log_info(self.name, "Extracting content from raw text")
         log_info(self.name, f"Input text length: {len(text)}")
         log_info(self.name, f"Input text: {text}")
         clean_text = remove_thinking_tags(text)
         clean_text = self.strip_markdown_blocks(clean_text)
+        # Try to parse as JSON and extract 'tests' or 'code' if present
+        try:
+            parsed = json.loads(clean_text)
+            if 'tests' in parsed:
+                clean_text = parsed['tests']
+            elif 'code' in parsed:
+                clean_text = parsed['code']
+        except json.JSONDecodeError:
+            pass  # Use full content
         log_info(self.name, f"Extracted content length: {len(clean_text)}")
         log_info(self.name, f"Extracted content: {clean_text}")
         return clean_text.strip()

@@ -90,6 +90,11 @@ class ModularPrompts:
             "- Use `new TimestampPlugin(mockApp, {} as any)` matching existing tests. Mock `obsidian.Editor` completely: define `mockEditor` with **all** methods from Obsidian Editor API as `jest.fn()` - see [`src/__tests__/main.test.ts`](src/__tests__/main.test.ts:14) for exact mock (getDoc, refresh, setValue, replaceSelection, getValue, getLine, lineCount, etc. all `jest.fn()` with appropriate mocks like getValue: jest.fn(() => "")). Use `button.onclick = () => {}` for modals (lowercase). Match **EXACTLY** the method and command names specified in the Task Details and Generated Code sections. Follow [`src/__mocks__/obsidian.ts`](src/__mocks__/obsidian.ts) for other mocks.\n"
              " - Tests must comprehensively cover code implementation. Ensure code satisfies all acceptance criteria exactly. If vague, default to basic command + method with app.workspace.currentFile notice.\n"
              " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n\n"
+            "Use precise syntax:\n"
+            "const mockGetActiveView = app.workspace.getActiveViewOfType as jest.Mock;\n"
+            "(app.workspace.getActiveViewOfType as jest.Mock).mockReturnValue(view);\n"
+            "Always end statements with ';'.\n"
+            "Emphasize strict TS/Jest syntax, no hallucinations.\n"
         )
         if raw_refined_ticket:
             formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
