@@ -77,17 +77,18 @@ class ModularPrompts:
             "- Avoid obsidian.Manifest or undefined types; use 'any' or mock consistently.\n"
             "- Use jest.fn() for mocks where appropriate.\n\n"
             "2. **New Test Requirements:**\n"
+            " - Analyze the Generated Code section to identify the exact method name and command id added.\n"
             " - Generate exactly two `describe` blocks:\n"
-            " - One for the method `{method_name}` added to the plugin class.\n"
-            " - One for the command `{command_id}` added via `this.addCommand`.\n"
-            " - For the method test, call `plugin.{method_name}('test input')` to use the real implementation and check the result (e.g., expect it to return a string or call mockEditor).\n"
-            " - For the command test, execute `mockCommands['{command_id}'].callback()` to trigger the command, which should call `{method_name}` and interact with `mockEditor`.\n"
+            " - One for the new method added to the plugin class (extract name from code like 'public methodName(): string').\n"
+            " - One for the new command added via `this.addCommand` (extract id from code like 'id: \"command-id\"').\n"
+            " - For the method test, call `plugin.methodName('test input')` to use the real implementation and check the result (e.g., expect it to return a string or call mockEditor).\n"
+            " - For the command test, execute `mockCommands['command-id'].callback()` to trigger the command, which should call the method and interact with `mockEditor`.\n"
             " - Match the style of existing tests (e.g., async tests with `await plugin.onload()`, expect(mockEditor.replaceSelection).toHaveBeenCalledWith(result)).\n"
-            " - Only generate tests for `{method_name}` and `{command_id}`, as these are the new additions.\n"
+            " - Only generate tests for the new method and command identified in the Generated Code.\n"
             " - Do not access private methods or non-existent properties on the plugin.\n"
             " - Do not use jest.spyOn on plugin methods.\n"
-            " - IMPORTANT: Do not use `plugin.commandIds` or any property access for command IDs; always use string literals like `'{command_id}'` in `mockCommands['{command_id}']`.\n"
-            "- Use `new TimestampPlugin(mockApp, {} as any)` matching existing tests. Mock `obsidian.Editor` completely: define `mockEditor` with **all** methods from Obsidian Editor API as `jest.fn()` - see [`src/__tests__/main.test.ts`](src/__tests__/main.test.ts:14) for exact mock (getDoc, refresh, setValue, replaceSelection, getValue, getLine, lineCount, etc. all `jest.fn()` with appropriate mocks like getValue: jest.fn(() => "")). Use `button.onclick = () => {}` for modals (lowercase). Match **EXACTLY** the method and command names specified in the Task Details and Generated Code sections. Follow [`src/__mocks__/obsidian.ts`](src/__mocks__/obsidian.ts) for other mocks.\n"
+            " - IMPORTANT: Do not use `plugin.commandIds` or any property access for command IDs; always use string literals like `'command-id'` in `mockCommands['command-id']`.\n"
+            "- Use `new TimestampPlugin(mockApp, {} as any)` matching existing tests. Mock `obsidian.Editor` completely: define `mockEditor` with **all** methods from Obsidian Editor API as `jest.fn()` - see [`src/__tests__/main.test.ts`](src/__tests__/main.test.ts:14) for exact mock (getDoc, refresh, setValue, replaceSelection, getValue, getLine, lineCount, etc. all `jest.fn()` with appropriate mocks like getValue: jest.fn(() => "")). Use `button.onclick = () => {}` for modals (lowercase). Match **EXACTLY** the method and command names from the Generated Code section. Follow [`src/__mocks__/obsidian.ts`](src/__mocks__/obsidian.ts) for other mocks.\n"
              " - Tests must comprehensively cover code implementation. Ensure code satisfies all acceptance criteria exactly. If vague, default to basic command + method with app.workspace.currentFile notice.\n"
              " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n\n"
             "Use precise syntax:\n"
@@ -95,6 +96,7 @@ class ModularPrompts:
             "(app.workspace.getActiveViewOfType as jest.Mock).mockReturnValue(view);\n"
             "Always end statements with ';'.\n"
             "Emphasize strict TS/Jest syntax, no hallucinations.\n"
+            "CRITICAL: Extract method name and command id directly from the Generated Code section - do not use placeholders or assumptions.\n"
         )
         if raw_refined_ticket:
             formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
@@ -123,9 +125,10 @@ class ModularPrompts:
     def get_output_instructions_tests():
         return (
             "7. **Output Instructions:**\n"
-            " - Response MUST start with 'describe(' and end with '});'.\n"
-            " - ONLY the two inner describe blocks.\n"
-            " - NO top-level describe, imports, comments, or extra text.\n"
+            " - Output ONLY valid JSON: {\"tests\": \"describe block code here\"}\n"
+            " - The 'tests' field must contain the complete Jest test code starting with 'describe(' and ending with '});'.\n"
+            " - Include exactly two inner describe blocks for the method and command.\n"
+            " - NO extra text, comments, or markdown outside the JSON.\n"
             " - MUST include 'describe(' and 'it(' or 'test(' keywords.\n"
             " - Valid Jest syntax only."
         )

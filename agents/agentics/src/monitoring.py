@@ -391,3 +391,6 @@ def get_monitoring_data() -> Dict[str, Any]:
 
 # Import ServiceHealthMonitor from circuit_breaker for backward compatibility
 from .circuit_breaker import ServiceHealthMonitor
+
+# For backward compatibility
+monitor = structured_log(__name__)

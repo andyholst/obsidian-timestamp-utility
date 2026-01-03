@@ -39,7 +39,6 @@ def remove_thinking_tags(text: str) -> str:
     return cleaned_text
 
 def log_info(name: str, msg: str, extra: dict = None, **kwargs):
-    from .monitoring import monitor
     monitor.info(msg, extra={'agent': name, **(extra or {}), **kwargs})
 
 def parse_json_response(response: str, required_keys=None, fallback_defaults=None, llm_client=None, original_prompt=None, max_retries=3):

@@ -70,11 +70,11 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 state['installed_deps'] = installed_deps
                 self.monitor.info(f"Dependency handling complete. Installed: {installed_deps}", extra={'agent': self.name})
 
-            result = state.get('result')
-            if not result:
-                self.monitor.info("INTEGRATOR_NO_RESULT_FALLBACK", {"agent": self.name, "keys": list(state.keys())})
-                raise ValueError(f"No result in state for integrator: {list(state.keys())}")
-            task_details = result
+            refined_ticket = state.get('refined_ticket')
+            if not refined_ticket:
+                self.monitor.info("INTEGRATOR_NO_REFINED_TICKET_FALLBACK", {"agent": self.name, "keys": list(state.keys())})
+                raise ValueError(f"No refined_ticket in state for integrator: {list(state.keys())}")
+            task_details = refined_ticket
             relevant_code_files = state.get('relevant_code_files', [])
             relevant_test_files = state.get('relevant_test_files', [])
 

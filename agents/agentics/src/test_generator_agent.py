@@ -33,10 +33,6 @@ class TestGeneratorAgent(BaseAgent):
         def build_test_prompt(inputs):
             test_structure = json.dumps(inputs.get('test_structure', {}))
             generated_code = inputs.get('generated_code', '')
-            method_match = re.search(r'public\s+(\w+)\s*\(', generated_code)
-            method_name = method_match.group(1) if method_match else 'unknownMethod'
-            cmd_match = re.search(r'id\s*:\s*["\']([^"\']+)["\']', generated_code)
-            command_id = cmd_match.group(1) if cmd_match else 'unknownCommand'
             raw_refined_ticket = inputs.get('raw_refined_ticket', '')
             original_ticket_content = inputs.get('original_ticket_content', '')
             prompt = (
@@ -246,33 +242,36 @@ class TestGeneratorAgent(BaseAgent):
         title = safe_get(state, 'title', 'UnknownFeature')
         method_name = safe_get(state, 'method_name', 'testMethod')
         command_id = safe_get(state, 'command_id', 'testCommand')
-        fallback_tests = f'''import TimestampPlugin from '../main';
-import * as obsidian from 'obsidian';
-
-const mockApp: obsidian.App = {{}} as any;
-const mockEditor: obsidian.Editor = {{ replaceSelection: jest.fn() }} as any;
-const mockView: obsidian.MarkdownView = {{ editor: mockEditor }} as any;
-
-describe(`{{title}}`, () => {{
+        fallback_tests = f'''describe('{method_name}', () => {{
   let plugin: TimestampPlugin;
 
-  beforeEach(() => {{
-    plugin = new TimestampPlugin(mockApp, {{ id: 'test-plugin' }} as obsidian.PluginManifest);
+  beforeEach(async () => {{
+    plugin = new TimestampPlugin(mockApp, mockManifest);
+    await plugin.onload();
   }});
 
-  it('should execute {{command_id}} command', () => {{
-    const command = plugin.addCommand({{
-      id: '{{command_id}}',
-      name: '{{title}}',
-      callback: jest.fn()
-    }});
-    command.callback();
-    expect(true).toBe(true); // Validate command registration
+  it('should return a string when called', () => {{
+    const result = plugin.{method_name}();
+    expect(typeof result).toBe('string');
+    expect(result).toMatch(/^[0-9]+$/); // Assuming timestamp or similar
+  }});
+}});
+
+describe('{command_id} command', () => {{
+  let plugin: TimestampPlugin;
+
+  beforeEach(async () => {{
+    plugin = new TimestampPlugin(mockApp, mockManifest);
+    await plugin.onload();
   }});
 
-  it('should call {{method_name}} method', () => {{
-    expect(plugin.{{method_name}}).toBeDefined();
-    expect(true).toBe(true); // Placeholder for method test
+  it('should insert result into editor', async () => {{
+    const command = mockCommands['{command_id}'];
+    expect(command).toBeDefined();
+    if (command && typeof command.callback === 'function') {{
+      await command.callback();
+      expect(mockEditor.replaceSelection).toHaveBeenCalledWith(expect.stringMatching(/^[0-9]+$/));
+    }}
   }});
 }});'''
         log_info(self.logger, f"Generated improved fallback tests for '{title}' (method: {method_name}, cmd: {command_id})")
