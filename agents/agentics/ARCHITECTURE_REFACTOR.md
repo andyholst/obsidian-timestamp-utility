@@ -20,6 +20,37 @@
 6. **Persistence & Checkpointing**: LangGraph checkpointers for durable workflow state across restarts and failures (use in-memory for local development)
 7. **Human-in-the-Loop (HITL)**: Strategic pauses for human intervention on critical decisions and low-confidence outputs
 
+## Agents Catalog
+
+The following table documents **all agents** in the system, addressing previous gaps. Agents follow consistent patterns: inherit from [`BaseAgent`](src/base_agent.py:28) or [`ToolIntegratedAgent`](src/tool_integrated_agent.py:11), use immutable [`CodeGenerationState`](src/state.py), circuit breakers, and structured logging.
+
+| Agent | Purpose | Key Chains/Tools | Best Practices Used | Reference |
+|-------|---------|------------------|---------------------|-----------|
+| [`FetchIssueAgent`](src/fetch_issue_agent.py:11) | Fetches GitHub issue content and validates URL. I/O: str url → state['ticket_content']. No chains/tools beyond GitHub client. | GitHub API client. | Circuit breaker, immutable state updates, structured error context. | [`fetch_issue_agent.py`](src/fetch_issue_agent.py) |
+| [`TicketClarityAgent`](src/ticket_clarity_agent.py:16) | Iteratively refines ticket into structured JSON (title/desc/reqs/AC/impl steps) using LLM. Handles low-quality extraction with fallbacks. I/O: raw ticket → refined_ticket. | LLM chains with @retry (tenacity), [`ModularPrompts`](src/prompts.py), parse_json_response. | Dynamic prompts, few-shot examples, iterative refinement, JSON structured output (Pydantic enforced). | [`ticket_clarity_agent.py`](src/ticket_clarity_agent.py) |
+| [`ImplementationPlannerAgent`](src/implementation_planner_agent.py:11) | Analyzes refined ticket to produce implementation_steps and npm_packages suggestions. I/O: refined_ticket → enhanced with steps/packages. | LLM [`PromptTemplate`](src/implementation_planner_agent.py:32), circuit breaker. | Few-shot JSON schema enforcement, merges with prior state immutably. | [`implementation_planner_agent.py`](src/implementation_planner_agent.py) |
+| [`CodeExtractorAgent`](src/code_extractor_agent.py:9) | Dynamically lists/reads project files, extracts relevant code/tests via semantic identifier matching from ticket. I/O: state → relevant_code_files/relevant_test_files with structure. | [`ToolExecutor`](src/tool_executor.py) (list_files_tool, read_file_tool), identifier extraction regex. | Tool-augmented LCEL, fallback to main files, code structure parsing (classes/methods). | [`code_extractor_agent.py`](src/code_extractor_agent.py) |
+| [`CodeGeneratorAgent`](src/code_generator_agent.py:20) | Generates TS code from specs, requirements, existing code. Workflows: collaborative with tests. | ToolIntegratedAgent chains, LLM. | LCEL composition, context-aware prompting, structured output prevents TS syntax errors. | [`code_generator_agent.py`](src/code_generator_agent.py) |
+| [`TestGeneratorAgent`](src/test_generator_agent.py:16) | Generates Jest tests based on code and specs. Collaborative workflow. | LLM chains, state transforms. | Immutable state, cross-validation with code. | [`test_generator_agent.py`](src/test_generator_agent.py) |
+| [`CodeIntegratorAgent`](src/code_integrator_agent.py:13) | Writes generated code/tests to files safely. | File write tools. | Validation before write, backup creation. | [`code_integrator_agent.py`](src/code_integrator_agent.py) |
+| [`CodeReviewerAgent`](src/code_reviewer_agent.py:12) | Reviews code for best practices, TS errors, Obsidian API compliance. | LLM review chain. | Few-shot review criteria. | [`code_reviewer_agent.py`](src/code_reviewer_agent.py) |
+| [`PostTestRunnerAgent`](src/post_test_runner_agent.py:16) | Runs `npm test`, parses failures (TS errors), triggers recovery. | NPM tools, regex error parsing. | TestRecoveryNeeded exception, log parsing. | [`post_test_runner_agent.py`](src/post_test_runner_agent.py) |
+| [`PreTestRunnerAgent`](src/pre_test_runner_agent.py:18) | Runs `tsc --noEmit` before tests. | NPM tools. | Compile checks prevent runtime fails. | [`pre_test_runner_agent.py`](src/pre_test_runner_agent.py) |
+| [`ErrorRecoveryAgent`](src/error_recovery_agent.py:23) | Applies fallback strategies for failures, e.g., test fixes via LLM. Memory: state checkpointing. | Recovery chains per AgentType. | Circuit breakers, max retries, confidence thresholds. | [`error_recovery_agent.py`](src/error_recovery_agent.py) |
+| [`DependencyAnalyzerAgent`](src/dependency_analyzer_agent.py:11) | Scans package.json, suggests deps from plan. | npm_list_tool. | Dependency resolution. | [`dependency_analyzer_agent.py`](src/dependency_analyzer_agent.py) |
+| [`DependencyInstallerAgent`](src/dependency_installer_agent.py:14) | Runs `npm install` for suggested packages. | npm_install_tool. | Lockfile updates. | [`dependency_installer_agent.py`](src/dependency_installer_agent.py) |
+| [`OutputResultAgent`](src/output_result_agent.py:8) | Compiles final results for output. | None. | Structured JSON. | [`output_result_agent.py`](src/output_result_agent.py) |
+| [`FeedbackAgent`](src/feedback_agent.py:11) | Incorporates HITL feedback into state. | Input parsing. | ConversationBufferMemory compatible. | [`feedback_agent.py`](src/feedback_agent.py) |
+| [`ProcessLLMAgent`](src/process_llm_agent.py:17) | Normalizes LLM outputs with fallbacks. | Fallback LLMs. | Multi-model resilience. | [`process_llm_agent.py`](src/process_llm_agent.py) |
+| [`NpmBuildTestAgent`](src/npm_build_test_agent.py:11) | Executes NPM build/test sequences. | NPM tools. | Sequential tool calls. | [`npm_build_test_agent.py`](src/npm_build_test_agent.py) |
+| [`ToolIntegratedCodeGeneratorAgent`](src/tool_integrated_code_generator_agent.py:18) | Advanced code gen with dynamic tools. | Extended toolset. | Tool-calling LCEL. | [`tool_integrated_code_generator_agent.py`](src/tool_integrated_code_generator_agent.py) |
+
+**Notes**: 
+- All agents extend [`BaseAgent`](src/base_agent.py:28) for monitoring/circuit breakers.
+- Tool agents extend [`ToolIntegratedAgent`](src/tool_integrated_agent.py:11).
+- Workflows composed via [`AgentComposer`](src/agent_composer.py) and [`ComposableWorkflows`](src/composable_workflows.py).
+- TS generation uses structured JSON/Pydantic outputs to prevent syntax errors (e.g., valid constructors, imports).
+
 ### New Architecture Components
 
 #### 1. Agent Composition System
@@ -308,6 +339,58 @@ graph.add_conditional_edges(\"validate\", route_hitl, {\"hitl\": \"human_review\
 5. **Modularity**: Small, focused agents that can be composed
 6. **Observability**: Structured logging and monitoring
 7. **Testing**: Comprehensive test coverage with realistic mocks
+
+#### Memory Management (New: Addresses Audit Gap)
+Uses LangGraph checkpointers for **persistent workflow state** across nodes/restarts. Agent-level conversation memory via RunnableWithMessageHistory for HITL/FeedbackAgent.
+
+**Examples**:
+```python
+# Workflow-level (already in use)
+from langgraph.checkpoint.memory import MemorySaver
+checkpointer = MemorySaver()  # In-memory for local dev
+app = workflow.compile(checkpointer=checkpointer)
+
+# Agent-level (extendable)
+from langchain.memory import ConversationBufferMemory
+from langchain_core.runnables import RunnableWithMessageHistory
+memory = ConversationBufferMemory(return_messages=True)
+agent_with_memory = RunnableWithMessageHistory(
+    agent_chain,
+    lambda session_id: memory.load_memory_variables({}),
+    memory.save_context
+)
+```
+State checkpointed immutably via [`CodeGenerationState`](src/state.py:27). Serialization: `dataclasses.asdict(state)` for logs/monitoring.
+
+#### Prompt Optimization (New: Addresses Audit Gap)
+**Dynamic prompts** via `PromptTemplate.format(state_vars)`. **Few-shot examples** embedded for JSON parsing, code gen, reviews. Structured outputs prevent TS syntax errors (e.g., valid imports/constructors).
+
+**Examples** (from [`TicketClarityAgent`](src/ticket_clarity_agent.py:119)):
+```python
+prompt = ModularPrompts.get_ticket_clarity_evaluation_prompt().format(ticket_content=ticket_content)
+# Few-shot in ModularPrompts for extraction: "Extract >=8 requirements..."
+response = llm.invoke(prompt)
+parsed = parse_json_response(response)  # Enforces schema
+```
+Used across agents for reliability/scalability.
+
+#### Supporting Modules (Documents agentics.py Imports)
+Central orchestration in [`agentics.py`](src/agentics.py) imports:
+
+| Module | Purpose | Key Usage |
+|--------|---------|-----------|
+| [`config.py`](src/config.py) | Env-based config (models, tokens). | `init_config()` |
+| [`services.py`](src/services.py) | LLM/GitHub/MCP clients. | `init_services()` |
+| [`workflows.py`](src/workflows.py) | LangGraph composables. | `ComposableWorkflows.process_issue()` |
+| [`prompts.py`](src/prompts.py) | Few-shot/dynamic templates. | `ModularPrompts.get_*_prompt()` |
+| [`tools.py`](src/tools.py) | MCP/NPM integration. | `mcp_tools = [read_file_tool, npm_install_tool, ...]` |
+| [`utils.py`](src/utils.py) | Logging, parsing, validation. | `log_info`, `parse_json_response` |
+| [`monitoring.py`](src/monitoring.py) | Structured logs/metrics. | `structured_log` |
+| [`circuit_breaker.py`](src/circuit_breaker.py) | Failure resilience. | `@circuit_breaker.call` |
+| [`exceptions.py`](src/exceptions.py) | Typed errors. | `TestRecoveryNeeded`, `AgenticsError` |
+| [`state.py`](src/state.py) | Immutable workflow state. | `CodeGenerationState.with_*()` |
+
+**TS Generation Impact**: Structured prompts + JSON parsing ensure valid TS (no syntax errors from hallucinations). Fixes reflected: PydanticOutputParser in chains.
 
 ### Benefits of Refactored Architecture
 
