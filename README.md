@@ -1,13 +1,13 @@
 # Timestamp Plugin for Obsidian
 
-This plugin enhances your Obsidian experience by adding six convenient commands for working with timestamps, date ranges, and task processing to support the Zettelkasten notes and effecient planning:
+This plugin enhances your Obsidian experience by adding six convenient commands for working with timestamps, date ranges, and task processing to support the Zettelkasten notes and efficient planning:
 
 - **Insert Current Timestamp (YYYYMMDDHHMMSS)**: Inserts a timestamp at the cursor position in the format `YYYYMMDDHHMMSS` (e.g., `20250221134527` for February 21, 2025, 1:45:27 PM).
 - **Rename Current File with Timestamp Prefix (YYYYMMDDHHMMSS)**: Renames the active file by adding a timestamp prefix in the format `YYYYMMDDHHMMSS_filename` (e.g., `20250221134527_notes.md`).
 - **Rename Current File with Timestamp as Prefix and First Heading Title as Filename**: Renames the active file using a timestamp prefix and the first heading title from the file content in the format `YYYYMMDDHHMMSS_title` (e.g., `20250221134527_my_awesome_title.md`). If no heading is found, it uses "untitled" (e.g., `20250221134527_untitled.md`).
 - **Rename Current File with the First Heading Title as Filename**: Renames the active file using the first level 1 heading (e.g., `# My Awesome Title`) as the filename (e.g., `my_awesome_title.md`). If no heading is found, it uses "untitled" (e.g., `untitled.md`).
 - **Insert Dates in Range (YYYY-MM-DD, one per line)**: Opens a modal where you can input a start and end date in `YYYYMMDD` format. It then inserts a list of dates from the start to the end date (inclusive) in `YYYY-MM-DD` format, each on a new line.
-- **Convert Reminders to Date-Time-Blocked Tasks**: Processes reminders in notes in a selected source folder and converts them into time-blocked tasks organized by date in a selected output folder. Reminders in the format `- [ ] Task description (@YYYY-MM-DD HH:MM)` are transformed into tasks like `- [ ] HH:MM - HH:MM Task description` and grouped into daily files to be synced with ICAL services (like `2025-01-01.md`).
+- **Convert Reminders to Date Time-Blocked Tasks**: Processes reminders in notes in a selected source folder and converts them into time-blocked tasks organized by date in a selected output folder. Reminders in the format `- [ ] Task description (@YYYY-MM-DD HH:MM)` are transformed into tasks like `- [ ] HH:MM - HH:MM Task description` and grouped into daily files to be synced with ICAL services (like `2025-01-01.md`).
 
 ## Installation
 
@@ -15,7 +15,7 @@ You can install the plugin either by downloading a pre-built release or by build
 
 ### From Release
 
-1. Download the latest release from [link to releases] (e.g., a ZIP file).
+1. Download the latest release from [https://github.com/andyholst/obsidian-timestamp-utility/releases](https://github.com/andyholst/obsidian-timestamp-utility/releases) (e.g., a ZIP file).
 2. Extract the downloaded archive to obtain the plugin files (e.g., `main.js`, `manifest.json`).
 3. In your Obsidian vault, navigate to the `.obsidian/plugins` directory. If it doesn’t exist, create it.
 4. Create a new folder named `timestamp-plugin` (this name should match the plugin’s ID in `manifest.json`).
