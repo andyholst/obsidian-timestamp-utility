@@ -29,12 +29,26 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
         ansi_escape = re.compile(r'\\x1B(?:[@-Z\\\\-_]|\\[[0-?]*[ -/]*[@-~])')
         return ansi_escape.sub('', text)
 
-    def parse_test_errors(self, log_path: str) -> List[Dict[str, str]]:
-        with open(log_path, 'r') as f:
-            content = f.read()
-        pattern = r'^(.*?):(\d+):(\d+) - (error TS\d+: .*?)(?=\n(?:\s*[a-zA-Z]|$))'
-        errors = re.findall(pattern, content, re.MULTILINE)
-        return [{'file': f, 'line': int(l), 'col': int(c), 'msg': m.strip()} for f,l,c,m in errors]
+    def parse_errors(self, content: str) -> List[Dict[str, str]]:
+        # TS/tsc
+        ts_pattern = r'^(.*?):(\d+):(\d+) - (error TS\d+: .*?)(?=\n(?:\s*[a-zA-Z]|$))'
+        # Rollup
+        rollup_pattern = r'[!>]\\s*(src[/\\\\](.*?)\\.ts):(\\d+):(\\d+)\\s*(error TS\\d+:\\s*(.*?))'
+        # Jest FAIL
+        jest_fail_pattern = r'FAIL\\s+(.+?)\\n(.*?)(?=\\n\\nFAIL|\\n\\nTest Suites|\\Z)'
+        errors = []
+        for pat, typ in [(ts_pattern, 'ts'), (rollup_pattern, 'rollup'), (jest_fail_pattern, 'jest')]:
+            for match in re.finditer(pat, content, re.MULTILINE | re.DOTALL):
+                if typ == 'ts':
+                    f, l, c, m = match.groups()
+                    errors.append({'type': typ, 'file': f, 'line': int(l), 'col': int(c), 'msg': m.strip()})
+                elif typ == 'rollup':
+                    f, _, l, c, _, m = match.groups()
+                    errors.append({'type': typ, 'file': f, 'line': int(l), 'col': int(c), 'msg': m.strip()})
+                elif typ == 'jest':
+                    f, m = match.groups()
+                    errors.append({'type': typ, 'file': f, 'msg': m.strip()})
+        return errors
 
     def process(self, state: State) -> State:
         self.monitor.info(f"Before processing in {self.name}: {safe_json_dumps(state, indent=2)}")
@@ -74,6 +88,29 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
             self.monitor.error(f"Install command failed: {str(e)}")
             raise RuntimeError(f"Install command failed: {str(e)}")
 
+        self.monitor.info(f"Running rollup build in {self.project_root}")
+        try:
+            result = self.tool_executor.execute_tool('npm_run_tool', {'script': 'build', 'cwd': self.project_root})
+            if 'error' in result.lower():
+                raise RuntimeError(f"Rollup build failed: {result}")
+        except Exception as e:
+            combined_output = self.strip_ansi_codes(str(e))
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_path = os.path.join(self.project_root, f"build_failure_post_{timestamp}.log")
+            with open(log_path, 'w') as f:
+                f.write(combined_output)
+            self.monitor.error(f"Rollup build errors. Full output logged to {log_path}: {combined_output[:500]}...")
+            parsed_errors = self.parse_errors(combined_output)
+            current_build_attempt = safe_get(state, "current_build_attempt", 0) + 1
+            new_state = dict(state)
+            new_state["build_errors"] = parsed_errors
+            new_state["test_log_path"] = log_path
+            new_state["current_build_attempt"] = current_build_attempt
+            new_state["recovery_confidence"] = 0.0
+            new_state["recovery_explanation"] = f"Rollup build errors ({len(parsed_errors)} errors). Log: {log_path}"
+            log_info(self.name, f"Recovery triggered: {len(parsed_errors)} errors. Log: {log_path}")
+            raise TestRecoveryNeeded(f"Build recovery needed after attempt {new_state['current_build_attempt']}")
+
         self.monitor.info(f"Running TypeScript typecheck in {self.project_root}")
         try:
             self.tool_executor.execute_tool('typescript_typecheck_tool', {'cwd': self.project_root})
@@ -84,16 +121,16 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
             with open(log_path, 'w') as f:
                 f.write(combined_output)
             self.monitor.error(f"TypeScript compile errors. Full output logged to {log_path}: {combined_output[:500]}...")
-            parsed_errors = self.parse_test_errors(log_path)
-            recovery_attempt = safe_get(state, "recovery_attempt", 0) + 1
+            parsed_errors = self.parse_errors(combined_output)
+            current_build_attempt = safe_get(state, "current_build_attempt", 0) + 1
             new_state = dict(state)
-            new_state["test_errors"] = parsed_errors
+            new_state["build_errors"] = parsed_errors
             new_state["test_log_path"] = log_path
-            new_state["recovery_attempt"] = recovery_attempt
+            new_state["current_build_attempt"] = current_build_attempt
             new_state["recovery_confidence"] = 0.0
             new_state["recovery_explanation"] = f"TypeScript compile errors ({len(parsed_errors)} errors). Log: {log_path}"
             log_info(self.name, f"Recovery triggered: {len(parsed_errors)} errors. Log: {log_path}")
-            raise TestRecoveryNeeded(f"Test recovery needed after attempt {new_state['recovery_attempt']}")
+            raise TestRecoveryNeeded(f"Test recovery needed after attempt {new_state['current_build_attempt']}")
         self.monitor.info("TypeScript typecheck passed.")
 
         log_info(self.name, f"Running test command: {self.test_command} in {self.project_root}")
@@ -117,16 +154,16 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
                 f.write(combined_output)
             self.monitor.error(f"Test command failed: {str(e)}")
             self.monitor.error(f"Test command failed. Full output logged to {log_file}: {combined_output[:500]}...")
-            parsed_errors = self.parse_test_errors(log_file)
-            recovery_attempt = safe_get(state, "recovery_attempt", 0) + 1
+            parsed_errors = self.parse_errors(combined_output)
+            current_build_attempt = safe_get(state, "current_build_attempt", 0) + 1
             new_state = dict(state)
             new_state["test_errors"] = parsed_errors
             new_state["test_log_path"] = log_file
-            new_state["recovery_attempt"] = recovery_attempt
+            new_state["current_build_attempt"] = current_build_attempt
             new_state["recovery_confidence"] = 0.0
             new_state["recovery_explanation"] = f"Tests failed ({len(parsed_errors)} errors). Log: {log_file}"
             log_info(self.name, f"Recovery triggered: {len(parsed_errors)} errors. Log: {log_file}")
-            raise TestRecoveryNeeded(f"Test recovery needed after attempt {new_state['recovery_attempt']}")
+            raise TestRecoveryNeeded(f"Test recovery needed after attempt {new_state['current_build_attempt']}")
 
         log_info(self.name, "Parsing test output for metrics")
         tests_passed_match = re.search(r'Tests:.*?(\\d+)\\s*passed\\s*(\\d+)\\s*total', combined_output, re.DOTALL | re.I)

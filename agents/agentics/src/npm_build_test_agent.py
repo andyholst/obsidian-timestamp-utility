@@ -25,6 +25,7 @@ class NpmBuildTestAgent(ToolIntegratedAgent):
 
             # Parse the output for errors
             errors = self._parse_errors(result)
+            state['build_errors'] = errors
 
             if errors:
                 log_info(self.name, f"Found {len(errors)} errors, proposing fixes")
@@ -53,34 +54,27 @@ class NpmBuildTestAgent(ToolIntegratedAgent):
         return state
 
     def _parse_errors(self, output: str) -> list:
-        """Parse npm build and test output for TypeScript compilation errors and Jest test failures."""
+        """Parse npm build and test output for TypeScript compilation errors, rollup errors, and Jest test failures."""
         errors = []
 
-        # Parse TypeScript compilation errors (from build-package, likely tsc)
-        # Look for lines like: src/main.ts(10,5): error TS1234: Some error
-        ts_error_pattern = r'(\w+\.ts)\((\d+),(\d+)\):\s*error\s*(\w+):\s*(.+)'
-        for match in re.finditer(ts_error_pattern, output, re.MULTILINE):
-            file, line, col, code, message = match.groups()
-            errors.append({
-                'type': 'typescript',
-                'file': file,
-                'line': int(line),
-                'column': int(col),
-                'code': code,
-                'message': message.strip()
-            })
+        # TS/tsc
+        ts_pattern = r'^(.*?):(\d+):(\d+) - (error TS\d+: .*?)(?=\n(?:\s*[a-zA-Z]|$))'
+        # Rollup
+        rollup_pattern = r'[!>]\\s*(src[/\\\\](.*?)\\.ts):(\\d+):(\\d+)\\s*(error TS\\d+:\\s*(.*?))'
+        # Jest FAIL
+        jest_fail_pattern = r'FAIL\\s+(.+?)\\n(.*?)(?=\\n\\nFAIL|\\n\\nTest Suites|\\Z)'
 
-        # Parse Jest test failures
-        # Look for "FAIL" sections
-        fail_pattern = r'FAIL\s+(.+)\n(.+?)(?=\n\nPASS|\n\nFAIL|\n\nTest Suites|\Z)'
-        for match in re.finditer(fail_pattern, output, re.DOTALL):
-            test_file = match.group(1).strip()
-            failure_details = match.group(2).strip()
-            errors.append({
-                'type': 'jest',
-                'file': test_file,
-                'details': failure_details
-            })
+        for pat, typ in [(ts_pattern, 'ts'), (rollup_pattern, 'rollup'), (jest_fail_pattern, 'jest')]:
+            for match in re.finditer(pat, output, re.MULTILINE | re.DOTALL):
+                if typ == 'ts':
+                    f, l, c, m = match.groups()
+                    errors.append({'type': typ, 'file': f, 'line': int(l), 'col': int(c), 'msg': m.strip()})
+                elif typ == 'rollup':
+                    f, _, l, c, _, m = match.groups()
+                    errors.append({'type': typ, 'file': f, 'line': int(l), 'col': int(c), 'msg': m.strip()})
+                elif typ == 'jest':
+                    f, m = match.groups()
+                    errors.append({'type': typ, 'file': f, 'msg': m.strip()})
 
         # Also check for general npm errors
         if 'npm ERR!' in output:
@@ -94,10 +88,10 @@ class NpmBuildTestAgent(ToolIntegratedAgent):
 
     def _propose_fixes(self, state: Dict[str, Any], errors: list) -> Dict[str, Any]:
         """Use LLM to propose fixes for the errors."""
-        prompt = ModularPrompts.get_npm_build_test_fix_prompt().format(
+        prompt = ModularPrompts.get_ts_build_fix_prompt().format(
+            errors=errors,
             generated_code=state.get('generated_code', ''),
-            generated_tests=state.get('generated_tests', ''),
-            errors=errors
+            generated_tests=state.get('generated_tests', '')
         )
         try:
             response = self.llm.invoke(prompt)

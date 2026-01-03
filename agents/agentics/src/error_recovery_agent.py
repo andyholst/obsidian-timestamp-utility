@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from .state import CodeGenerationState
 from .utils import safe_get
 from .exceptions import TestRecoveryNeeded, CompileError
+from .prompts import ModularPrompts
 
 logger = logging.getLogger(__name__)
 
@@ -32,24 +33,8 @@ class ErrorRecoveryAgent(Runnable[CodeGenerationState, CodeGenerationState]):
     def _build_chain(self) -> Runnable:
         parser = PydanticOutputParser(pydantic_object=FixesModel)
         prompt = PromptTemplate(
-            template="""Analyze and fix these TypeScript test errors:
-
-Errors:
-{errors}
-
-Current generated code (fix any integration issues):
-{code}
-
-Current generated tests (fix test code issues):
-{tests}
-
-Ticket context:
-{ticket}
-
-Output ONLY valid JSON matching the schema.
-
-{format_instructions}""",
-            input_variables=["errors", "code", "tests", "ticket"],
+            template=ModularPrompts.get_ts_build_fix_prompt(),
+            input_variables=["errors", "generated_code", "generated_tests"],
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
         chain = prompt | self.llm_reasoning | parser
@@ -67,10 +52,9 @@ Output ONLY valid JSON matching the schema.
 
         try:
             fixes = self.chain.invoke({
-                "errors": json.dumps(safe_get(state, 'test_errors', []), indent=2),
-                "code": safe_get(state, 'generated_code', ''),
-                "tests": safe_get(state, 'generated_tests', ''),
-                "ticket": safe_get(state, 'ticket_content', '') or json.dumps(safe_get(state, 'refined_ticket', {})),
+                "errors": json.dumps(safe_get(state, 'test_errors', []) + safe_get(state, 'build_errors', []), indent=2),
+                "generated_code": safe_get(state, 'generated_code', ''),
+                "generated_tests": safe_get(state, 'generated_tests', ''),
             })
             logger.info(f"Recovery fixes generated, confidence={fixes.confidence}")
 

@@ -156,6 +156,9 @@ class ComposableWorkflows:
         def code_integrator_node(state: CodeGenerationState) -> CodeGenerationState:
             return self.composer.agents["code_integrator"].invoke(state)
 
+        def npm_build_test_node(state: CodeGenerationState) -> CodeGenerationState:
+            return self.composer.agents["npm_build_test"].invoke(state)
+
         def dependency_installer_node(state: CodeGenerationState) -> CodeGenerationState:
             return self.composer.agents["dependency_installer"].invoke(state)
 
@@ -179,13 +182,16 @@ class ComposableWorkflows:
             return hitl.invoke(state)
 
         def recovery_router(state: CodeGenerationState) -> str:
-            attempts = getattr(state, 'recovery_attempt', 0)
+            attempt = state.current_build_attempt
+            max_attempts = getattr(state, 'max_build_attempts', 5)
             confidence = getattr(state, 'recovery_confidence', 0.0)
-            return "error_recovery" if attempts < 3 and confidence > 50 else "hitl"
+            errors = len(state.build_errors or []) + len(state.test_errors or [])
+            return "error_recovery" if attempt < max_attempts and confidence > 50 and errors > 0 else "hitl"
 
         graph = StateGraph(CodeGenerationState)
 
         graph.add_node("code_integrator", code_integrator_node)
+        graph.add_node("npm_build_test", npm_build_test_node)
         graph.add_node("dependency_installer", dependency_installer_node)
         graph.add_node("pre_test_runner", pre_test_runner_node)
         graph.add_node("post_test_runner", post_test_runner_node)
@@ -196,7 +202,8 @@ class ComposableWorkflows:
 
         graph.set_entry_point("code_integrator")
 
-        graph.add_edge("code_integrator", "dependency_installer")
+        graph.add_edge("code_integrator", "npm_build_test")
+        graph.add_edge("npm_build_test", "dependency_installer")
         graph.add_edge("dependency_installer", "pre_test_runner")
         graph.add_edge("pre_test_runner", "post_test_runner")
         graph.add_conditional_edges(

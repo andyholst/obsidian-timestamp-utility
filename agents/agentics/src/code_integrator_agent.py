@@ -2,21 +2,34 @@ import os
 import logging
 import re
 import json
+import shutil
+from datetime import datetime
 from .tool_integrated_agent import ToolIntegratedAgent
-from .tools import read_file_tool, check_file_exists_tool, write_file_tool, npm_install_tool
+from .tools import read_file_tool, check_file_exists_tool, write_file_tool, npm_install_tool, execute_command_tool
 from .state import State
 from .utils import safe_json_dumps, remove_thinking_tags, log_info
 from .prompts import ModularPrompts
 
 class CodeIntegratorAgent(ToolIntegratedAgent):
     def __init__(self, llm_client):
-        super().__init__(llm_client, [read_file_tool, check_file_exists_tool, write_file_tool], "CodeIntegrator")
+        super().__init__(llm_client, [read_file_tool, check_file_exists_tool, write_file_tool, execute_command_tool], "CodeIntegrator")
         # Configurable project root and file extensions
         self.project_root = os.getenv('PROJECT_ROOT', '/project')
         self.code_ext = os.getenv('CODE_FILE_EXTENSION', '.ts')
         self.test_ext = os.getenv('TEST_FILE_EXTENSION', '.test.ts')
         self.llm = llm_client
         self.monitor.info("agent_initialized", data={"project_root": self.project_root, "code_ext": self.code_ext, "test_ext": self.test_ext})
+
+    def backup_file(self, file_path: str, attempt: int):
+        if not os.path.exists(file_path):
+            return
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_dir = os.path.join(self.project_root, 'src', 'backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        backup_name = f"{os.path.basename(file_path)}.{timestamp}.attempt{attempt}.bak"
+        backup_path = os.path.join(backup_dir, backup_name)
+        shutil.copy2(file_path, backup_path)
+        self.monitor.info(f"Backed up {file_path} → {backup_path}")
 
     def process(self, state: State) -> State:
         """
@@ -120,6 +133,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                     updated_content = self.generate_updated_code_file(existing_content, code_content)
                     self.monitor.info(f"Generated updated content length: {len(updated_content)}", extra={'agent': self.name})
                     self.monitor.info(f"Generated updated content: {updated_content}", extra={'agent': self.name})
+                    self.backup_file(abs_file_path, state.get('current_build_attempt', 0))
                     self.update_file(abs_file_path, updated_content)
                 # Update existing test files
                 for file_data in relevant_test_files:
@@ -132,6 +146,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                     updated_content = self.generate_updated_test_file(existing_content, test_content)
                     self.monitor.info(f"Generated updated content length: {len(updated_content)}", extra={'agent': self.name})
                     self.monitor.info(f"Generated updated content: {updated_content}", extra={'agent': self.name})
+                    self.backup_file(abs_file_path, state.get('current_build_attempt', 0))
                     self.update_file(abs_file_path, updated_content)
             else:
                 self.monitor.info("No relevant files found; creating new files", extra={'agent': self.name})

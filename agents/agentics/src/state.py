@@ -53,8 +53,10 @@ class CodeGenerationState:
     validation_history: List[Dict[str, Any]] = field(default_factory=list)
     existing_tests_passed: int = 0
     test_errors: List[Dict[str, str]] = field(default_factory=list)
+    build_errors: List[Dict[str, str]] = field(default_factory=list)
+    max_build_attempts: int = 5
+    current_build_attempt: int = 0
     test_log_path: Optional[str] = None
-    recovery_attempt: int = 0
     recovery_confidence: float = 100.0
     recovery_explanation: Optional[str] = None
     existing_coverage_all_files: float = field(default=0.0)
@@ -79,13 +81,14 @@ class CodeGenerationState:
             generated_tests=tests
         )
 
-    def with_recovery(self, errors: List[Dict[str, str]], log_path: str, attempt: int, confidence: float, explanation: Optional[str] = None) -> 'CodeGenerationState':
+    def with_recovery(self, test_errors: List[Dict[str, str]], build_errors: List[Dict[str, str]], log_path: str, current_build_attempt: int, confidence: float, explanation: Optional[str] = None) -> 'CodeGenerationState':
         """Return new state with recovery information"""
         return CodeGenerationState(
-            **{k: v for k, v in self.__dict__.items() if k not in ['test_errors', 'test_log_path', 'recovery_attempt', 'recovery_confidence', 'recovery_explanation']},
-            test_errors=errors,
+            **{k: v for k, v in self.__dict__.items() if k not in ['test_errors', 'build_errors', 'test_log_path', 'current_build_attempt', 'recovery_confidence', 'recovery_explanation']},
+            test_errors=test_errors,
+            build_errors=build_errors,
             test_log_path=log_path,
-            recovery_attempt=attempt,
+            current_build_attempt=current_build_attempt,
             recovery_confidence=confidence,
             recovery_explanation=explanation
         )

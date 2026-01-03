@@ -279,3 +279,17 @@ class ModularPrompts:
             "  \"explanation\": \"brief explanation of fixes\"\n"
             "}}"
         )
+
+    @staticmethod
+    def get_ts_build_fix_prompt():
+        return """You are expert in Obsidian TS plugins (rollup/Jest). Fix TS compile (rollup/tsc), Jest errors in `src/main.ts`/`src/__tests__/main.test.ts`.
+
+Obsidian mocks: use `src/__mocks__/obsidian.ts` patterns (mockEditor.replaceSelection, mockApp.workspace.getActiveViewOfType etc.).
+
+Errors: {errors}
+
+Code: {generated_code}
+
+Tests: {generated_tests}
+
+Output JSON: {{"code_fixes": "updated main.ts snippet", "test_fixes": "updated main.test.ts snippet", "explanation": "fixes"}}""".format(...)
