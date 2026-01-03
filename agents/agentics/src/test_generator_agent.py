@@ -216,7 +216,7 @@ class TestGeneratorAgent(BaseAgent):
             # Try to parse as structured output
             parsed = json.loads(clean_response)
             if 'tests' in parsed:
-                generated_tests = parsed['tests']
+                generated_tests = parsed['tests'] if parsed['tests'] is not None else clean_response.strip()
             else:
                 # Fallback to treating as raw tests
                 generated_tests = clean_response.strip()
@@ -274,17 +274,18 @@ class TestGeneratorAgent(BaseAgent):
                 self._log_structured("error", "circuit_breaker_open", {"operation": "test_generation", "error": str(e)})
                 raise
             except Exception as e:
-                self._log_structured("error", "test_generation_failed", {"error": str(e)})
-                raise
+                self._log_structured("error", "test_generation_failed", {"error_type": type(e).__name__, "message": str(e), "code_length": len(safe_get(state, 'generated_code', ''))})
+                generated_tests = self._get_fallback_tests(state)
+                log_info(self.logger, f"Applied fallback tests due to generation exception: {str(e)}")
 
             self._log_structured("info", "test_generation_complete", {
-            "test_length": len(generated_tests),
-            "has_describes": 'describe(' in generated_tests,
-            "has_its": 'it(' in generated_tests or 'test(' in generated_tests
+                "test_length": len(generated_tests or ''),
+                "has_describes": 'describe(' in (generated_tests or ''),
+                "has_its": 'it(' in (generated_tests or '') or 'test(' in (generated_tests or '')
             })
 
             # Fallback if generated tests are empty
-            if not generated_tests.strip():
+            if not generated_tests or not str(generated_tests).strip():
                 generated_tests = self._get_fallback_tests(state)
                 log_info(self.logger, "Applied fallback tests due to empty generation")
 
