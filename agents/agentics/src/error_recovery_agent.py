@@ -38,7 +38,7 @@ class ErrorRecoveryAgent(Runnable[CodeGenerationState, CodeGenerationState]):
             input_variables=["errors", "generated_code", "generated_tests"],
             partial_variables={"format_instructions": parser.get_format_instructions()},
         )
-        chain = (prompt | self.llm_reasoning | parser).with_retry(max_attempts=3, backoff_factor=2)
+        chain = (prompt | self.llm_reasoning | parser).with_retry(stop_after_attempt=3, wait_exponential_jitter=True)
         return chain
 
     def invoke(self, input: CodeGenerationState, config=None) -> CodeGenerationState:
