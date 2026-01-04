@@ -71,7 +71,7 @@ class TestGeneratorAgent(BaseAgent):
             | RunnableLambda(build_test_prompt)
             | self.llm_with_tools.with_structured_output(TestGenerationOutput)
             | RunnableLambda(lambda x: self._post_process_tests(x.tests))
-        ).with_retry(max_attempts=3, backoff_factor=2)
+        ).with_retry(stop_after_attempt=3, wait_exponential_jitter=True)
 
     def _create_test_refinement_chain(self):
         """Create LCEL chain for test refinement based on validation feedback."""
