@@ -323,17 +323,33 @@ class PerformanceMonitor:
     def track_workflow_progress(self, workflow_id: str, workflow_type: str):
         """Track workflow execution"""
         def decorator(func):
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                self.workflow_tracker.start_workflow(workflow_id, workflow_type)
-                try:
-                    result = func(*args, **kwargs)
-                    self.workflow_tracker.complete_workflow(workflow_id, {"result": "success"})
-                    return result
-                except Exception as e:
-                    self.workflow_tracker.fail_workflow(workflow_id, e)
-                    raise e
-            return wrapper
+            import asyncio
+            import inspect
+
+            if inspect.iscoroutinefunction(func):
+                @wraps(func)
+                async def async_wrapper(*args, **kwargs):
+                    self.workflow_tracker.start_workflow(workflow_id, workflow_type)
+                    try:
+                        result = await func(*args, **kwargs)
+                        self.workflow_tracker.complete_workflow(workflow_id, {"result": "success"})
+                        return result
+                    except Exception as e:
+                        self.workflow_tracker.fail_workflow(workflow_id, e)
+                        raise e
+                return async_wrapper
+            else:
+                @wraps(func)
+                def sync_wrapper(*args, **kwargs):
+                    self.workflow_tracker.start_workflow(workflow_id, workflow_type)
+                    try:
+                        result = func(*args, **kwargs)
+                        self.workflow_tracker.complete_workflow(workflow_id, {"result": "success"})
+                        return result
+                    except Exception as e:
+                        self.workflow_tracker.fail_workflow(workflow_id, e)
+                        raise e
+                return sync_wrapper
         return decorator
 
     def record_circuit_breaker_state(self, name: str, state: str, failure_count: int = 0):

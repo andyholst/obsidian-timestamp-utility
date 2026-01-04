@@ -342,7 +342,7 @@ class ComposableWorkflows:
         return merged
 
     @track_workflow_progress("full_workflow", "issue_processing")
-    def process_issue(self, issue_url: str) -> Dict[str, Any]:
+    async def process_issue(self, issue_url: str) -> Dict[str, Any]:
         """Process a single issue using the composable workflow."""
         workflow_id = f"workflow_{issue_url.split('/')[-1]}"  # Extract issue number
 
@@ -352,12 +352,12 @@ class ComposableWorkflows:
             "workflow_type": "full_workflow"
         })
 
-        log_info(logger, f"Starting composable workflow for issue: {issue_url}")
+        log_info(__name__, f"Starting composable workflow for issue: {issue_url}")
 
         try:
             initial_state = {"url": issue_url}
             config = {"configurable": {"thread_id": workflow_id}}
-            result = self.full_workflow.invoke(initial_state, config=config)
+            result = await self.full_workflow.ainvoke(initial_state, config=config)
 
             self.monitor.info("workflow_completed", {
                 "workflow_id": workflow_id,
@@ -369,7 +369,7 @@ class ComposableWorkflows:
                 }
             })
 
-            log_info(logger, "Composable workflow completed successfully")
+            log_info(__name__, "Composable workflow completed successfully")
             return result
 
         except Exception as e:

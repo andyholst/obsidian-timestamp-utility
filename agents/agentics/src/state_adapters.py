@@ -54,6 +54,7 @@ class StateToCodeGenerationStateAdapter(Runnable[State, CodeGenerationState]):
             existing_tests_passed=input.get('existing_tests_passed', 0),
             test_errors=input.get('test_errors', []),
             test_log_path=input.get('test_log_path'),
+            recovery_attempt=input.get('recovery_attempt', 0),
             recovery_confidence=input.get('recovery_confidence', 100.0),
             recovery_explanation=input.get('recovery_explanation')
         )
@@ -167,7 +168,8 @@ class InitialStateAdapter(Runnable[Dict[str, Any], CodeGenerationState]):
             relevant_test_files=[],
             feedback=None,
             method_name=None,
-            command_id=None
+            command_id=None,
+            recovery_attempt=0
         )
 
 
@@ -253,6 +255,7 @@ class IntegrationInputAdapter(Runnable[Dict[str, Any], CodeGenerationState]):
             'existing_tests_passed': 0,
             'test_errors': [],
             'test_log_path': None,
+            'recovery_attempt': 0,
             'recovery_confidence': 100.0,
             'recovery_explanation': None,
         }
