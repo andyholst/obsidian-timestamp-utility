@@ -6,6 +6,7 @@ with real test execution and minimal coverage analysis.
 """
 
 import pytest
+import shutil
 import os
 import tempfile
 import subprocess
@@ -65,13 +66,15 @@ describe('Calculator', () => {
 """
 
     @pytest.mark.integration
-    def test_basic_jest_test_execution(self, jest_executor, simple_typescript_code, simple_jest_tests):
+    def test_basic_jest_test_execution(
+        self, jest_executor, simple_typescript_code, simple_jest_tests
+    ):
         """Test basic Jest test execution with real files"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             simple_typescript_code,
             simple_jest_tests,
-            context={"test_framework": "jest"}
+            context={"test_framework": "jest"},
         )
 
         # Assert
@@ -82,13 +85,15 @@ describe('Calculator', () => {
         assert test_metrics.execution_time >= 0
 
     @pytest.mark.integration
-    def test_jest_test_results_validation(self, jest_executor, simple_typescript_code, simple_jest_tests):
+    def test_jest_test_results_validation(
+        self, jest_executor, simple_typescript_code, simple_jest_tests
+    ):
         """Test that Jest produces valid test results"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             simple_typescript_code,
             simple_jest_tests,
-            context={"test_framework": "jest"}
+            context={"test_framework": "jest"},
         )
 
         # Assert
@@ -112,9 +117,7 @@ describe('Calculator', () => {
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            simple_typescript_code,
-            invalid_tests,
-            context={"test_framework": "jest"}
+            simple_typescript_code, invalid_tests, context={"test_framework": "jest"}
         )
 
         # Assert
@@ -135,9 +138,7 @@ describe('Empty Suite', () => {
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            simple_typescript_code,
-            empty_tests,
-            context={"test_framework": "jest"}
+            simple_typescript_code, empty_tests, context={"test_framework": "jest"}
         )
 
         # Assert
@@ -145,7 +146,9 @@ describe('Empty Suite', () => {
         assert test_metrics.total_tests >= 1  # At least the empty test
 
     @pytest.mark.integration
-    def test_jest_execution_time_measurement(self, jest_executor, simple_typescript_code, simple_jest_tests):
+    def test_jest_execution_time_measurement(
+        self, jest_executor, simple_typescript_code, simple_jest_tests
+    ):
         """Test that Jest execution time is properly measured"""
         import time
 
@@ -155,26 +158,33 @@ describe('Empty Suite', () => {
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             simple_typescript_code,
             simple_jest_tests,
-            context={"test_framework": "jest"}
+            context={"test_framework": "jest"},
         )
 
         end_time = time.time()
 
         # Assert
         assert test_metrics.execution_time > 0
-        assert test_metrics.execution_time <= (end_time - start_time + 1)  # Allow 1 second tolerance
+        assert test_metrics.execution_time <= (
+            end_time - start_time + 1
+        )  # Allow 1 second tolerance
 
     @pytest.mark.integration
-    def test_jest_test_structure_recognition(self, jest_executor, simple_typescript_code, simple_jest_tests):
+    def test_jest_test_structure_recognition(
+        self, jest_executor, simple_typescript_code, simple_jest_tests
+    ):
         """Test that Jest recognizes test structure correctly"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             simple_typescript_code,
             simple_jest_tests,
-            context={"test_framework": "jest", "analyze_test_structure": True}
+            context={"test_framework": "jest", "analyze_test_structure": True},
         )
 
         # Assert
         assert test_metrics.total_tests == 2
         # Should recognize describe blocks and test structure
-        assert test_metrics.passed_tests + test_metrics.failed_tests == test_metrics.total_tests
+        assert (
+            test_metrics.passed_tests + test_metrics.failed_tests
+            == test_metrics.total_tests
+        )

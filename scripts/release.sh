@@ -56,6 +56,6 @@ cp dist/main.js CHANGELOG.md manifest.json README.md release_notes.md release/ |
 cd release
 
 # Create a zip file for the release
-zip -r "release-timestamp-utility-$TAG.zip" main.js manifest.json README.md release_notes.md >/dev/null 2>&1 || { echo "Error: Failed to create zip file"; exit 1; }
+zip -r "${REPO_NAME}-${TAG}.zip" main.js manifest.json README.md release_notes.md >/dev/null 2>&1 || { echo "Error: Failed to create zip file"; exit 1; }
 
-echo "release/release-timestamp-utility-$TAG.zip created successfully"
+echo "${REPO_NAME}-${TAG}.zip created successfully"

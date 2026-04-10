@@ -3,6 +3,7 @@ LangChain tools for file operations used by agents.
 """
 
 import logging
+import subprocess
 from typing import List, Dict, Any
 from langchain_core.tools import tool, BaseTool
 from .config import LOGGER_LEVEL
@@ -43,10 +44,10 @@ class ToolExecutor:
     def execute(self, response: Any) -> Dict[str, Any]:
         """Execute tools based on LLM response containing tool calls."""
         results = {}
-        if hasattr(response, 'tool_calls') and response.tool_calls:
+        if hasattr(response, "tool_calls") and response.tool_calls:
             for tool_call in response.tool_calls:
-                tool_name = tool_call.get('name')
-                tool_input = tool_call.get('args', {})
+                tool_name = tool_call.get("name")
+                tool_input = tool_call.get("args", {})
                 try:
                     result = self.execute_tool(tool_name, tool_input)
                     results[tool_name] = result
@@ -67,10 +68,11 @@ def read_file_tool(file_path: str) -> str:
         File content as string, or empty string if file not found
     """
     import os
-    project_root = os.getenv('PROJECT_ROOT', '/project')
+
+    project_root = os.getenv("PROJECT_ROOT", "/project")
     full_path = os.path.join(project_root, file_path)
     try:
-        with open(full_path, 'r', encoding='utf-8') as f:
+        with open(full_path, "r", encoding="utf-8") as f:
             return f.read()
     except Exception as e:
         return f"Error reading file {file_path}: {str(e)}"
@@ -88,7 +90,8 @@ def list_files_tool(directory: str = ".") -> str:
         Comma-separated list of files and directories
     """
     import os
-    project_root = os.getenv('PROJECT_ROOT', '/project')
+
+    project_root = os.getenv("PROJECT_ROOT", "/project")
     full_path = os.path.join(project_root, directory)
     try:
         items = os.listdir(full_path)
@@ -109,9 +112,11 @@ def check_file_exists_tool(file_path: str) -> bool:
         True if file exists, False otherwise
     """
     import os
-    project_root = os.getenv('PROJECT_ROOT', '/project')
+
+    project_root = os.getenv("PROJECT_ROOT", "/project")
     full_path = os.path.join(project_root, file_path)
     return os.path.isfile(full_path)
+
 
 @tool
 def npm_search_tool(package_name: str, limit: int = 5) -> str:
@@ -135,9 +140,9 @@ def npm_search_tool(package_name: str, limit: int = 5) -> str:
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                if 'objects' in data and data['objects']:
-                    version = data['objects'][0]['package']['version']
-                    return json.dumps([{'name': package_name, 'version': version}])
+                if "objects" in data and data["objects"]:
+                    version = data["objects"][0]["package"]["version"]
+                    return json.dumps([{"name": package_name, "version": version}])
         except Exception as e:
             pass
         return json.dumps([])
@@ -146,7 +151,12 @@ def npm_search_tool(package_name: str, limit: int = 5) -> str:
 
 
 @tool
-def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: bool = False, cwd: str = "") -> str:
+def npm_install_tool(
+    package_name: str = "",
+    is_dev: bool = False,
+    save_exact: bool = False,
+    cwd: str = "",
+) -> str:
     """
     Install an npm package or all dependencies if no package specified.
 
@@ -161,20 +171,23 @@ def npm_install_tool(package_name: str = "", is_dev: bool = False, save_exact: b
     """
     import subprocess
     import os
+
     try:
-        cmd = ['npm', 'install']
+        cmd = ["npm", "install"]
         if is_dev:
-            cmd.append('--save-dev')
+            cmd.append("--save-dev")
         if save_exact:
-            cmd.append('--save-exact')
+            cmd.append("--save-exact")
         if package_name:
             cmd.append(package_name)
 
         # Set working directory - default to project root if not provided
-        project_root = os.getenv('PROJECT_ROOT', '/project')
+        project_root = os.getenv("PROJECT_ROOT", "/project")
         cwd_path = cwd if cwd else project_root
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=cwd_path)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60, cwd=cwd_path
+        )
 
         if result.returncode == 0:
             if package_name:
@@ -204,14 +217,17 @@ def npm_list_tool(depth: int = 0, cwd: str = "") -> str:
     import os
     import subprocess
     import json
-    try:
-        cmd = ['npm', 'list', '--json']
-        if depth > 0:
-            cmd.extend(['--depth', str(depth)])
 
-        project_root = os.getenv('PROJECT_ROOT', '/project')
+    try:
+        cmd = ["npm", "list", "--json"]
+        if depth > 0:
+            cmd.extend(["--depth", str(depth)])
+
+        project_root = os.getenv("PROJECT_ROOT", "/project")
         cwd_path = cwd if cwd else project_root
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=cwd_path)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=30, cwd=cwd_path
+        )
 
         if result.returncode == 0:
             try:
@@ -223,6 +239,8 @@ def npm_list_tool(depth: int = 0, cwd: str = "") -> str:
             return f"Failed to list packages: {result.stderr}"
     except Exception as e:
         return f"Error listing npm packages: {str(e)}"
+
+
 @tool
 def write_file_tool(file_path: str, content: str) -> str:
     """
@@ -237,12 +255,13 @@ def write_file_tool(file_path: str, content: str) -> str:
     """
     import os
     from .monitoring import structured_log
+
     monitor = structured_log("write_file_tool")
-    project_root = os.getenv('PROJECT_ROOT', '/project')
+    project_root = os.getenv("PROJECT_ROOT", "/project")
     full_path = os.path.join(project_root, file_path)
     try:
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        with open(full_path, 'w', encoding='utf-8') as f:
+        with open(full_path, "w", encoding="utf-8") as f:
             f.write(content)
         monitor.info("File written successfully")
         return f"Successfully wrote to {file_path}"
@@ -264,27 +283,41 @@ def npm_run_tool(script: str, args: str = "", cwd: str = "") -> str:
     Returns:
         Output of the npm run command or error details
     """
-    import subprocess
     import os
+    import signal
+    import subprocess
+    import logging
+
     try:
-        cmd = ['npm', 'run', script]
+        cmd = ["npm", "run", script]
         if args:
             cmd.extend(args.split())
 
-        # Set working directory - default to project root if not provided
-        project_root = os.getenv('PROJECT_ROOT', '/project')
+        project_root = os.getenv("PROJECT_ROOT", "/project")
         cwd_path = cwd if cwd else project_root
 
-        # Add logging to validate cwd
-        import logging
         logger = logging.getLogger(__name__)
         logger.info(f"npm_run_tool: Running in cwd: {cwd_path}, cmd: {cmd}")
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=cwd_path)
-        if result.returncode == 0:
-            return result.stdout
-        else:
-            return f"npm run {script} failed: {result.stderr}"
+        # Use Popen with a new process group so we can kill all children on timeout
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=cwd_path, preexec_fn=os.setsid,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=30)
+            if proc.returncode == 0:
+                return stdout.decode("utf-8", errors="replace")
+            else:
+                return f"npm run {script} failed: {stderr.decode('utf-8', errors='replace')}"
+        except subprocess.TimeoutExpired:
+            # Kill the entire process group
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, OSError):
+                pass
+            proc.wait()
+            return f"npm run {script} timed out after 30s"
     except Exception as e:
         return f"Error running npm script {script}: {str(e)}"
 
@@ -295,10 +328,10 @@ def typescript_typecheck_tool(cwd: str = "") -> str:
     Perform TypeScript typecheck using `npx tsc --noEmit`.
     Args:
         cwd: Working directory to run the command in (default: project root).
-    
+
     Returns:
         "TypeScript typecheck passed." if successful.
-    
+
     Raises:
         CompileError if there are TypeScript errors.
     """
@@ -306,21 +339,26 @@ def typescript_typecheck_tool(cwd: str = "") -> str:
     import subprocess
     import logging
     from .exceptions import CompileError
-    
-    project_root = os.getenv('PROJECT_ROOT', '/project')
+
+    project_root = os.getenv("PROJECT_ROOT", "/project")
     cwd_path = cwd if cwd else project_root
-    
-    cmd = ['npx', 'tsc', '--noEmit']
+
+    cmd = ["npx", "tsc", "--noEmit"]
     logger = logging.getLogger(__name__)
     logger.info(f"typescript_typecheck_tool: Running in cwd: {cwd_path}, cmd: {cmd}")
-    
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=cwd_path)
+
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=60, cwd=cwd_path
+    )
     if result.returncode == 0:
         return "TypeScript typecheck passed."
     else:
         logger.warning(f"tsc stdout: {result.stdout[:1000]}")
         logger.warning(f"tsc stderr: {result.stderr[:1000]}")
-        raise CompileError(f"TypeScript errors:\\nSTDOUT:\\n{result.stdout}\\nSTDERR:\\n{result.stderr}")
+        raise CompileError(
+            f"TypeScript errors:\\nSTDOUT:\\n{result.stdout}\\nSTDERR:\\n{result.stderr}"
+        )
+
 
 @tool
 def execute_command_tool(command: str, cwd: str = "") -> str:
@@ -336,10 +374,18 @@ def execute_command_tool(command: str, cwd: str = "") -> str:
     """
     import subprocess
     import os
+
     try:
-        project_root = os.getenv('PROJECT_ROOT', '/project')
+        project_root = os.getenv("PROJECT_ROOT", "/project")
         cwd_path = cwd if cwd else project_root
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=60, cwd=cwd_path)
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            cwd=cwd_path,
+        )
         if result.returncode == 0:
             return result.stdout
         else:
@@ -349,6 +395,16 @@ def execute_command_tool(command: str, cwd: str = "") -> str:
 
 
 # Export tools for use by agents
-__all__ = ['ToolExecutor', 'read_file_tool', 'list_files_tool', 'check_file_exists_tool', 'npm_search_tool', 'npm_install_tool', 'npm_list_tool', 'write_file_tool', 'npm_run_tool', 'typescript_typecheck_tool', 'execute_command_tool']
-
-
+__all__ = [
+    "ToolExecutor",
+    "read_file_tool",
+    "list_files_tool",
+    "check_file_exists_tool",
+    "npm_search_tool",
+    "npm_install_tool",
+    "npm_list_tool",
+    "write_file_tool",
+    "npm_run_tool",
+    "typescript_typecheck_tool",
+    "execute_command_tool",
+]

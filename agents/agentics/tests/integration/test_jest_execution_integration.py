@@ -7,6 +7,7 @@ TEST_SUITE_README.md and LLM_CODE_VALIDATION.md.
 """
 
 import pytest
+import shutil
 import json
 import os
 import tempfile
@@ -17,7 +18,7 @@ from src.test_suite import (
     TestSuiteExecutor,
     TestExecutionMetrics,
     LLMTestSuiteValidator,
-    validate_llm_test_suite
+    validate_llm_test_suite,
 )
 
 
@@ -292,13 +293,13 @@ describe('StringProcessor', () => {
 });
 """
 
-    def test_actual_jest_test_execution_success(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_actual_jest_test_execution_success(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test successful Jest test execution with real files"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            valid_jest_tests,
-            context={"test_framework": "jest"}
+            valid_typescript_code, valid_jest_tests, context={"test_framework": "jest"}
         )
 
         # Assert
@@ -310,13 +311,13 @@ describe('StringProcessor', () => {
         assert test_metrics.coverage_percentage >= 0
         assert isinstance(test_metrics.error_messages, list)
 
-    def test_jest_coverage_analysis(self, jest_executor, coverage_test_code, coverage_test_tests):
+    def test_jest_coverage_analysis(
+        self, jest_executor, coverage_test_code, coverage_test_tests
+    ):
         """Test Jest coverage analysis functionality"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            coverage_test_code,
-            coverage_test_tests,
-            context={"collect_coverage": True}
+            coverage_test_code, coverage_test_tests, context={"collect_coverage": True}
         )
 
         # Assert
@@ -329,7 +330,9 @@ describe('StringProcessor', () => {
             # High coverage expected for comprehensive tests
             assert test_metrics.coverage_percentage > 50
 
-    def test_jest_parallel_processing_configuration(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_jest_parallel_processing_configuration(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test Jest parallel processing configuration"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
@@ -338,8 +341,8 @@ describe('StringProcessor', () => {
             context={
                 "parallel_execution": True,
                 "max_workers": 2,
-                "test_framework": "jest"
-            }
+                "test_framework": "jest",
+            },
         )
 
         # Assert
@@ -347,13 +350,15 @@ describe('StringProcessor', () => {
         # Should still execute tests even with parallel config
         assert test_metrics.total_tests >= 0
 
-    def test_invalid_test_suite_handling(self, jest_executor, valid_typescript_code, invalid_jest_tests):
+    def test_invalid_test_suite_handling(
+        self, jest_executor, valid_typescript_code, invalid_jest_tests
+    ):
         """Test handling of invalid test suites"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             valid_typescript_code,
             invalid_jest_tests,
-            context={"test_framework": "jest"}
+            context={"test_framework": "jest"},
         )
 
         # Assert
@@ -361,13 +366,15 @@ describe('StringProcessor', () => {
         # Should detect test failures or syntax errors
         assert test_metrics.failed_tests >= 0 or len(test_metrics.error_messages) > 0
 
-    def test_invalid_code_handling(self, jest_executor, invalid_typescript_code, valid_jest_tests):
+    def test_invalid_code_handling(
+        self, jest_executor, invalid_typescript_code, valid_jest_tests
+    ):
         """Test handling of invalid source code"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             invalid_typescript_code,
             valid_jest_tests,
-            context={"test_framework": "jest"}
+            context={"test_framework": "jest"},
         )
 
         # Assert
@@ -404,7 +411,7 @@ describe('SlowProcessor', () => {
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             slow_code,
             slow_tests,
-            context={"test_timeout": 5000}  # Short timeout
+            context={"test_timeout": 5000},  # Short timeout
         )
 
         # Assert
@@ -449,9 +456,7 @@ describe('MemoryIntensiveProcessor', () => {
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            memory_intensive_code,
-            memory_tests,
-            context={"memory_limit": "128MB"}
+            memory_intensive_code, memory_tests, context={"memory_limit": "128MB"}
         )
 
         # Assert
@@ -459,7 +464,9 @@ describe('MemoryIntensiveProcessor', () => {
         # Should execute regardless of memory usage
         assert test_metrics.total_tests >= 0
 
-    def test_jest_coverage_reporting(self, jest_executor, coverage_test_code, coverage_test_tests):
+    def test_jest_coverage_reporting(
+        self, jest_executor, coverage_test_code, coverage_test_tests
+    ):
         """Test detailed Jest coverage reporting"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
@@ -467,8 +474,8 @@ describe('MemoryIntensiveProcessor', () => {
             coverage_test_tests,
             context={
                 "collect_coverage": True,
-                "coverage_reporters": ["json", "text", "lcov"]
-            }
+                "coverage_reporters": ["json", "text", "lcov"],
+            },
         )
 
         # Assert
@@ -504,23 +511,25 @@ describe('Calculator', () => {
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            failing_tests,
-            context={"test_framework": "jest"}
+            valid_typescript_code, failing_tests, context={"test_framework": "jest"}
         )
 
         # Assert
         assert isinstance(test_metrics, TestExecutionMetrics)
         assert test_metrics.failed_tests > 0
-        assert len(test_metrics.error_messages) >= 0  # May or may not capture detailed errors
+        assert (
+            len(test_metrics.error_messages) >= 0
+        )  # May or may not capture detailed errors
 
-    def test_jest_test_structure_analysis(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_jest_test_structure_analysis(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test Jest test structure analysis"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             valid_typescript_code,
             valid_jest_tests,
-            context={"analyze_test_structure": True}
+            context={"analyze_test_structure": True},
         )
 
         # Assert
@@ -529,7 +538,10 @@ describe('Calculator', () => {
 
         # Should identify test structure
         if test_metrics.total_tests > 0:
-            assert test_metrics.passed_tests + test_metrics.failed_tests == test_metrics.total_tests
+            assert (
+                test_metrics.passed_tests + test_metrics.failed_tests
+                == test_metrics.total_tests
+            )
 
     def test_jest_with_mocked_dependencies(self, jest_executor):
         """Test Jest execution with mocked dependencies"""
@@ -607,7 +619,7 @@ describe('ApiService', () => {
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             code_with_deps,
             tests_with_mocks,
-            context={"test_framework": "jest", "mock_dependencies": True}
+            context={"test_framework": "jest", "mock_dependencies": True},
         )
 
         # Assert
@@ -615,7 +627,9 @@ describe('ApiService', () => {
         # Should execute tests (may fail due to missing axios, but should attempt execution)
         assert test_metrics.total_tests >= 0
 
-    def test_jest_execution_with_custom_config(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_jest_execution_with_custom_config(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test Jest execution with custom configuration"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
@@ -631,11 +645,11 @@ describe('ApiService', () => {
                             "branches": 70,
                             "functions": 80,
                             "lines": 80,
-                            "statements": 80
+                            "statements": 80,
                         }
-                    }
+                    },
                 }
-            }
+            },
         )
 
         # Assert
@@ -712,38 +726,42 @@ describe('AsyncProcessor', () => {
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
             async_code,
             async_tests,
-            context={"test_framework": "jest", "async_tests": True}
+            context={"test_framework": "jest", "async_tests": True},
         )
 
         # Assert
         assert isinstance(test_metrics, TestExecutionMetrics)
         assert test_metrics.total_tests >= 0
 
-    def test_jest_subprocess_error_handling(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_jest_subprocess_error_handling(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test handling of subprocess errors during Jest execution"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            valid_jest_tests
+            valid_typescript_code, valid_jest_tests
         )
 
         # Assert
         assert isinstance(test_metrics, TestExecutionMetrics)
         assert test_metrics.execution_time >= 0
 
-    def test_jest_file_creation_failure_handling(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_jest_file_creation_failure_handling(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test handling of file creation failures"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            valid_jest_tests
+            valid_typescript_code, valid_jest_tests
         )
 
         # Assert
         assert isinstance(test_metrics, TestExecutionMetrics)
         assert test_metrics.failed_tests >= 0
 
-    def test_comprehensive_jest_validation_integration(self, valid_typescript_code, valid_jest_tests):
+    def test_comprehensive_jest_validation_integration(
+        self, valid_typescript_code, valid_jest_tests
+    ):
         """Test complete Jest validation integration with LLMTestSuiteValidator"""
         # Act
         result, code_validator_report = validate_llm_test_suite(
@@ -752,27 +770,29 @@ describe('AsyncProcessor', () => {
             context={
                 "language": "typescript",
                 "test_framework": "jest",
-                "validation_focus": "jest_execution"
+                "validation_focus": "jest_execution",
             },
-            include_code_validator=True
+            include_code_validator=True,
         )
 
         # Assert
         assert result is not None
-        assert hasattr(result, 'test_execution')
+        assert hasattr(result, "test_execution")
         assert result.test_execution.total_tests >= 0
         assert result.test_execution.coverage_percentage >= 0
         assert 0 <= result.overall_score <= 100
 
-    def test_jest_performance_metrics(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_jest_performance_metrics(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test Jest performance metrics collection"""
         import time
+
         start_time = time.time()
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            valid_jest_tests
+            valid_typescript_code, valid_jest_tests
         )
 
         end_time = time.time()
@@ -780,7 +800,9 @@ describe('AsyncProcessor', () => {
         # Assert
         assert isinstance(test_metrics, TestExecutionMetrics)
         assert test_metrics.execution_time >= 0
-        assert test_metrics.execution_time <= (end_time - start_time + 1)  # Allow 1 second tolerance
+        assert test_metrics.execution_time <= (
+            end_time - start_time + 1
+        )  # Allow 1 second tolerance
 
     def test_jest_test_result_parsing_edge_cases(self, jest_executor):
         """Test Jest result parsing for edge cases"""
@@ -798,8 +820,7 @@ describe('add', () => {
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            minimal_code,
-            minimal_tests
+            minimal_code, minimal_tests
         )
 
         # Assert
@@ -827,9 +848,7 @@ describe('Empty', () => {
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            empty_code,
-            empty_tests,
-            context={"collect_coverage": True}
+            empty_code, empty_tests, context={"collect_coverage": True}
         )
 
         # Assert

@@ -7,11 +7,14 @@ import sys
 import os
 
 # Add the agents/agentics/src directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'agents', 'agentics', 'src'))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(__file__), "..", "agents", "agentics", "src")
+)
 
 try:
     # Test basic imports
     from test_suite import validate_llm_test_suite, generate_test_suite_report
+
     print("✅ Basic imports successful")
 
     # Test with simple code and tests
@@ -39,12 +42,12 @@ describe('Calculator', () => {
     print("✅ Validation completed")
 
     # Check result structure
-    assert hasattr(result, 'overall_score')
-    assert hasattr(result, 'risk_level')
-    assert hasattr(result, 'code_execution')
-    assert hasattr(result, 'test_execution')
-    assert hasattr(result, 'test_code_relationship')
-    assert hasattr(result, 'langchain_compliance')
+    assert hasattr(result, "overall_score")
+    assert hasattr(result, "risk_level")
+    assert hasattr(result, "code_execution")
+    assert hasattr(result, "test_execution")
+    assert hasattr(result, "test_code_relationship")
+    assert hasattr(result, "langchain_compliance")
     print("✅ Result structure valid")
 
     # Generate report
@@ -60,5 +63,6 @@ describe('Calculator', () => {
 except Exception as e:
     print(f"❌ Error: {str(e)}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)

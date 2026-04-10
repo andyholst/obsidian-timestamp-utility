@@ -7,7 +7,14 @@ from unittest.mock import MagicMock
 import json
 
 
-def create_realistic_github_issue_mock(title="Test Issue", body="Test body", number=1, state="open", user="testuser", repo="test/repo"):
+def create_realistic_github_issue_mock(
+    title="Test Issue",
+    body="Test body",
+    number=1,
+    state="open",
+    user="testuser",
+    repo="test/repo",
+):
     """Create a realistic GitHub issue mock with all expected attributes."""
 
     # Mock user
@@ -19,7 +26,7 @@ def create_realistic_github_issue_mock(title="Test Issue", body="Test body", num
     # Mock repository
     mock_repo = MagicMock()
     mock_repo.full_name = repo
-    mock_repo.name = repo.split('/')[1]
+    mock_repo.name = repo.split("/")[1]
     mock_repo.owner = mock_user
 
     # Mock issue with comprehensive attributes
@@ -70,7 +77,7 @@ This should integrate with the existing TimestampPlugin class and follow the est
     return create_realistic_github_issue_mock(
         title="Implement Timestamp-based UUID Generator in Obsidian",
         body=body,
-        number=1
+        number=1,
     )
 
 
@@ -87,11 +94,7 @@ Make it better.
 ## Acceptance Criteria
 - It works."""
 
-    return create_realistic_github_issue_mock(
-        title="Do something",
-        body=body,
-        number=2
-    )
+    return create_realistic_github_issue_mock(title="Do something", body=body, number=2)
 
 
 def create_malformed_ticket_mock():
@@ -105,29 +108,25 @@ Add a feature with mismatched brackets: { { {.
 - It should somehow work"""
 
     return create_realistic_github_issue_mock(
-        title="Title Missing Closing Bracket",
-        body=body,
-        number=3
+        title="Title Missing Closing Bracket", body=body, number=3
     )
 
 
 def create_empty_ticket_mock():
     """Create a mock for an empty GitHub issue."""
-    return create_realistic_github_issue_mock(
-        title="Empty Issue",
-        body="",
-        number=4
-    )
+    return create_realistic_github_issue_mock(title="Empty Issue", body="", number=4)
 
 
 def create_large_ticket_mock():
     """Create a mock for a large/complex GitHub issue."""
-    body = "# Large Complex Ticket\n" + "Description " * 500 + "\n\n## Requirements\n- Req1\n- Req2\n- Req3\n\n## Acceptance Criteria\n- AC1\n- AC2\n- AC3"
+    body = (
+        "# Large Complex Ticket\n"
+        + "Description " * 500
+        + "\n\n## Requirements\n- Req1\n- Req2\n- Req3\n\n## Acceptance Criteria\n- AC1\n- AC2\n- AC3"
+    )
 
     return create_realistic_github_issue_mock(
-        title="Large Complex Ticket",
-        body=body,
-        number=5
+        title="Large Complex Ticket", body=body, number=5
     )
 
 
@@ -175,7 +174,7 @@ def create_github_client_mock():
             2: unclear_issue,
             3: malformed_issue,
             4: empty_issue,
-            5: large_issue
+            5: large_issue,
         }
         return issues.get(number, well_structured_issue)
 
@@ -191,7 +190,10 @@ def create_github_error_responses():
     rate_limit_error = MagicMock()
     rate_limit_error.status = 403
     rate_limit_error.data = {"message": "API rate limit exceeded for user ID 12345."}
-    rate_limit_error.headers = {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1640995200"}
+    rate_limit_error.headers = {
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset": "1640995200",
+    }
 
     # Authentication error
     auth_error = MagicMock()
@@ -212,7 +214,7 @@ def create_github_error_responses():
         "rate_limit": rate_limit_error,
         "auth": auth_error,
         "not_found": not_found_error,
-        "server": server_error
+        "server": server_error,
     }
 
 
@@ -231,10 +233,7 @@ def create_github_client_with_errors():
     mock_repo.full_name = "test/repo"
     mock_repo.name = "repo"
     mock_repo.get_issue.return_value = MagicMock(
-        number=1,
-        title="Test Issue",
-        body="Test body",
-        state="open"
+        number=1, title="Test Issue", body="Test body", state="open"
     )
 
     # Set up return values
@@ -244,14 +243,17 @@ def create_github_client_with_errors():
     # Add error simulation methods
     def simulate_rate_limit():
         from github.GithubException import GithubException
+
         raise GithubException(403, {"message": "API rate limit exceeded"})
 
     def simulate_auth_error():
         from github.GithubException import GithubException
+
         raise GithubException(401, {"message": "Bad credentials"})
 
     def simulate_not_found():
         from github.GithubException import GithubException
+
         raise GithubException(404, {"message": "Not Found"})
 
     mock_client.simulate_rate_limit = simulate_rate_limit
@@ -267,12 +269,12 @@ def create_github_paginated_responses():
     issues_page_1 = [
         MagicMock(number=1, title="Issue 1", state="open"),
         MagicMock(number=2, title="Issue 2", state="closed"),
-        MagicMock(number=3, title="Issue 3", state="open")
+        MagicMock(number=3, title="Issue 3", state="open"),
     ]
 
     issues_page_2 = [
         MagicMock(number=4, title="Issue 4", state="open"),
-        MagicMock(number=5, title="Issue 5", state="closed")
+        MagicMock(number=5, title="Issue 5", state="closed"),
     ]
 
     # Mock repository with pagination
@@ -302,13 +304,13 @@ def create_github_webhook_payloads():
             "title": "Test Issue",
             "body": "Test issue body",
             "state": "open",
-            "user": {"login": "testuser", "id": 12345}
+            "user": {"login": "testuser", "id": 12345},
         },
         "repository": {
             "full_name": "test/repo",
             "name": "repo",
-            "owner": {"login": "testuser"}
-        }
+            "owner": {"login": "testuser"},
+        },
     }
 
     issue_closed = {
@@ -318,13 +320,13 @@ def create_github_webhook_payloads():
             "title": "Test Issue",
             "body": "Test issue body",
             "state": "closed",
-            "user": {"login": "testuser", "id": 12345}
+            "user": {"login": "testuser", "id": 12345},
         },
         "repository": {
             "full_name": "test/repo",
             "name": "repo",
-            "owner": {"login": "testuser"}
-        }
+            "owner": {"login": "testuser"},
+        },
     }
 
     pr_opened = {
@@ -334,18 +336,18 @@ def create_github_webhook_payloads():
             "title": "Test PR",
             "body": "Test PR body",
             "state": "open",
-            "user": {"login": "testuser", "id": 12345}
+            "user": {"login": "testuser", "id": 12345},
         },
         "repository": {
             "full_name": "test/repo",
             "name": "repo",
-            "owner": {"login": "testuser"}
-        }
+            "owner": {"login": "testuser"},
+        },
     }
 
     return {
         "issue_opened": issue_opened,
         "issue_closed": issue_closed,
-        "pr_opened": pr_opened
+        "pr_opened": pr_opened,
     }
     return mock_client

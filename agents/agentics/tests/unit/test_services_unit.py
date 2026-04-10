@@ -9,12 +9,15 @@ from src.services import (
     ServiceManager,
     get_service_manager,
     init_services,
-    _service_manager
+    _service_manager,
 )
 from src.exceptions import OllamaError, GitHubError, MCPError, ServiceUnavailableError
 from src.config import LLMConfig
 from src.circuit_breaker import CircuitBreaker, ServiceHealthMonitor
-from tests.fixtures.mock_circuit_breaker import create_mock_circuit_breaker, patch_circuit_breakers
+from tests.fixtures.mock_circuit_breaker import (
+    create_mock_circuit_breaker,
+    patch_circuit_breakers,
+)
 from tests.fixtures.mock_llm_responses import create_mock_llm_response
 from tests.fixtures.mock_github_responses import create_github_client_mock
 
@@ -45,8 +48,10 @@ def mock_circuit_breaker():
 
     def mock_call(func):
         """Mock circuit breaker call that returns a wrapper."""
+
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
+
         return wrapper
 
     cb.call.side_effect = mock_call
@@ -66,8 +71,8 @@ def mock_llm_config():
         top_k=40,
         min_p=0.0,
         presence_penalty=1.0,
-        num_ctx=4096,
-        num_predict=2048
+        num_ctx=2048,
+        num_predict=512,
     )
 
 
@@ -90,9 +95,15 @@ def mock_mcp_client():
 class TestServiceClientTests:
     """Test ServiceClient base class functionality."""
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_service_client_initialization(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_service_client_initialization(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test ServiceClient initialization."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -103,9 +114,15 @@ class TestServiceClientTests:
         assert client.circuit_breaker == mock_circuit_breaker
         assert client.health_monitor == mock_health_monitor
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_service_client_abstract_methods(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_service_client_abstract_methods(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test that ServiceClient abstract methods raise NotImplementedError."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -120,10 +137,18 @@ class TestServiceClientTests:
 class TestOllamaClient:
     """Test OllamaClient functionality."""
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_initialization_success(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_initialization_success(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient initialization with valid config."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -134,7 +159,10 @@ class TestOllamaClient:
         client = OllamaClient(mock_llm_config)
 
         assert client.config == mock_llm_config
-        assert client._client == mock_llm_instance
+        # With lazy initialization, _client is None until first use
+        assert client._client is None
+        # Accessing the client property triggers initialization
+        assert client.client == mock_llm_instance
         mock_ollama_class.assert_called_once_with(
             model="test-model",
             base_url="http://test.com",
@@ -142,17 +170,26 @@ class TestOllamaClient:
             top_p=0.9,
             top_k=40,
             min_p=0.0,
+            request_timeout=30,
             extra_params={
                 "presence_penalty": 1.0,
-                "num_ctx": 4096,
-                "num_predict": 2048
-            }
+                "num_ctx": 2048,
+                "num_predict": 512,
+            },
         )
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_initialization_failure(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_initialization_failure(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient initialization failure."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -163,10 +200,18 @@ class TestOllamaClient:
 
         assert client._client is None
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_health_check_success(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_health_check_success(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient health check success."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -181,17 +226,25 @@ class TestOllamaClient:
         async def mock_run_in_executor(*args, **kwargs):
             return "Hello response"
 
-        with patch('asyncio.get_event_loop') as mock_loop:
+        with patch("asyncio.get_event_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = mock_run_in_executor
 
             result = asyncio.run(client.health_check())
 
             assert result is True
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_health_check_no_client(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_health_check_no_client(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient health check when client is None."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -204,10 +257,18 @@ class TestOllamaClient:
 
         assert result is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_health_check_exception(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_health_check_exception(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient health check with exception."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -217,17 +278,27 @@ class TestOllamaClient:
 
         client = OllamaClient(mock_llm_config)
 
-        with patch('asyncio.get_event_loop') as mock_loop:
-            mock_loop.return_value.run_in_executor.side_effect = Exception("Health check failed")
+        with patch("asyncio.get_event_loop") as mock_loop:
+            mock_loop.return_value.run_in_executor.side_effect = Exception(
+                "Health check failed"
+            )
 
             result = asyncio.run(client.health_check())
 
             assert result is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_is_available(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_is_available(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient is_available method."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -242,10 +313,18 @@ class TestOllamaClient:
         assert result is True
         mock_health_monitor.is_service_healthy.assert_called_once_with("ollama")
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_is_available_no_client(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_is_available_no_client(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient is_available when client is None."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -258,10 +337,18 @@ class TestOllamaClient:
 
         assert result is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_invoke_success(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_invoke_success(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient invoke method success."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -277,10 +364,18 @@ class TestOllamaClient:
         assert result == "LLM response"
         mock_llm_instance.invoke.assert_called_once_with("Test prompt")
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaLLM')
-    def test_ollama_client_invoke_not_available(self, mock_ollama_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_llm_config, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaLLM")
+    def test_ollama_client_invoke_not_available(
+        self,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test OllamaClient invoke when service not available."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -291,18 +386,29 @@ class TestOllamaClient:
 
         client = OllamaClient(mock_llm_config)
 
-        with pytest.raises(OllamaError, match="Ollama service \\(test-model\\) is not available"):
+        with pytest.raises(
+            OllamaError, match="Ollama service \\(test-model\\) is not available"
+        ):
             client.invoke("Test prompt")
 
 
 class TestGitHubClient:
     """Test GitHubClient functionality."""
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.Github')
-    @patch('src.services.Auth')
-    def test_github_client_initialization_success(self, mock_auth_class, mock_github_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_github_token, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.Github")
+    @patch("src.services.Auth")
+    def test_github_client_initialization_success(
+        self,
+        mock_auth_class,
+        mock_github_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_github_token,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient initialization with valid token."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -320,11 +426,20 @@ class TestGitHubClient:
         mock_auth_class.Token.assert_called_once_with(mock_github_token)
         mock_github_class.assert_called_once_with(auth=mock_auth_instance)
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.Github')
-    @patch('src.services.Auth')
-    def test_github_client_initialization_failure(self, mock_auth_class, mock_github_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_github_token, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.Github")
+    @patch("src.services.Auth")
+    def test_github_client_initialization_failure(
+        self,
+        mock_auth_class,
+        mock_github_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_github_token,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient initialization failure."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -335,11 +450,20 @@ class TestGitHubClient:
 
         assert client._client is None
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.Github')
-    @patch('src.services.Auth')
-    def test_github_client_health_check_success(self, mock_auth_class, mock_github_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_github_token, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.Github")
+    @patch("src.services.Auth")
+    def test_github_client_health_check_success(
+        self,
+        mock_auth_class,
+        mock_github_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_github_token,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient health check success."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -355,16 +479,22 @@ class TestGitHubClient:
         async def mock_run_in_executor(*args, **kwargs):
             return mock_user
 
-        with patch('asyncio.get_event_loop') as mock_loop:
+        with patch("asyncio.get_event_loop") as mock_loop:
             mock_loop.return_value.run_in_executor = mock_run_in_executor
 
             result = asyncio.run(client.health_check())
 
             assert result is True
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_github_client_health_check_no_client(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_github_client_health_check_no_client(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient health check when client is None."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -380,11 +510,20 @@ class TestGitHubClient:
 
         assert result is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.Github')
-    @patch('src.services.Auth')
-    def test_github_client_is_available(self, mock_auth_class, mock_github_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_github_token, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.Github")
+    @patch("src.services.Auth")
+    def test_github_client_is_available(
+        self,
+        mock_auth_class,
+        mock_github_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_github_token,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient is_available method."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -399,9 +538,15 @@ class TestGitHubClient:
         assert result is True
         mock_health_monitor.is_service_healthy.assert_called_once_with("github")
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_github_client_is_available_no_client(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_github_client_is_available_no_client(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient is_available when client is None."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -412,11 +557,20 @@ class TestGitHubClient:
 
         assert result is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.Github')
-    @patch('src.services.Auth')
-    def test_github_client_get_user_success(self, mock_auth_class, mock_github_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_github_token, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.Github")
+    @patch("src.services.Auth")
+    def test_github_client_get_user_success(
+        self,
+        mock_auth_class,
+        mock_github_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_github_token,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient get_user method success."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -433,11 +587,20 @@ class TestGitHubClient:
         assert result == mock_user
         mock_github_instance.get_user.assert_called_once()
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.Github')
-    @patch('src.services.Auth')
-    def test_github_client_get_user_not_available(self, mock_auth_class, mock_github_class, mock_get_health_monitor, mock_get_circuit_breaker, mock_github_token, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.Github")
+    @patch("src.services.Auth")
+    def test_github_client_get_user_not_available(
+        self,
+        mock_auth_class,
+        mock_github_class,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_github_token,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test GitHubClient get_user when service not available."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -455,9 +618,15 @@ class TestGitHubClient:
 class TestMCPClient:
     """Test MCPClient functionality."""
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_initialization(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_mcp_client_initialization(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test MCPClient initialization."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -468,11 +637,17 @@ class TestMCPClient:
         assert client._initialized is False
         assert client._tools == []
 
-
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.init_mcp_client')
-    def test_mcp_client_initialize_failure(self, mock_init_mcp, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.init_mcp_client")
+    def test_mcp_client_initialize_failure(
+        self,
+        mock_init_mcp,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test MCPClient initialize failure."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -485,10 +660,15 @@ class TestMCPClient:
 
         assert client._initialized is False
 
-
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_health_check_not_initialized(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_mcp_client_health_check_not_initialized(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test MCPClient health check when not initialized."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -499,10 +679,15 @@ class TestMCPClient:
 
         assert result is False
 
-
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_is_available_not_initialized(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_mcp_client_is_available_not_initialized(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test MCPClient is_available when not initialized."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -513,10 +698,15 @@ class TestMCPClient:
 
         assert result is False
 
-
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_get_context_not_available(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_mcp_client_get_context_not_available(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test MCPClient get_context when service not available."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -528,54 +718,75 @@ class TestMCPClient:
         with pytest.raises(MCPError, match="MCP service is not available"):
             asyncio.run(client.get_context("test query"))
 
-
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.get_mcp_client')
-    @patch('src.services.Tool')
-    def test_mcp_client_get_tools(self, mock_tool_class, mock_get_mcp, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor, mock_mcp_client):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.get_mcp_client")
+    @patch("src.services.Tool")
+    def test_mcp_client_get_tools(
+        self,
+        mock_tool_class,
+        mock_get_mcp,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+        mock_mcp_client,
+    ):
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
         mock_get_mcp.return_value = mock_mcp_client
-        
+
         mock_tool1 = MagicMock()
         mock_tool2 = MagicMock()
         mock_tool3 = MagicMock()
         mock_tool_class.from_function.side_effect = [mock_tool1, mock_tool2, mock_tool3]
-        
+
         client = MCPClient()
         client._client = mock_mcp_client
         client._initialized = True
-        
+
         # Await the async call
         tools = asyncio.run(client.get_tools())
-        
+
         assert len(tools) == 3
         assert tools == [mock_tool1, mock_tool2, mock_tool3]
         assert client._tools == [mock_tool1, mock_tool2, mock_tool3]
-        
+
         # Call again to test caching
         tools2 = asyncio.run(client.get_tools())
         assert tools2 == [mock_tool1, mock_tool2, mock_tool3]
         # Should not create new tools
         assert mock_tool_class.from_function.call_count == 3
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_get_tools_not_available(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.init_mcp_client", side_effect=Exception("MCP not available"))
+    def test_mcp_client_get_tools_not_available(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
-        
+
         client = MCPClient()
-        
+
         # Await the async call
         tools = asyncio.run(client.get_tools())
-        
+
         assert tools == []
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    def test_mcp_client_close_success(self, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    def test_mcp_client_close_success(
+        self,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test MCPClient close success."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -587,10 +798,17 @@ class TestMCPClient:
 
         assert client._initialized is False
 
-    @patch('src.services.get_circuit_breaker')
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.close_mcp_client')
-    def test_mcp_client_close_failure(self, mock_close_mcp, mock_get_health_monitor, mock_get_circuit_breaker, mock_circuit_breaker, mock_health_monitor):
+    @patch("src.services.get_circuit_breaker")
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.close_mcp_client")
+    def test_mcp_client_close_failure(
+        self,
+        mock_close_mcp,
+        mock_get_health_monitor,
+        mock_get_circuit_breaker,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
         """Test MCPClient close failure."""
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
@@ -608,8 +826,10 @@ class TestMCPClient:
 class TestServiceManager:
     """Test ServiceManager functionality."""
 
-    @patch('src.services.get_health_monitor')
-    def test_service_manager_initialization(self, mock_get_health_monitor, mock_health_monitor):
+    @patch("src.services.get_health_monitor")
+    def test_service_manager_initialization(
+        self, mock_get_health_monitor, mock_health_monitor
+    ):
         """Test ServiceManager initialization."""
         mock_get_health_monitor.return_value = mock_health_monitor
 
@@ -623,8 +843,10 @@ class TestServiceManager:
         assert manager.mcp is None
         assert manager.health_monitor == mock_health_monitor
 
-    @patch('src.services.get_health_monitor')
-    def test_service_manager_initialize_services(self, mock_get_health_monitor, mock_health_monitor, mock_llm_config):
+    @patch("src.services.get_health_monitor")
+    def test_service_manager_initialize_services(
+        self, mock_get_health_monitor, mock_health_monitor, mock_llm_config
+    ):
         """Test ServiceManager initialize_services."""
         mock_get_health_monitor.return_value = mock_health_monitor
 
@@ -642,16 +864,32 @@ class TestServiceManager:
         assert manager.github is not None
         assert manager.mcp is not None
 
-        mock_health_monitor.register_service.assert_any_call("ollama_reasoning", manager.ollama_reasoning.health_check)
-        mock_health_monitor.register_service.assert_any_call("ollama_code", manager.ollama_code.health_check)
-        mock_health_monitor.register_service.assert_any_call("github", manager.github.health_check)
-        mock_health_monitor.register_service.assert_any_call("mcp", manager.mcp.health_check)
+        mock_health_monitor.register_service.assert_any_call(
+            "ollama_reasoning", manager.ollama_reasoning.health_check
+        )
+        mock_health_monitor.register_service.assert_any_call(
+            "ollama_code", manager.ollama_code.health_check
+        )
+        mock_health_monitor.register_service.assert_any_call(
+            "github", manager.github.health_check
+        )
+        mock_health_monitor.register_service.assert_any_call(
+            "mcp", manager.mcp.health_check
+        )
 
-    @patch('src.services.get_health_monitor')
-    @patch('src.services.OllamaClient')
-    @patch('src.services.GitHubClient')
-    @patch('src.services.MCPClient')
-    def test_service_manager_initialize_services_no_github_token(self, mock_mcp_class, mock_github_class, mock_ollama_class, mock_get_health_monitor, mock_health_monitor, mock_llm_config):
+    @patch("src.services.get_health_monitor")
+    @patch("src.services.OllamaClient")
+    @patch("src.services.GitHubClient")
+    @patch("src.services.MCPClient")
+    def test_service_manager_initialize_services_no_github_token(
+        self,
+        mock_mcp_class,
+        mock_github_class,
+        mock_ollama_class,
+        mock_get_health_monitor,
+        mock_health_monitor,
+        mock_llm_config,
+    ):
         """Test ServiceManager initialize_services without GitHub token."""
         mock_get_health_monitor.return_value = mock_health_monitor
 
@@ -674,7 +912,7 @@ class TestServiceManager:
         assert manager.github is None
         mock_github_class.assert_not_called()
 
-    @patch('src.services.get_health_monitor')
+    @patch("src.services.get_health_monitor")
     def test_service_manager_check_services_health(self, mock_get_health_monitor):
         """Test ServiceManager check_services_health."""
         mock_health_monitor = MagicMock()
@@ -684,7 +922,7 @@ class TestServiceManager:
             "ollama_reasoning": True,
             "ollama_code": False,
             "github": True,
-            "mcp": True
+            "mcp": True,
         }.get(name, False)
 
         config = MagicMock()
@@ -707,12 +945,14 @@ class TestServiceManager:
             "ollama_reasoning": True,
             "ollama_code": False,
             "github": True,
-            "mcp": True
+            "mcp": True,
         }
         assert result == expected
 
-    @patch('src.services.get_health_monitor')
-    def test_service_manager_check_services_health_none_services(self, mock_get_health_monitor, mock_health_monitor):
+    @patch("src.services.get_health_monitor")
+    def test_service_manager_check_services_health_none_services(
+        self, mock_get_health_monitor, mock_health_monitor
+    ):
         """Test ServiceManager check_services_health with None services."""
         mock_get_health_monitor.return_value = mock_health_monitor
 
@@ -731,12 +971,14 @@ class TestServiceManager:
             "ollama_reasoning": False,
             "ollama_code": False,
             "github": False,
-            "mcp": False
+            "mcp": False,
         }
         assert result == expected
 
-    @patch('src.services.get_health_monitor')
-    def test_service_manager_close_services(self, mock_get_health_monitor, mock_health_monitor):
+    @patch("src.services.get_health_monitor")
+    def test_service_manager_close_services(
+        self, mock_get_health_monitor, mock_health_monitor
+    ):
         """Test ServiceManager close_services."""
         mock_get_health_monitor.return_value = mock_health_monitor
 
@@ -755,13 +997,13 @@ class TestServiceManager:
 class TestGlobalServiceFunctions:
     """Test global service management functions."""
 
-    @patch('src.services._service_manager', None)
+    @patch("src.services._service_manager", None)
     def test_get_service_manager_not_initialized(self):
         """Test get_service_manager when not initialized."""
         with pytest.raises(RuntimeError, match="Service manager not initialized"):
             get_service_manager()
 
-    @patch('src.services._service_manager', None)
+    @patch("src.services._service_manager", None)
     def test_init_services_success(self, mock_llm_config):
         """Test init_services success."""
         config = MagicMock()
@@ -770,11 +1012,14 @@ class TestGlobalServiceFunctions:
 
         assert result is not None
         from src.services import _service_manager
+
         assert _service_manager is not None
 
-    @patch('src.services.ServiceManager')
-    @patch('src.services._service_manager', None)
-    def test_init_services_sets_global_manager(self, mock_service_manager_class, mock_llm_config):
+    @patch("src.services.ServiceManager")
+    @patch("src.services._service_manager", None)
+    def test_init_services_sets_global_manager(
+        self, mock_service_manager_class, mock_llm_config
+    ):
         """Test init_services sets global manager."""
         config = MagicMock()
         mock_manager = MagicMock()

@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
 from src.state import CodeGenerationState
-from src.models import CodeSpec, TestSpec, ValidationResults
+from src.models import CodeSpec, TestSpecification, ValidationResults
 
 
 def test_code_generation_state_instantiation():
@@ -14,7 +14,7 @@ def test_code_generation_state_instantiation():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
     assert state.issue_url == "https://example.com"
     assert state.ticket_content == "Test ticket"
@@ -33,7 +33,7 @@ def test_code_generation_state_immutability():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
     with pytest.raises(AttributeError):
         state.generated_code = "new code"
@@ -49,9 +49,11 @@ def test_with_code_transformation():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
-    new_state = state.with_code("console.log('hello');", method_name="testMethod", command_id="testCmd")
+    new_state = state.with_code(
+        "console.log('hello');", method_name="testMethod", command_id="testCmd"
+    )
 
     # Original state unchanged
     assert state.generated_code is None
@@ -77,7 +79,7 @@ def test_with_tests_transformation():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
     new_state = state.with_tests("describe('test', () => {});")
 
@@ -98,7 +100,7 @@ def test_with_validation_transformation():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
     validation = {"passed": True, "errors": []}
     new_state = state.with_validation(validation)
@@ -121,7 +123,7 @@ def test_with_feedback_transformation():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
     feedback = {"comments": "Good job"}
     new_state = state.with_feedback(feedback)
@@ -143,7 +145,7 @@ def test_validate_valid_state():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest"),
+        test_spec=TestSpecification(test_framework="jest"),
         generated_code="valid code",
         generated_tests="valid tests",
         method_name="testMethod",
@@ -151,7 +153,7 @@ def test_validate_valid_state():
         relevant_code_files=[{"file": "test.ts"}],
         relevant_test_files=[{"file": "test.test.ts"}],
         validation_results=ValidationResults(success=True, errors=[], warnings=[]),
-        feedback={"good": True}
+        feedback={"good": True},
     )
     # Note: validate method may not exist, assuming it does for now
     # assert state.validate() is True
@@ -169,7 +171,7 @@ def test_validate_invalid_state():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
     assert state is not None
 
@@ -185,8 +187,8 @@ def test_get_audit_trail():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest"),
-        history=initial_history
+        test_spec=TestSpecification(test_framework="jest"),
+        history=initial_history,
     )
     trail = state.get_audit_trail()
     assert trail == initial_history
@@ -205,7 +207,7 @@ def test_history_timestamps():
         requirements=["req1"],
         acceptance_criteria=["crit1"],
         code_spec=CodeSpec(language="typescript", framework="react"),
-        test_spec=TestSpec(test_framework="jest")
+        test_spec=TestSpecification(test_framework="jest"),
     )
     # Note: with_code doesn't add to history in current implementation
     # So this test may need to be updated or history tracking added back

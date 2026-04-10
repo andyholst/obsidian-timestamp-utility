@@ -15,12 +15,14 @@ LOGGER_LEVEL = logging.INFO
 
 class ConfigValidationError(Exception):
     """Raised when configuration validation fails."""
+
     pass
 
 
 @dataclass(frozen=True)
 class LLMConfig:
     """Configuration for LLM clients."""
+
     model: str
     base_url: str
     temperature: float = 0.7
@@ -28,20 +30,29 @@ class LLMConfig:
     top_k: int = 20
     min_p: float = 0.0
     presence_penalty: float = 1.5
-    num_ctx: int = 32768
-    num_predict: int = 32768
+    num_ctx: int = 4096
+    num_predict: int = 1024
+    request_timeout: int = 30
 
 
 class AgenticsConfig(BaseModel):
     """Centralized configuration for the agentics application."""
 
     # GitHub configuration
-    github_token: Optional[str] = Field(default_factory=lambda: os.getenv('GITHUB_TOKEN'))
+    github_token: Optional[str] = Field(
+        default_factory=lambda: os.getenv("GITHUB_TOKEN")
+    )
 
     # Ollama configuration
-    ollama_host: str = Field(default_factory=lambda: os.getenv('OLLAMA_HOST', 'http://localhost:11434'))
-    ollama_reasoning_model: str = Field(default_factory=lambda: os.getenv('OLLAMA_REASONING_MODEL', 'qwen2.5:14b'))
-    ollama_code_model: str = Field(default_factory=lambda: os.getenv('OLLAMA_CODE_MODEL', 'qwen2.5-coder:14b'))
+    ollama_host: str = Field(
+        default_factory=lambda: os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    )
+    ollama_reasoning_model: str = Field(
+        default_factory=lambda: os.getenv("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+    )
+    ollama_code_model: str = Field(
+        default_factory=lambda: os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+    )
 
     # Circuit breaker configuration
     circuit_breaker_failure_threshold: int = 3
@@ -53,17 +64,18 @@ class AgenticsConfig(BaseModel):
     logger_level: int = LOGGER_LEVEL
     info_as_debug: bool = INFO_AS_DEBUG
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_ollama_host(cls, model):
-        if not model.ollama_host.startswith(('http://', 'https://')):
+        if not model.ollama_host.startswith(("http://", "https://")):
             raise ConfigValidationError("OLLAMA_HOST must be a valid HTTP/HTTPS URL")
         return model
 
-    @field_validator('github_token')
+    @field_validator("github_token")
     @classmethod
     def validate_github_token(cls, v: Optional[str]) -> str:
         if v is None or str(v).strip() == "":
             raise ValueError("GITHUB_TOKEN must be a non-empty string")
+        # Allow placeholder tokens for testing (e.g. "***" or "test_token")
         return v
 
     def get_reasoning_llm_config(self) -> LLMConfig:
@@ -76,8 +88,8 @@ class AgenticsConfig(BaseModel):
             top_k=20,
             min_p=0.0,
             presence_penalty=1.5,
-            num_ctx=32768,
-            num_predict=32768
+            num_ctx=4096,
+            num_predict=1024,
         )
 
     def get_code_llm_config(self) -> LLMConfig:
@@ -90,8 +102,8 @@ class AgenticsConfig(BaseModel):
             top_k=20,
             min_p=0.0,
             presence_penalty=1.5,
-            num_ctx=32768,
-            num_predict=32768
+            num_ctx=4096,
+            num_predict=1024,
         )
 
 
@@ -102,7 +114,7 @@ _config: Optional[AgenticsConfig] = None
 def get_config() -> AgenticsConfig:
     """Get the global configuration instance."""
     if _config is None:
-        raise RuntimeError("Configuration not initialized")
+        return init_config()
     return _config
 
 
@@ -112,8 +124,10 @@ def init_config(config: Optional[AgenticsConfig] = None) -> AgenticsConfig:
     if config is None:
         config = AgenticsConfig()
     logging.debug(f"init_config: github_token = {repr(config.github_token)}")
-    if config.github_token is None or config.github_token == '':
-        raise ConfigValidationError("GITHUB_TOKEN environment variable is required and cannot be empty")
+    if config.github_token is None or config.github_token == "":
+        raise ConfigValidationError(
+            "GITHUB_TOKEN environment variable is required and cannot be empty"
+        )
     _config = config
 
     # Setup logging with the configured level
@@ -128,11 +142,11 @@ class JSONFormatter(logging.Formatter):
     def format(self, record):
         """Format log record as JSON."""
         # If the message is already JSON (from StructuredLogger), use it directly
-        if isinstance(record.getMessage(), str) and record.getMessage().startswith('{'):
+        if isinstance(record.getMessage(), str) and record.getMessage().startswith("{"):
             try:
                 # Parse and re-format to ensure consistent structure
                 log_data = json.loads(record.getMessage())
-                return json.dumps(log_data, separators=(',', ':'))
+                return json.dumps(log_data, separators=(",", ":"))
             except json.JSONDecodeError:
                 pass
 
@@ -141,14 +155,14 @@ class JSONFormatter(logging.Formatter):
             "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
             "level": record.levelname,
             "component": record.name,
-            "message": record.getMessage()
+            "message": record.getMessage(),
         }
 
         # Add exception info if present
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(log_entry, separators=(',', ':'))
+        return json.dumps(log_entry, separators=(",", ":"))
 
 
 def setup_logging(level: int = logging.INFO, enable_json: bool = True) -> None:
@@ -176,7 +190,7 @@ def setup_logging(level: int = logging.INFO, enable_json: bool = True) -> None:
     else:
         # Use simple formatter for development
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         )
 
     console_handler.setFormatter(formatter)

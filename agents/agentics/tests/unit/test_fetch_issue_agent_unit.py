@@ -4,6 +4,7 @@ from src.fetch_issue_agent import FetchIssueAgent
 from src.state import State
 from github import GithubException
 
+
 def test_fetch_issue_agent_valid_url():
     # Given: Mocked GitHub client with valid ticket
     mock_github = MagicMock()
@@ -19,9 +20,12 @@ def test_fetch_issue_agent_valid_url():
     result = agent(state)
 
     # Then: Verify ticket content is fetched
-    assert result["ticket_content"] == "Sample ticket content", "Expected ticket content"
+    assert result["ticket_content"] == "Sample ticket content", (
+        "Expected ticket content"
+    )
     mock_github.get_repo.assert_called_once_with("user/repo")
     mock_repo.get_issue.assert_called_once_with(1)
+
 
 def test_fetch_issue_agent_invalid_url():
     # Given: Invalid GitHub URL
@@ -33,6 +37,7 @@ def test_fetch_issue_agent_invalid_url():
     # Then: Expect a ValueError
     with pytest.raises(ValueError, match="Invalid GitHub URL"):
         agent(state)
+
 
 def test_fetch_issue_agent_empty_ticket():
     # Given: Mocked GitHub client with empty ticket
@@ -46,9 +51,13 @@ def test_fetch_issue_agent_empty_ticket():
     state = State(url="https://github.com/user/repo/issues/1")
 
     # When: Processing the state
-    # Then: Expect a ValueError
-    with pytest.raises(ValueError, match="Empty ticket content"):
-        agent(state)
+    result = agent(state)
+
+    # Then: Agent returns state with error info instead of raising
+    assert result.get("error") is not None
+    assert "Empty ticket content" in result.get("error", "")
+    assert result.get("ticket_content") == ""
+
 
 def test_fetch_issue_agent_github_error():
     # Given: Mocked GitHub client with error
@@ -58,9 +67,13 @@ def test_fetch_issue_agent_github_error():
     state = State(url="https://github.com/user/repo/issues/1")
 
     # When: Processing the state
-    # Then: Expect GithubException directly
-    with pytest.raises(GithubException):
-        agent(state)
+    result = agent(state)
+
+    # Then: Agent returns state with error info instead of raising
+    assert result.get("error") is not None
+    assert result.get("error_type") == "GithubException"
+    assert result.get("ticket_content") == ""
+
 
 def test_fetch_issue_agent_closed_issue():
     # Given: Mocked GitHub client with closed issue
@@ -78,4 +91,6 @@ def test_fetch_issue_agent_closed_issue():
     result = agent(state)
 
     # Then: Verify closed ticket content is fetched
-    assert result["ticket_content"] == "Closed ticket content", "Expected closed ticket content"
+    assert result["ticket_content"] == "Closed ticket content", (
+        "Expected closed ticket content"
+    )

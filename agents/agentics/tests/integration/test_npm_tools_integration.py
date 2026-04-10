@@ -8,15 +8,39 @@ from src.tools import ToolExecutor, npm_search_tool, npm_list_tool
 
 @pytest.mark.integration
 class TestPhase4NpmToolsIntegration:
-
-    def test_npm_tools_tool_executor_multiple_calls(self, npm_mock_dir):
+    def test_npm_tools_tool_executor_multiple_calls(self, npm_mock_dir, monkeypatch):
         """Test ToolExecutor processing multiple npm tool calls from AIMessage."""
+        import subprocess
+        original_run = subprocess.run
+        def mock_run(cmd, **kwargs):
+            # If npm list, return minimal valid output
+            if isinstance(cmd, list) and 'list' in cmd:
+                return type("R", (), {"stdout": '{"dependencies": {}}', "returncode": 0, "stderr": ""})()
+            # If npm search, return minimal valid output
+            if isinstance(cmd, list) and 'search' in cmd:
+                return type("R", (), {"stdout": '[{"name": "lodash", "version": "4.17.21", "description": "Lodash modular utilities"}]', "returncode": 0, "stderr": ""})()
+            return original_run(cmd, **kwargs)
+        monkeypatch.setattr(subprocess, "run", mock_run)
+        # Also patch subprocess in the tools module's namespace
+        import src.tools as tools_mod
+        monkeypatch.setattr(tools_mod, "subprocess", subprocess)
+        
         tools: List[BaseTool] = [npm_search_tool, npm_list_tool]
         executor = ToolExecutor(tools)
 
         tool_calls = [
-            {"id": "call1", "name": "npm_search_tool", "args": {"package_name": "lodash", "limit": 3}, "type": "tool"},
-            {"id": "call2", "name": "npm_list_tool", "args": {"depth": 0}, "type": "tool"}
+            {
+                "id": "call1",
+                "name": "npm_search_tool",
+                "args": {"package_name": "lodash", "limit": 3},
+                "type": "tool",
+            },
+            {
+                "id": "call2",
+                "name": "npm_list_tool",
+                "args": {"depth": 0},
+                "type": "tool",
+            },
         ]
 
         ai_message = AIMessage(content="Process with npm tools", tool_calls=tool_calls)
@@ -36,7 +60,9 @@ class TestPhase4NpmToolsIntegration:
             assert isinstance(packages, list)
             assert len(packages) > 0
             # At least one lodash-related package
-            lodash_packages = [p for p in packages if "lodash" in p.get("name", "").lower()]
+            lodash_packages = [
+                p for p in packages if "lodash" in p.get("name", "").lower()
+            ]
             assert len(lodash_packages) >= 1
         except json.JSONDecodeError:
             pytest.fail("npm_search_tool did not return valid JSON")
@@ -58,7 +84,7 @@ class TestPhase4NpmToolsIntegration:
             ("express", 1),
             ("jest", 1),
         ],
-        ids=["react", "express", "jest"]
+        ids=["react", "express", "jest"],
     )
     def test_parametrized_npm_search(self, package_name, expected_min_results):
         """Parametrized npm search tool tests."""
@@ -66,10 +92,17 @@ class TestPhase4NpmToolsIntegration:
         executor = ToolExecutor(tools)
 
         tool_calls = [
-            {"id": "call1", "name": "npm_search_tool", "args": {"package_name": package_name, "limit": 5}, "type": "tool"}
+            {
+                "id": "call1",
+                "name": "npm_search_tool",
+                "args": {"package_name": package_name, "limit": 5},
+                "type": "tool",
+            }
         ]
 
-        ai_message = AIMessage(content=f"Search for {package_name}", tool_calls=tool_calls)
+        ai_message = AIMessage(
+            content=f"Search for {package_name}", tool_calls=tool_calls
+        )
 
         tool_results = executor.execute(ai_message)
 

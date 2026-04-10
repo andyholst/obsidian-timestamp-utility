@@ -18,7 +18,10 @@ def create_mock_circuit_breaker():
 
 def patch_circuit_breakers():
     """Context manager to patch all circuit breaker creation."""
-    return patch('src.circuit_breaker.get_circuit_breaker', side_effect=create_mock_circuit_breaker)
+    return patch(
+        "src.circuit_breaker.get_circuit_breaker",
+        side_effect=create_mock_circuit_breaker,
+    )
 
 
 def mock_circuit_breaker_for_agent(agent_instance):

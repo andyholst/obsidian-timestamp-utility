@@ -10,7 +10,6 @@ from src.tools import ToolExecutor, read_file_tool, write_file_tool, list_files_
 
 @pytest.mark.integration
 class TestPhase4FileToolsIntegration:
-
     def setup_method(self):
         """Create temporary project directory with initial file."""
         self.temp_dir = tempfile.mkdtemp(prefix="phase4_file_tools_")
@@ -21,7 +20,7 @@ class TestPhase4FileToolsIntegration:
 
     def teardown_method(self):
         """Cleanup temporary directory."""
-        if hasattr(self, 'temp_dir'):
+        if hasattr(self, "temp_dir"):
             shutil.rmtree(self.temp_dir)
         if "PROJECT_ROOT" in os.environ:
             del os.environ["PROJECT_ROOT"]
@@ -32,9 +31,27 @@ class TestPhase4FileToolsIntegration:
         executor = ToolExecutor(tools)
 
         tool_calls = [
-            {"id": "call1", "name": "read_file_tool", "args": {"file_path": "initial.txt"}, "type": "tool"},
-            {"id": "call2", "name": "write_file_tool", "args": {"file_path": "output.txt", "content": "new content from tools"}, "type": "tool"},
-            {"id": "call3", "name": "list_files_tool", "args": {"directory": "."}, "type": "tool"}
+            {
+                "id": "call1",
+                "name": "read_file_tool",
+                "args": {"file_path": "initial.txt"},
+                "type": "tool",
+            },
+            {
+                "id": "call2",
+                "name": "write_file_tool",
+                "args": {
+                    "file_path": "output.txt",
+                    "content": "new content from tools",
+                },
+                "type": "tool",
+            },
+            {
+                "id": "call3",
+                "name": "list_files_tool",
+                "args": {"directory": "."},
+                "type": "tool",
+            },
         ]
 
         ai_message = AIMessage(content="Process with file tools", tool_calls=tool_calls)
@@ -43,7 +60,11 @@ class TestPhase4FileToolsIntegration:
 
         # Assert all tools processed
         assert len(tool_results) == 3
-        assert set(tool_results.keys()) == {"read_file_tool", "write_file_tool", "list_files_tool"}
+        assert set(tool_results.keys()) == {
+            "read_file_tool",
+            "write_file_tool",
+            "list_files_tool",
+        }
 
         # Assert read result
         read_result = tool_results["read_file_tool"]
@@ -71,9 +92,11 @@ class TestPhase4FileToolsIntegration:
             ("initial.txt", "param content 1", ["initial.txt", "param1.txt"]),
             ("initial.txt", "param content 2", ["initial.txt", "param2.txt"]),
         ],
-        ids=["param1", "param2"]
+        ids=["param1", "param2"],
     )
-    def test_parametrized_file_tool_sequence(self, read_path, write_content, expected_files):
+    def test_parametrized_file_tool_sequence(
+        self, read_path, write_content, expected_files
+    ):
         """Parametrized test for file read-write-list sequence."""
         tools: List[BaseTool] = [read_file_tool, write_file_tool, list_files_tool]
         executor = ToolExecutor(tools)
@@ -81,9 +104,24 @@ class TestPhase4FileToolsIntegration:
         write_path = expected_files[1]
 
         tool_calls = [
-            {"id": "call1", "name": "read_file_tool", "args": {"file_path": read_path}, "type": "tool"},
-            {"id": "call2", "name": "write_file_tool", "args": {"file_path": write_path, "content": write_content}, "type": "tool"},
-            {"id": "call3", "name": "list_files_tool", "args": {"directory": "."}, "type": "tool"}
+            {
+                "id": "call1",
+                "name": "read_file_tool",
+                "args": {"file_path": read_path},
+                "type": "tool",
+            },
+            {
+                "id": "call2",
+                "name": "write_file_tool",
+                "args": {"file_path": write_path, "content": write_content},
+                "type": "tool",
+            },
+            {
+                "id": "call3",
+                "name": "list_files_tool",
+                "args": {"directory": "."},
+                "type": "tool",
+            },
         ]
 
         ai_message = AIMessage(content="Parametrized tools", tool_calls=tool_calls)

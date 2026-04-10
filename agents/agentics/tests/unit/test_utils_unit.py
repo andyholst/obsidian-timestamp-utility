@@ -3,12 +3,13 @@ import json
 import re
 from src.utils import validate_github_url, remove_thinking_tags, parse_json_response
 
+
 def test_validate_github_url_valid():
     """Test that valid GitHub issue URLs are correctly validated."""
     # Given: Valid GitHub issue URLs
     urls = [
         "https://github.com/user/repo/issues/1",
-        "https://github.com/another-user/another-repo/issues/42"
+        "https://github.com/another-user/another-repo/issues/42",
     ]
 
     # When: Validating URLs
@@ -17,6 +18,7 @@ def test_validate_github_url_valid():
     # Then: Verify all are valid
     assert all(result == True for result in results), "Expected all URLs to be valid"
 
+
 def test_validate_github_url_invalid():
     """Test that invalid URLs are correctly rejected."""
     # Given: Invalid URLs
@@ -24,7 +26,7 @@ def test_validate_github_url_invalid():
         "https://github.com/user/repo/pull/1",
         "https://github.com/user/repo/issues/abc",
         "https://example.com/user/repo/issues/1",
-        "invalid_url"
+        "invalid_url",
     ]
 
     # When: Validating URLs
@@ -33,11 +35,13 @@ def test_validate_github_url_invalid():
     # Then: Verify all are invalid
     assert all(result == False for result in results), "Expected all URLs to be invalid"
 
+
 def test_remove_thinking_tags():
     """Test that thinking tags and markdown code blocks are properly removed."""
     text = "<think>This is thinking</think>Some content```typescript\ncode\n```"
     result = remove_thinking_tags(text)
     assert result == "Some contentcode"
+
 
 def test_parse_json_response_valid():
     """Test parsing a valid JSON string."""
@@ -48,6 +52,7 @@ def test_parse_json_response_valid():
     # Then it should return the parsed dictionary
     assert result == {"key": "value"}
 
+
 def test_parse_json_response_with_extra_text():
     """Test parsing JSON with extra text after it."""
     # Given JSON with extra text after it
@@ -56,6 +61,7 @@ def test_parse_json_response_with_extra_text():
     result = parse_json_response(response)
     # Then it should extract and return the JSON object
     assert result == {"key": "value"}
+
 
 def test_parse_json_response_nested():
     """Test parsing nested JSON with extra text."""
@@ -66,14 +72,16 @@ def test_parse_json_response_nested():
     # Then it should extract and return the nested JSON object
     assert result == {"key": {"nested": "value"}}
 
+
 def test_parse_json_response_invalid():
     """Test that invalid JSON raises ValueError."""
     # Given completely invalid JSON
-    response = 'not json at all'
+    response = "not json at all"
     # When parsing the JSON response
     # Then it should raise ValueError
     with pytest.raises(ValueError):
         parse_json_response(response)
+
 
 def test_parse_json_response_partial_json():
     """Test that malformed JSON raises ValueError."""
@@ -84,23 +92,26 @@ def test_parse_json_response_partial_json():
     with pytest.raises(ValueError):
         parse_json_response(response)
 
+
 def test_parse_json_response_empty():
     """Test that empty string raises ValueError."""
     # Given an empty string
-    response = ''
+    response = ""
     # When parsing the JSON response
     # Then it should raise ValueError
     with pytest.raises(ValueError):
         parse_json_response(response)
 
+
 def test_parse_json_response_only_extra_text():
     """Test that text without JSON raises ValueError."""
     # Given text without any JSON
-    response = 'some text without json'
+    response = "some text without json"
     # When parsing the JSON response
     # Then it should raise ValueError
     with pytest.raises(ValueError):
         parse_json_response(response)
+
 
 def test_parse_json_response_complex():
     """Test parsing complex JSON with extra text like LLM responses."""

@@ -26,31 +26,41 @@ class MetricsStore:
         self.counters: Dict[str, int] = defaultdict(int)
         self.timers: Dict[str, List[float]] = defaultdict(list)
         self.gauges: Dict[str, float] = {}
-        self.histograms: Dict[str, deque] = defaultdict(lambda: deque(maxlen=max_history))
+        self.histograms: Dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=max_history)
+        )
         self.lock = threading.RLock()
 
-    def increment_counter(self, name: str, value: int = 1, labels: Optional[Dict[str, str]] = None):
+    def increment_counter(
+        self, name: str, value: int = 1, labels: Optional[Dict[str, str]] = None
+    ):
         """Increment a counter metric"""
         with self.lock:
             key = self._make_key(name, labels)
             self.counters[key] += value
 
-    def record_timer(self, name: str, duration: float, labels: Optional[Dict[str, str]] = None):
+    def record_timer(
+        self, name: str, duration: float, labels: Optional[Dict[str, str]] = None
+    ):
         """Record a timer metric"""
         with self.lock:
             key = self._make_key(name, labels)
             self.timers[key].append(duration)
             # Keep only recent measurements
             if len(self.timers[key]) > self.max_history:
-                self.timers[key] = self.timers[key][-self.max_history:]
+                self.timers[key] = self.timers[key][-self.max_history :]
 
-    def set_gauge(self, name: str, value: float, labels: Optional[Dict[str, str]] = None):
+    def set_gauge(
+        self, name: str, value: float, labels: Optional[Dict[str, str]] = None
+    ):
         """Set a gauge metric"""
         with self.lock:
             key = self._make_key(name, labels)
             self.gauges[key] = value
 
-    def record_histogram(self, name: str, value: float, labels: Optional[Dict[str, str]] = None):
+    def record_histogram(
+        self, name: str, value: float, labels: Optional[Dict[str, str]] = None
+    ):
         """Record a histogram value"""
         with self.lock:
             key = self._make_key(name, labels)
@@ -63,7 +73,9 @@ class MetricsStore:
                 "counters": dict(self.counters),
                 "gauges": dict(self.gauges),
                 "timers": {k: self._summarize_timer(v) for k, v in self.timers.items()},
-                "histograms": {k: self._summarize_histogram(v) for k, v in self.histograms.items()}
+                "histograms": {
+                    k: self._summarize_histogram(v) for k, v in self.histograms.items()
+                },
             }
 
     def _make_key(self, name: str, labels: Optional[Dict[str, str]]) -> str:
@@ -83,7 +95,7 @@ class MetricsStore:
             "min": min(durations),
             "max": max(durations),
             "p95": sorted(durations)[int(len(durations) * 0.95)] if durations else None,
-            "p99": sorted(durations)[int(len(durations) * 0.99)] if durations else None
+            "p99": sorted(durations)[int(len(durations) * 0.99)] if durations else None,
         }
 
     def _summarize_histogram(self, values: deque) -> Dict[str, Any]:
@@ -96,7 +108,7 @@ class MetricsStore:
             "avg": sum(values_list) / len(values_list),
             "min": min(values_list),
             "max": max(values_list),
-            "current": values_list[-1] if values_list else None
+            "current": values_list[-1] if values_list else None,
         }
 
 
@@ -108,8 +120,14 @@ class StructuredLogger(logging.Logger):
         super().__init__(name)
         self.logger = logging.getLogger(name)
 
-    def _log_structured(self, level: int, event: str, data: Optional[Dict[str, Any]] = None,
-                       error: Optional[Exception] = None, extra: Optional[Dict[str, Any]] = None):
+    def _log_structured(
+        self,
+        level: int,
+        event: str,
+        data: Optional[Dict[str, Any]] = None,
+        error: Optional[Exception] = None,
+        extra: Optional[Dict[str, Any]] = None,
+    ):
         """Log structured event with proper logging level"""
         log_data = {
             "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -117,16 +135,13 @@ class StructuredLogger(logging.Logger):
             "event": event,
             "component": self.name,
             **(data or {}),
-            **(extra or {})
+            **(extra or {}),
         }
 
         if error:
-            log_data["error"] = {
-                "type": type(error).__name__,
-                "message": str(error)
-            }
+            log_data["error"] = {"type": type(error).__name__, "message": str(error)}
 
-        message = json.dumps(log_data, default=str, separators=(',', ':'))
+        message = json.dumps(log_data, default=str, separators=(",", ":"))
 
         # Use parent class logging method
         super().log(level, message)
@@ -135,10 +150,10 @@ class StructuredLogger(logging.Logger):
 
     def log(self, level: int, msg: str, *args, **kwargs):
         """Override log method to support structured logging"""
-        if isinstance(msg, str) and not msg.startswith('{'):
+        if isinstance(msg, str) and not msg.startswith("{"):
             # If it's not already JSON, treat it as an event
-            data = kwargs.pop('extra', {})
-            error = kwargs.pop('exc_info', None)
+            data = kwargs.pop("extra", {})
+            error = kwargs.pop("exc_info", None)
             if error and isinstance(error, Exception):
                 error = error
             elif error:
@@ -150,37 +165,50 @@ class StructuredLogger(logging.Logger):
 
     def debug(self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs):
         """Log debug event"""
-        extra = kwargs.pop('extra', {})
+        extra = kwargs.pop("extra", {})
         extra.update(data or {})
         self._log_structured(logging.DEBUG, event, extra=extra)
 
     def info(self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs):
         """Log info event"""
-        extra = kwargs.pop('extra', {})
+        extra = kwargs.pop("extra", {})
         extra.update(data or {})
         self._log_structured(logging.INFO, event, extra=extra)
 
-    def warning(self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs):
+    def warning(
+        self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs
+    ):
         """Log warning event"""
-        extra = kwargs.pop('extra', {})
+        extra = kwargs.pop("extra", {})
         extra.update(data or {})
         self._log_structured(logging.WARNING, event, extra=extra)
 
-    def error(self, event: str, data: Optional[Dict[str, Any]] = None, error: Optional[Exception] = None, *args, **kwargs):
+    def error(
+        self,
+        event: str,
+        data: Optional[Dict[str, Any]] = None,
+        error: Optional[Exception] = None,
+        *args,
+        **kwargs,
+    ):
         """Log error event"""
-        extra = kwargs.pop('extra', {})
+        extra = kwargs.pop("extra", {})
         extra.update(data or {})
         self._log_structured(logging.ERROR, event, data=extra, error=error)
 
-    def critical(self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs):
+    def critical(
+        self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs
+    ):
         """Log critical event"""
-        extra = kwargs.pop('extra', {})
+        extra = kwargs.pop("extra", {})
         extra.update(data or {})
         self._log_structured(logging.CRITICAL, event, extra=extra)
 
-    def exception(self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs):
+    def exception(
+        self, event: str, data: Optional[Dict[str, Any]] = None, *args, **kwargs
+    ):
         """Log exception with traceback"""
-        extra = kwargs.pop('extra', {})
+        extra = kwargs.pop("extra", {})
         extra.update(data or {})
         self._log_structured(logging.ERROR, event, exc_info=True, extra=extra)
 
@@ -197,7 +225,12 @@ class WorkflowTracker:
         self.workflow_metrics: Dict[str, Dict[str, Any]] = defaultdict(dict)
         self.lock = threading.RLock()
 
-    def start_workflow(self, workflow_id: str, workflow_type: str, initial_data: Optional[Dict[str, Any]] = None):
+    def start_workflow(
+        self,
+        workflow_id: str,
+        workflow_type: str,
+        initial_data: Optional[Dict[str, Any]] = None,
+    ):
         """Start tracking a workflow"""
         with self.lock:
             self.active_workflows[workflow_id] = {
@@ -206,22 +239,24 @@ class WorkflowTracker:
                 "current_step": None,
                 "steps_completed": [],
                 "data": initial_data or {},
-                "status": "running"
+                "status": "running",
             }
 
-    def update_workflow_step(self, workflow_id: str, step: str, step_data: Optional[Dict[str, Any]] = None):
+    def update_workflow_step(
+        self, workflow_id: str, step: str, step_data: Optional[Dict[str, Any]] = None
+    ):
         """Update current step in workflow"""
         with self.lock:
             if workflow_id in self.active_workflows:
                 workflow = self.active_workflows[workflow_id]
                 workflow["current_step"] = step
-                workflow["steps_completed"].append({
-                    "step": step,
-                    "timestamp": time.time(),
-                    "data": step_data or {}
-                })
+                workflow["steps_completed"].append(
+                    {"step": step, "timestamp": time.time(), "data": step_data or {}}
+                )
 
-    def complete_workflow(self, workflow_id: str, result: Optional[Dict[str, Any]] = None):
+    def complete_workflow(
+        self, workflow_id: str, result: Optional[Dict[str, Any]] = None
+    ):
         """Mark workflow as completed"""
         with self.lock:
             if workflow_id in self.active_workflows:
@@ -245,7 +280,7 @@ class WorkflowTracker:
                 workflow["status"] = "failed"
                 workflow["error"] = {
                     "type": type(error).__name__,
-                    "message": str(error)
+                    "message": str(error),
                 }
 
                 # Move to completed (with failure status)
@@ -284,7 +319,7 @@ class WorkflowTracker:
                 "active_workflows": len(self.active_workflows),
                 "success_rate": successful / len(completed) if completed else 0,
                 "failure_rate": failed / len(completed) if completed else 0,
-                "avg_duration": total_duration / len(completed) if completed else 0
+                "avg_duration": total_duration / len(completed) if completed else 0,
             }
 
 
@@ -298,6 +333,7 @@ class PerformanceMonitor:
 
     def time_execution(self, name: str, labels: Optional[Dict[str, str]] = None):
         """Decorator to time function execution"""
+
         def decorator(func):
             @wraps(func)
             def wrapper(*args, **kwargs):
@@ -310,10 +346,14 @@ class PerformanceMonitor:
                     return result
                 except Exception as e:
                     duration = time.perf_counter() - start_time
-                    self.metrics.record_timer(f"{name}_error_duration", duration, labels)
+                    self.metrics.record_timer(
+                        f"{name}_error_duration", duration, labels
+                    )
                     self.metrics.increment_counter(f"{name}_errors", labels=labels)
                     raise e
+
             return wrapper
+
         return decorator
 
     def track_agent_execution(self, agent_name: str):
@@ -322,43 +362,55 @@ class PerformanceMonitor:
 
     def track_workflow_progress(self, workflow_id: str, workflow_type: str):
         """Track workflow execution"""
+
         def decorator(func):
             @wraps(func)
             def wrapper(*args, **kwargs):
                 self.workflow_tracker.start_workflow(workflow_id, workflow_type)
                 try:
                     result = func(*args, **kwargs)
-                    self.workflow_tracker.complete_workflow(workflow_id, {"result": "success"})
+                    self.workflow_tracker.complete_workflow(
+                        workflow_id, {"result": "success"}
+                    )
                     return result
                 except Exception as e:
                     self.workflow_tracker.fail_workflow(workflow_id, e)
                     raise e
+
             return wrapper
+
         return decorator
 
-    def record_circuit_breaker_state(self, name: str, state: str, failure_count: int = 0):
+    def record_circuit_breaker_state(
+        self, name: str, state: str, failure_count: int = 0
+    ):
         """Record circuit breaker state"""
-        self.metrics.set_gauge(f"circuit_breaker_{name}_state",
-                              1 if state == "open" else 0 if state == "half_open" else 2,
-                              {"circuit_breaker": name})
-        self.metrics.record_histogram(f"circuit_breaker_{name}_failures", failure_count,
-                                    {"circuit_breaker": name})
+        self.metrics.set_gauge(
+            f"circuit_breaker_{name}_state",
+            1 if state == "open" else 0 if state == "half_open" else 2,
+            {"circuit_breaker": name},
+        )
+        self.metrics.record_histogram(
+            f"circuit_breaker_{name}_failures", failure_count, {"circuit_breaker": name}
+        )
 
     def get_monitoring_data(self) -> Dict[str, Any]:
         """Get all monitoring data"""
         return {
             "metrics": self.metrics.get_metrics(),
             "workflows": self.workflow_tracker.get_workflow_metrics(),
-            "active_workflows": self.workflow_tracker.get_active_workflows()
+            "active_workflows": self.workflow_tracker.get_active_workflows(),
         }
 
 
 # Global monitoring instance
 _monitor = PerformanceMonitor()
 
+
 def get_monitor() -> PerformanceMonitor:
     """Get the global performance monitor"""
     return _monitor
+
 
 def structured_log(name) -> StructuredLogger:
     if isinstance(name, logging.Logger):
@@ -367,27 +419,38 @@ def structured_log(name) -> StructuredLogger:
         name = str(name) if name is not None else "unknown"
     return StructuredLogger(name)
 
+
 # Convenience functions
 def time_execution(name: str, labels: Optional[Dict[str, str]] = None):
     """Time execution decorator"""
     return _monitor.time_execution(name, labels)
 
+
 def track_agent_execution(agent_name: str):
     """Track agent execution"""
     return _monitor.track_agent_execution(agent_name)
+
 
 def track_workflow_progress(workflow_id: str, workflow_type: str):
     """Track workflow progress"""
     return _monitor.track_workflow_progress(workflow_id, workflow_type)
 
+
 def record_circuit_breaker_state(name: str, state: str, failure_count: int = 0):
     """Record circuit breaker state"""
     _monitor.record_circuit_breaker_state(name, state, failure_count)
+
 
 def get_monitoring_data() -> Dict[str, Any]:
     """Get all monitoring data"""
     return _monitor.get_monitoring_data()
 
 
-# Import ServiceHealthMonitor from circuit_breaker for backward compatibility
-from .circuit_breaker import ServiceHealthMonitor
+def __getattr__(name: str) -> Any:
+    """Lazy load ServiceHealthMonitor to avoid circular import."""
+    if name == "ServiceHealthMonitor":
+        from .circuit_breaker import ServiceHealthMonitor
+
+        globals()["ServiceHealthMonitor"] = ServiceHealthMonitor
+        return ServiceHealthMonitor
+    raise AttributeError(f"module '{{__name__}}' has no attribute '{{name}}'")

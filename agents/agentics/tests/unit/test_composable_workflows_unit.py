@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 from src.composable_workflows import ComposableWorkflows
 from src.state import State, CodeGenerationState
 from src.agent_composer import WorkflowConfig
-from src.models import CodeSpec, TestSpec
+from src.models import CodeSpec, TestSpecification
 
 
 class TestComposableWorkflowsArchitecture:
@@ -28,12 +28,15 @@ class TestComposableWorkflowsArchitecture:
     def mock_github_client(self):
         """Mock GitHub client."""
         client = Mock()
-        client.get_issue = AsyncMock(return_value={"title": "Test Issue", "body": "Test body"})
+        client.get_issue = AsyncMock(
+            return_value={"title": "Test Issue", "body": "Test body"}
+        )
         return client
 
     @pytest.fixture
     def mock_mcp_tools(self):
         """Mock MCP tools."""
+
         @tool
         def test_tool(query: str) -> str:
             """Test tool for MCP integration."""
@@ -48,7 +51,7 @@ class TestComposableWorkflowsArchitecture:
             llm_reasoning=mock_llm,
             llm_code=mock_llm,
             github_client=mock_github_client,
-            mcp_tools=mock_mcp_tools
+            mcp_tools=mock_mcp_tools,
         )
 
     def test_workflow_initialization(self, workflows):
@@ -62,10 +65,18 @@ class TestComposableWorkflowsArchitecture:
     def test_agent_registration(self, workflows):
         """Test that all required agents are registered."""
         expected_agents = [
-            "fetch_issue", "ticket_clarity", "implementation_planner",
-            "dependency_analyzer", "code_extractor", "collaborative_generator",
-            "pre_test_runner", "code_integrator", "post_test_runner",
-            "code_reviewer", "output_result", "error_recovery"
+            "fetch_issue",
+            "ticket_clarity",
+            "implementation_planner",
+            "dependency_analyzer",
+            "code_extractor",
+            "collaborative_generator",
+            "pre_test_runner",
+            "code_integrator",
+            "post_test_runner",
+            "code_reviewer",
+            "output_result",
+            "error_recovery",
         ]
 
         for agent_name in expected_agents:
@@ -81,7 +92,7 @@ class TestComposableWorkflowsArchitecture:
         # Test issue processing workflow
         issue_config = WorkflowConfig(
             agent_names=["fetch_issue", "ticket_clarity", "implementation_planner"],
-            tool_names=["test_tool"]
+            tool_names=["test_tool"],
         )
         issue_workflow = workflows.composer.create_workflow("test_issue", issue_config)
         assert issue_workflow is not None
@@ -89,12 +100,12 @@ class TestComposableWorkflowsArchitecture:
         # Test code generation workflow
         code_config = WorkflowConfig(
             agent_names=["code_extractor", "collaborative_generator"],
-            tool_names=["test_tool"]
+            tool_names=["test_tool"],
         )
         code_workflow = workflows.composer.create_workflow("test_code", code_config)
         assert code_workflow is not None
 
-    @patch('agents.agentics.src.composable_workflows.RunnableParallel')
+    @patch("src.composable_workflows.RunnableParallel")
     def test_parallel_processing_enhancement(self, mock_parallel, workflows):
         """Test that parallel processing can be added for dependency analysis."""
         # This test verifies the structure supports parallel processing
@@ -117,19 +128,21 @@ class TestComposableWorkflowsArchitecture:
 
     def test_state_adapters_integration(self, workflows):
         """Test that state adapters work correctly."""
-        from agents.agentics.src.state_adapters import (
+        from src.state_adapters import (
             StateToCodeGenerationStateAdapter,
-            CodeGenerationStateToStateAdapter
+            CodeGenerationStateToStateAdapter,
         )
 
         # Test conversion from State dict to CodeGenerationState
         state_dict = State()
-        state_dict.update({
-            "url": "https://github.com/test/repo/issues/1",
-            "ticket_content": "Test issue content",
-            "requirements": ["req1", "req2"],
-            "acceptance_criteria": ["crit1"]
-        })
+        state_dict.update(
+            {
+                "url": "https://github.com/test/repo/issues/1",
+                "ticket_content": "Test issue content",
+                "requirements": ["req1", "req2"],
+                "acceptance_criteria": ["crit1"],
+            }
+        )
 
         adapter = StateToCodeGenerationStateAdapter()
         cg_state = adapter.invoke(state_dict)
@@ -184,14 +197,18 @@ class TestComposableWorkflowsArchitecture:
     async def test_full_workflow_execution_structure(self, workflows):
         """Test the structure of full workflow execution."""
         # Mock the workflow execution
-        with patch.object(workflows.full_workflow, 'ainvoke', new_callable=AsyncMock) as mock_ainvoke:
+        with patch.object(
+            workflows.full_workflow, "ainvoke", new_callable=AsyncMock
+        ) as mock_ainvoke:
             mock_ainvoke.return_value = {
                 "generated_code": "test code",
                 "generated_tests": "test tests",
-                "validation_results": {"passed": True}
+                "validation_results": {"passed": True},
             }
 
-            result = await workflows.process_issue("https://github.com/test/repo/issues/1")
+            result = await workflows.process_issue(
+                "https://github.com/test/repo/issues/1"
+            )
 
             # Verify the workflow was called with correct parameters
             mock_ainvoke.assert_called_once()
@@ -208,10 +225,11 @@ class TestComposableWorkflowsArchitecture:
         """Test that LangGraph checkpointer is properly integrated."""
         # Verify checkpointer is MemorySaver instance
         from langgraph.checkpoint.memory import MemorySaver
+
         assert isinstance(workflows.checkpointer, MemorySaver)
 
         # Verify workflow is compiled with checkpointer
-        assert hasattr(workflows.full_workflow, 'checkpointer')
+        assert hasattr(workflows.full_workflow, "checkpointer")
 
     def test_composability_patterns(self, workflows):
         """Test that LCEL composition patterns are used."""
@@ -220,12 +238,12 @@ class TestComposableWorkflowsArchitecture:
 
         # The workflow should be composed of multiple agents
         # This is a structural test - the actual composition happens in AgentComposer
-        assert hasattr(issue_workflow, 'invoke')  # Should be a Runnable
+        assert hasattr(issue_workflow, "invoke")  # Should be a Runnable
 
     def test_tool_integration_in_workflows(self, workflows, mock_mcp_tools):
         """Test that tools are integrated into workflow creation."""
         # Verify tools are passed to workflow configs
-        with patch.object(workflows.composer, 'create_workflow') as mock_create:
+        with patch.object(workflows.composer, "create_workflow") as mock_create:
             mock_create.return_value = Mock()
 
             # Recreate workflows to test tool integration
@@ -245,7 +263,7 @@ class TestParallelProcessingEnhancement:
         # This test verifies the design supports parallel execution
         # even if not currently implemented
 
-        from agents.agentics.src.composable_workflows import ComposableWorkflows
+        from src.composable_workflows import ComposableWorkflows
 
         # The design should allow for parallel execution of:
         # - Issue processing (fetch -> clarify -> plan)
@@ -258,8 +276,8 @@ class TestParallelProcessingEnhancement:
 
     def test_merge_parallel_outputs(self):
         """Test the merge logic for parallel outputs."""
-        from agents.agentics.src.composable_workflows import ComposableWorkflows
-        from agents.agentics.src.models import CodeSpec
+        from src.composable_workflows import ComposableWorkflows
+        from src.models import CodeSpec
 
         workflows = Mock(spec=ComposableWorkflows)
         workflows.monitor = Mock()
@@ -272,18 +290,16 @@ class TestParallelProcessingEnhancement:
             description="Test desc",
             requirements=["req1"],
             acceptance_criteria=["crit1"],
-            code_spec=CodeSpec(dependencies=[]),
-            test_spec=TestSpec(),
-            implementation_steps=["step1"]
+            code_spec=CodeSpec(language="typescript", dependencies=[]),
+            test_spec=TestSpecification(test_framework="jest"),
+            implementation_steps=["step1"],
         )
 
-        dep_state = {
-            "available_dependencies": ["dep1", "dep2"]
-        }
+        dep_state = {"available_dependencies": ["dep1", "dep2"]}
 
         parallel_result = {
             "issue_processing": issue_state,
-            "dependency_analysis": dep_state
+            "dependency_analysis": dep_state,
         }
 
         # Test merge logic

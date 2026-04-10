@@ -46,10 +46,10 @@ class IssueProcessingWorkflow(Workflow):
 
     def validate_input(self, input_data: Dict[str, Any]) -> None:
         """Validate input for issue processing."""
-        if 'url' not in input_data:
+        if "url" not in input_data:
             raise ValidationError("Input must contain 'url' key")
 
-        url = input_data['url']
+        url = input_data["url"]
         if not isinstance(url, str) or not validate_github_url(url):
             raise ValidationError("Invalid GitHub issue URL")
 
@@ -57,7 +57,7 @@ class IssueProcessingWorkflow(Workflow):
         """Execute issue processing workflow."""
         self.validate_input(input_data)
 
-        issue_url = input_data['url']
+        issue_url = input_data["url"]
         _monitor.info("issue_processing_started", {"issue_url": issue_url})
 
         async def _execute_impl():
@@ -68,28 +68,34 @@ class IssueProcessingWorkflow(Workflow):
             result = await workflow_system.process_issue(issue_url)
 
             _monitor.info("issue_processing_completed", {"issue_url": issue_url})
-            return {
-                "success": True,
-                "issue_url": issue_url,
-                "result": result
-            }
-    
+            return {"success": True, "issue_url": issue_url, "result": result}
+
         try:
             return await self.circuit_breaker.call_async(_execute_impl)
         except Exception as e:
-            _monitor.error("issue_processing_failed", {"issue_url": issue_url, "error": str(e)}, error=e)
+            _monitor.error(
+                "issue_processing_failed",
+                {"issue_url": issue_url, "error": str(e)},
+                error=e,
+            )
             raise WorkflowError(f"Workflow execution failed: {str(e)}") from e
 
     async def _create_workflow_system(self) -> ComposableWorkflows:
         """Create a composable workflow system instance."""
-        github_client = self.service_manager.github._client if self.service_manager.github else None
-        mcp_tools = await self.service_manager.mcp.get_tools() if self.service_manager.mcp else []
+        github_client = (
+            self.service_manager.github._client if self.service_manager.github else None
+        )
+        mcp_tools = (
+            await self.service_manager.mcp.get_tools()
+            if self.service_manager.mcp
+            else []
+        )
 
         return ComposableWorkflows(
             llm_reasoning=self.service_manager.ollama_reasoning._client,
             llm_code=self.service_manager.ollama_code._client,
             github_client=github_client,
-            mcp_tools=mcp_tools
+            mcp_tools=mcp_tools,
         )
 
 
@@ -104,10 +110,10 @@ class BatchIssueProcessingWorkflow(Workflow):
 
     def validate_input(self, input_data: Dict[str, Any]) -> None:
         """Validate input for batch processing."""
-        if 'issue_urls' not in input_data:
+        if "issue_urls" not in input_data:
             raise ValidationError("Input must contain 'issue_urls' key")
 
-        issue_urls = input_data['issue_urls']
+        issue_urls = input_data["issue_urls"]
         if not isinstance(issue_urls, list) or not issue_urls:
             raise ValidationError("'issue_urls' must be a non-empty list")
 
@@ -119,28 +125,31 @@ class BatchIssueProcessingWorkflow(Workflow):
         """Execute batch issue processing workflow."""
         self.validate_input(input_data)
 
-        issue_urls = input_data['issue_urls']
+        issue_urls = input_data["issue_urls"]
         _monitor.info("batch_processing_started", {"issue_count": len(issue_urls)})
 
         try:
             # Process issues in batch
             results = await self._process_batch(issue_urls)
 
-            successful = sum(1 for r in results if r.get('success', False))
+            successful = sum(1 for r in results if r.get("success", False))
             failed = len(results) - successful
 
-            _monitor.info("batch_processing_completed", {
-                "total_issues": len(issue_urls),
-                "successful": successful,
-                "failed": failed
-            })
+            _monitor.info(
+                "batch_processing_completed",
+                {
+                    "total_issues": len(issue_urls),
+                    "successful": successful,
+                    "failed": failed,
+                },
+            )
 
             return {
                 "success": True,
                 "total_issues": len(issue_urls),
                 "successful": successful,
                 "failed": failed,
-                "results": results
+                "results": results,
             }
 
         except Exception as e:
@@ -149,6 +158,7 @@ class BatchIssueProcessingWorkflow(Workflow):
 
     async def _process_batch(self, issue_urls: List[str]) -> List[Dict[str, Any]]:
         """Process multiple issues concurrently."""
+
         async def process_single_issue(issue_url: str) -> Dict[str, Any]:
             """Process a single issue asynchronously."""
             try:
@@ -157,17 +167,15 @@ class BatchIssueProcessingWorkflow(Workflow):
                 result = await workflow.execute({"url": issue_url})
                 return result
             except Exception as e:
-                _monitor.warning("single_issue_processing_failed", {"issue_url": issue_url, "error": str(e)})
-                return {
-                    "issue_url": issue_url,
-                    "success": False,
-                    "error": str(e)
-                }
+                _monitor.warning(
+                    "single_issue_processing_failed",
+                    {"issue_url": issue_url, "error": str(e)},
+                )
+                return {"issue_url": issue_url, "success": False, "error": str(e)}
 
         # Use batch processor for concurrent execution
         return await self.batch_processor.process_batch(
-            items=issue_urls,
-            processor_func=process_single_issue
+            items=issue_urls, processor_func=process_single_issue
         )
 
 
@@ -186,10 +194,14 @@ class WorkflowManager:
     def get_workflow(self, name: str) -> Workflow:
         """Get a workflow by name."""
         if name not in self.workflows:
-            raise WorkflowError(f"Workflow '{name}' not found. Available workflows: {list(self.workflows.keys())}")
+            raise WorkflowError(
+                f"Workflow '{name}' not found. Available workflows: {list(self.workflows.keys())}"
+            )
         return self.workflows[name]
 
-    async def execute_workflow(self, name: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_workflow(
+        self, name: str, input_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Execute a workflow by name."""
         workflow = self.get_workflow(name)
         return await workflow.execute(input_data)
@@ -206,7 +218,9 @@ _workflow_manager: Optional[WorkflowManager] = None
 def get_workflow_manager() -> WorkflowManager:
     """Get the global workflow manager instance."""
     if _workflow_manager is None:
-        raise RuntimeError("Workflow manager not initialized. Call init_workflows() first.")
+        raise RuntimeError(
+            "Workflow manager not initialized. Call init_workflows() first."
+        )
     return _workflow_manager
 
 
@@ -215,5 +229,8 @@ def init_workflows() -> WorkflowManager:
     global _workflow_manager
     _workflow_manager = WorkflowManager()
     monitor = structured_log(__name__)
-    monitor.info("workflow_manager_initialized", {"workflows": ["issue_processing", "batch_issue_processing"]})
+    monitor.info(
+        "workflow_manager_initialized",
+        {"workflows": ["issue_processing", "batch_issue_processing"]},
+    )
     return _workflow_manager

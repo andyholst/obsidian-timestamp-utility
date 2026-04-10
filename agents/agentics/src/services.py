@@ -9,7 +9,13 @@ from langchain_ollama import OllamaLLM
 from langchain.tools import Tool
 
 from .config import LLMConfig, get_config
-from .exceptions import ServiceUnavailableError, GitHubError, OllamaError, MCPError, HealthCheckError
+from .exceptions import (
+    ServiceUnavailableError,
+    GitHubError,
+    OllamaError,
+    MCPError,
+    HealthCheckError,
+)
 from .mcp_client import get_mcp_client, init_mcp_client, close_mcp_client
 from .circuit_breaker import get_circuit_breaker, get_health_monitor
 from .utils import log_info
@@ -41,7 +47,6 @@ class OllamaClient(ServiceClient):
         super().__init__("ollama")
         self.config = config
         self._client: Optional[OllamaLLM] = None
-        self._initialize_client()
 
     def _initialize_client(self) -> None:
         """Initialize the Ollama client."""
@@ -53,26 +58,35 @@ class OllamaClient(ServiceClient):
                 top_p=self.config.top_p,
                 top_k=self.config.top_k,
                 min_p=self.config.min_p,
+                request_timeout=self.config.request_timeout,
                 extra_params={
                     "presence_penalty": self.config.presence_penalty,
                     "num_ctx": self.config.num_ctx,
-                    "num_predict": self.config.num_predict
-                }
+                    "num_predict": self.config.num_predict,
+                },
             )
-            log_info(__name__, f"Initialized Ollama client for model {self.config.model}")
         except Exception as e:
             log_info(__name__, f"Failed to initialize Ollama client: {str(e)}")
             self._client = None
 
+    @property
+    def client(self) -> Optional[OllamaLLM]:
+        """Lazily initialize and return the Ollama client."""
+        if self._client is None:
+            self._initialize_client()
+        return self._client
+
     async def health_check(self) -> bool:
         """Check if Ollama is healthy."""
-        if not self._client:
+        # Use lazy client property to trigger initialization if needed
+        client = self.client
+        if not client:
             return False
 
         try:
             # Run health check in thread pool to avoid blocking
             response = await asyncio.get_event_loop().run_in_executor(
-                None, self._client.invoke, "Hello"
+                None, client.invoke, "Hello"
             )
             return bool(response and len(response.strip()) > 0)
         except Exception:
@@ -80,7 +94,9 @@ class OllamaClient(ServiceClient):
 
     def is_available(self) -> bool:
         """Check if Ollama client is available."""
-        return self._client is not None and self.health_monitor.is_service_healthy("ollama")
+        return self.client is not None and self.health_monitor.is_service_healthy(
+            "ollama"
+        )
 
     def invoke(self, prompt: str) -> str:
         """Invoke the LLM with a prompt."""
@@ -89,7 +105,7 @@ class OllamaClient(ServiceClient):
 
         @self.circuit_breaker.call
         def _invoke():
-            return self._client.invoke(prompt)
+            return self.client.invoke(prompt)
 
         return _invoke()
 
@@ -117,7 +133,10 @@ class GitHubClient(ServiceClient):
         except Exception as e:
             log_info(__name__, f"Failed to initialize GitHub client: {str(e)}")
             self._client = None
-        log_info(__name__, f"GitHub client initialization complete: _client is {self._client}")
+        log_info(
+            __name__,
+            f"GitHub client initialization complete: _client is {self._client}",
+        )
 
     async def health_check(self) -> bool:
         if not self.token or not self._client:
@@ -133,7 +152,9 @@ class GitHubClient(ServiceClient):
 
     def is_available(self) -> bool:
         """Check if GitHub client is available."""
-        return self._client is not None and self.health_monitor.is_service_healthy("github")
+        return self._client is not None and self.health_monitor.is_service_healthy(
+            "github"
+        )
 
     def get_user(self):
         """Get authenticated user."""
@@ -191,33 +212,27 @@ class MCPClient(ServiceClient):
         if not self.is_available():
             raise MCPError("MCP service is not available")
 
-        @self.circuit_breaker.call
-        def _get_context():
-            return self._client.get_context(query, max_tokens)
-
-        return await asyncio.get_event_loop().run_in_executor(None, _get_context)
+        try:
+            return await self._client.get_context(query, max_tokens)
+        except Exception:
+            return ""
 
     async def store_memory(self, key: str, value: str) -> None:
         """Store memory in MCP."""
         if not self.is_available():
             raise MCPError("MCP service is not available")
 
-        @self.circuit_breaker.call
-        def _store_memory():
-            return self._client.store_memory(key, value)
-
-        await asyncio.get_event_loop().run_in_executor(None, _store_memory)
+        await self._client.store_memory(key, value)
 
     async def retrieve_memory(self, key: str) -> str:
         """Retrieve memory from MCP."""
         if not self.is_available():
             raise MCPError("MCP service is not available")
 
-        @self.circuit_breaker.call
-        def _retrieve_memory():
-            return self._client.retrieve_memory(key)
-
-        return await asyncio.get_event_loop().run_in_executor(None, _retrieve_memory)
+        try:
+            return await self._client.retrieve_memory(key)
+        except Exception:
+            return ""
 
     async def get_tools(self) -> list:
         """Get MCP tools for LangChain integration."""
@@ -229,6 +244,7 @@ class MCPClient(ServiceClient):
 
         if not self._tools:
             try:
+
                 async def mcp_context_search(query):
                     return await self.get_context(query, max_tokens=4096)
 
@@ -243,18 +259,18 @@ class MCPClient(ServiceClient):
                     Tool.from_function(
                         func=mcp_context_search,
                         name="mcp_context_search",
-                        description="Search for contextual information using MCP context server"
+                        description="Search for contextual information using MCP context server",
                     ),
                     Tool.from_function(
                         func=mcp_memory_store,
                         name="mcp_memory_store",
-                        description="Store key-value pairs in MCP memory server"
+                        description="Store key-value pairs in MCP memory server",
                     ),
                     Tool.from_function(
                         func=mcp_memory_retrieve,
                         name="mcp_memory_retrieve",
-                        description="Retrieve stored values from MCP memory server"
-                    )
+                        description="Retrieve stored values from MCP memory server",
+                    ),
                 ]
             except Exception as e:
                 log_info(__name__, f"Failed to create MCP tools: {str(e)}")
@@ -306,9 +322,13 @@ class ServiceManager:
 
         # Register health checks
         if self.ollama_reasoning:
-            self.health_monitor.register_service("ollama_reasoning", self.ollama_reasoning.health_check)
+            self.health_monitor.register_service(
+                "ollama_reasoning", self.ollama_reasoning.health_check
+            )
         if self.ollama_code:
-            self.health_monitor.register_service("ollama_code", self.ollama_code.health_check)
+            self.health_monitor.register_service(
+                "ollama_code", self.ollama_code.health_check
+            )
         if self.github:
             self.health_monitor.register_service("github", self.github.health_check)
         if self.mcp:
@@ -324,7 +344,7 @@ class ServiceManager:
             ("ollama_reasoning", self.ollama_reasoning),
             ("ollama_code", self.ollama_code),
             ("github", self.github),
-            ("mcp", self.mcp)
+            ("mcp", self.mcp),
         ]
 
         for name, service in services_to_check:
@@ -352,7 +372,9 @@ _service_manager: Optional[ServiceManager] = None
 def get_service_manager() -> ServiceManager:
     """Get the global service manager instance."""
     if _service_manager is None:
-        raise RuntimeError("Service manager not initialized. Call init_services() first.")
+        raise RuntimeError(
+            "Service manager not initialized. Call init_services() first."
+        )
     return _service_manager
 
 

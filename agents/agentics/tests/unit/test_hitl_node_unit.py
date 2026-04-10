@@ -29,15 +29,17 @@ class TestHITLNode:
         assert result == state
         assert "human_feedback" not in result
 
-    @patch('builtins.input')
-    @patch('builtins.print')
-    def test_hitl_node_review_needed_low_score(self, mock_print, mock_input, monkeypatch):
+    @patch("builtins.input")
+    @patch("builtins.print")
+    def test_hitl_node_review_needed_low_score(
+        self, mock_print, mock_input, monkeypatch
+    ):
         """Test HITL node when validation score is low (review needed)."""
         # Mock skip conditions to enable HITL execution
-        monkeypatch.delenv('CI', raising=False)
-        monkeypatch.setattr(sys, 'argv', ['test'])
-        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
-        monkeypatch.setenv('HITL_ENABLED', 'true')
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.setattr(sys, "argv", ["test"])
+        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+        monkeypatch.setenv("HITL_ENABLED", "true")
         mock_input.return_value = "User feedback: please improve error handling"
         node = HITLNode()
         original_state = {"validation_score": 75, "other_data": "test"}
@@ -58,19 +60,23 @@ class TestHITLNode:
 
         # Result is a new state dict with human_feedback added
         assert result != state
-        assert result["human_feedback"] == "User feedback: please improve error handling"
+        assert (
+            result["human_feedback"] == "User feedback: please improve error handling"
+        )
         assert result["validation_score"] == 75
         assert result["other_data"] == "test"
 
-    @patch('builtins.input')
-    @patch('builtins.print')
-    def test_hitl_node_review_needed_zero_score(self, mock_print, mock_input, monkeypatch):
+    @patch("builtins.input")
+    @patch("builtins.print")
+    def test_hitl_node_review_needed_zero_score(
+        self, mock_print, mock_input, monkeypatch
+    ):
         """Test HITL node when validation score is zero."""
         # Mock skip conditions to enable HITL execution
-        monkeypatch.delenv('CI', raising=False)
-        monkeypatch.setattr(sys, 'argv', ['test'])
-        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
-        monkeypatch.setenv('HITL_ENABLED', 'true')
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.setattr(sys, "argv", ["test"])
+        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+        monkeypatch.setenv("HITL_ENABLED", "true")
         mock_input.return_value = "Complete rewrite needed"
         node = HITLNode()
         state = {"validation_score": 0}
@@ -84,15 +90,17 @@ class TestHITLNode:
     def test_hitl_node_no_validation_score(self, monkeypatch):
         """Test HITL node when no validation_score is present (defaults to 0)."""
         # Mock skip conditions to enable HITL execution
-        monkeypatch.delenv('CI', raising=False)
-        monkeypatch.setattr(sys, 'argv', ['test'])
-        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
-        monkeypatch.setenv('HITL_ENABLED', 'true')
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.setattr(sys, "argv", ["test"])
+        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+        monkeypatch.setenv("HITL_ENABLED", "true")
         node = HITLNode()
         state = {"other_data": "test"}
 
-        with patch('builtins.input') as mock_input, \
-             patch('builtins.print') as mock_print:
+        with (
+            patch("builtins.input") as mock_input,
+            patch("builtins.print") as mock_print,
+        ):
             mock_input.return_value = "Default feedback"
 
             result = node(state)
@@ -101,15 +109,15 @@ class TestHITLNode:
             mock_input.assert_called_once()
             assert result["human_feedback"] == "Default feedback"
 
-    @patch('builtins.input')
-    @patch('builtins.print')
+    @patch("builtins.input")
+    @patch("builtins.print")
     def test_hitl_node_preserves_state_data(self, mock_print, mock_input, monkeypatch):
         """Test that HITL node preserves all existing state data."""
         # Mock skip conditions to enable HITL execution
-        monkeypatch.delenv('CI', raising=False)
-        monkeypatch.setattr(sys, 'argv', ['test'])
-        monkeypatch.setattr(sys.stdout, 'isatty', lambda: True)
-        monkeypatch.setenv('HITL_ENABLED', 'true')
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.setattr(sys, "argv", ["test"])
+        monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
+        monkeypatch.setenv("HITL_ENABLED", "true")
         mock_input.return_value = "Feedback"
         node = HITLNode()
         state = {
@@ -117,7 +125,7 @@ class TestHITLNode:
             "generated_code": "some code",
             "generated_tests": "some tests",
             "refined_ticket": {"title": "Test"},
-            "complex_nested_data": {"key": "value"}
+            "complex_nested_data": {"key": "value"},
         }
 
         result = node(state)

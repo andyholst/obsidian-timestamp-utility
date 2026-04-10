@@ -4,16 +4,19 @@ from unittest.mock import MagicMock, patch, mock_open
 from langchain_core.tools import BaseTool
 
 # Mock environment variables to avoid initialization issues
-os.environ.setdefault('PROJECT_ROOT', '/tmp')
-os.environ.setdefault('GITHUB_TOKEN', 'dummy_token')
+os.environ.setdefault("PROJECT_ROOT", "/tmp")
+os.environ.setdefault("GITHUB_TOKEN", "dummy_token")
 
 # Mock the problematic imports at the module level
-with patch.dict('sys.modules', {
-    'src.agentics': MagicMock(),
-    'src.code_extractor_agent': MagicMock(),
-    'src.circuit_breaker': MagicMock(),
-    'src.monitoring': MagicMock(),
-}):
+with patch.dict(
+    "sys.modules",
+    {
+        "src.agentics": MagicMock(),
+        "src.code_extractor_agent": MagicMock(),
+        "src.circuit_breaker": MagicMock(),
+        "src.monitoring": MagicMock(),
+    },
+):
     from src.tool_integrated_agent import ToolIntegratedAgent
     from src.state import State
 
@@ -54,7 +57,7 @@ def mock_response_with_tools():
     response = MagicMock()
     response.tool_calls = [
         {"name": "read_file", "args": {"file_path": "test.txt"}},
-        {"name": "list_files", "args": {"directory": "."}}
+        {"name": "list_files", "args": {"directory": "."}},
     ]
     response.content = "Need to use tools"
     return response
@@ -82,7 +85,7 @@ def sample_state():
         existing_tests_passed=0,
         existing_coverage_all_files=0.0,
         relevant_code_files=[],
-        relevant_test_files=[]
+        relevant_test_files=[],
     )
 
 
@@ -95,7 +98,7 @@ def test_tool_integrated_agent_init(mock_llm, mock_tools):
     assert agent.llm == mock_llm
     assert agent.tools == mock_tools
     assert agent.name == "ToolIntegratedAgent"
-    assert hasattr(agent, 'tool_executor')
+    assert hasattr(agent, "tool_executor")
 
 
 def test_gather_tool_context(mock_llm, mock_tools, sample_state):
@@ -195,32 +198,42 @@ def test_needs_tool_execution_no_tool_calls_attribute():
     assert needs_execution is False
 
 
-def test_update_state_with_response(mock_llm, mock_tools, sample_state, mock_response_no_tools):
+def test_update_state_with_response(
+    mock_llm, mock_tools, sample_state, mock_response_no_tools
+):
     """Test updating state with response content."""
     agent = ToolIntegratedAgent(mock_llm, mock_tools)
 
     # When: Updating state with response
-    updated_state = agent._update_state_with_response(sample_state, mock_response_no_tools)
+    updated_state = agent._update_state_with_response(
+        sample_state, mock_response_no_tools
+    )
 
     # Then: State has tool_integrated_response key
     assert "tool_integrated_response" in updated_state
     assert updated_state["tool_integrated_response"] == "Processed without tools"
 
 
-def test_update_state_with_response_no_content(mock_llm, mock_tools, sample_state, mock_response_no_content):
+def test_update_state_with_response_no_content(
+    mock_llm, mock_tools, sample_state, mock_response_no_content
+):
     """Test updating state when response has no content attribute."""
     agent = ToolIntegratedAgent(mock_llm, mock_tools)
 
     # When: Updating state with response without content
-    updated_state = agent._update_state_with_response(sample_state, mock_response_no_content)
+    updated_state = agent._update_state_with_response(
+        sample_state, mock_response_no_content
+    )
 
     # Then: State has tool_integrated_response as string representation
     assert "tool_integrated_response" in updated_state
     assert isinstance(updated_state["tool_integrated_response"], str)
 
 
-@patch('src.tool_integrated_agent.ToolExecutor')
-def test_process_with_tools_no_tool_calls(mock_tool_executor, mock_llm, mock_tools, sample_state, mock_response_no_tools):
+@patch("src.tool_integrated_agent.ToolExecutor")
+def test_process_with_tools_no_tool_calls(
+    mock_tool_executor, mock_llm, mock_tools, sample_state, mock_response_no_tools
+):
     """Test processing state when no tool calls are needed."""
     agent = ToolIntegratedAgent(mock_llm, mock_tools)
     mock_llm.invoke.return_value = mock_response_no_tools
@@ -235,7 +248,9 @@ def test_process_with_tools_no_tool_calls(mock_tool_executor, mock_llm, mock_too
     assert result["tool_integrated_response"] == "Processed without tools"
 
 
-def test_process_with_tools_with_tool_calls(mock_llm, mock_tools, sample_state, mock_response_with_tools, mock_response_no_tools):
+def test_process_with_tools_with_tool_calls(
+    mock_llm, mock_tools, sample_state, mock_response_with_tools, mock_response_no_tools
+):
     """Test processing state with successful tool calls."""
     agent = ToolIntegratedAgent(mock_llm, mock_tools)
 
@@ -257,13 +272,18 @@ def test_process_with_tools_with_tool_calls(mock_llm, mock_tools, sample_state, 
     assert result["tool_integrated_response"] == "Processed without tools"
 
 
-def test_process_with_tools_tool_execution_failure(mock_llm, mock_tools, sample_state, mock_response_with_tools, mock_response_no_tools):
+def test_process_with_tools_tool_execution_failure(
+    mock_llm, mock_tools, sample_state, mock_response_with_tools, mock_response_no_tools
+):
     """Test processing state when tool execution fails."""
     agent = ToolIntegratedAgent(mock_llm, mock_tools)
 
     # Mock the tool_executor to return error results
     agent.tool_executor = MagicMock()
-    tool_results = {"read_file": "Error: Tool execution failed", "list_files": "Error: Tool execution failed"}
+    tool_results = {
+        "read_file": "Error: Tool execution failed",
+        "list_files": "Error: Tool execution failed",
+    }
     agent.tool_executor.execute.return_value = tool_results
 
     # Setup LLM responses
@@ -278,7 +298,9 @@ def test_process_with_tools_tool_execution_failure(mock_llm, mock_tools, sample_
     assert "tool_integrated_response" in result
 
 
-def test_process_with_tools_empty_tools_list(mock_llm, sample_state, mock_response_no_tools):
+def test_process_with_tools_empty_tools_list(
+    mock_llm, sample_state, mock_response_no_tools
+):
     """Test processing with empty tools list."""
     agent = ToolIntegratedAgent(mock_llm, [])
     mock_llm.invoke.return_value = mock_response_no_tools
@@ -306,6 +328,6 @@ def test_tool_integrated_agent_inheritance(mock_llm, mock_tools):
     agent = ToolIntegratedAgent(mock_llm, mock_tools)
 
     # Then: Has BaseAgent attributes
-    assert hasattr(agent, 'name')
-    assert hasattr(agent, 'logger')
-    assert hasattr(agent, 'circuit_breaker')
+    assert hasattr(agent, "name")
+    assert hasattr(agent, "logger")
+    assert hasattr(agent, "circuit_breaker")

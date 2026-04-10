@@ -1,0 +1,101 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "xai/grok-4.20-0309-reasoning",
+  "shell": "zsh",
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "reserved": 8192
+  },
+  "plugin": [
+    "opencode-dynamic-context-pruning"
+  ],
+  "provider": {
+    "xai": { "apiKey": "${XAI_API_KEY}" },
+    "ollama": { "baseURL": "http://localhost:11434" }
+  },
+  "instructions": ["AGENTS.md", "COMPACT.md"],
+  "permission": {
+    "*": "ask",
+    "edit": {
+      "*": "ask"
+    },
+    "external_directory": "ask",
+    "doom_loop": "ask",
+    "bash": {
+      "*": "ask",
+      "make *": "allow",
+      "make test-app": "allow",
+      "make test-agents-unit-mock": "allow",
+      "make start-mcp-persist*": "allow",
+      "make setup-dev": "allow",
+      "make build-app": "allow",
+      "make clean*": "allow",
+      "make fix-perms": "allow",
+      "make lint-python": "allow",
+      "make help": "allow",
+      "*dagger*": "allow",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git branch*": "allow",
+      "git fetch*": "allow",
+      "git pull*": "ask",
+      "npm test*": "allow",
+      "npm run build*": "allow",
+      "grep *": "allow",
+      "ls *": "allow",
+      "cat *": "allow",
+      "pwd*": "allow",
+      "echo *": "allow",
+      "rm -rf *": "deny",
+      "rm *": "deny",
+      "git push*": "deny",
+      "git commit*": "ask",
+      "sudo *": "deny",
+      "chmod *": "deny",
+      "docker compose down*": "ask"
+    }
+  },
+  "agent": {
+    "plan": {
+      "mode": "primary",
+      "model": "xai/grok-4.20-0309-reasoning",
+      "edit": "deny",
+      "bash": "deny",
+      "description": "Planning & analysis only – no changes allowed. Follow AGENTS.md strictly."
+    },
+    "build": {
+      "mode": "primary",
+      "model": "xai/grok-4.20-0309-reasoning",
+      "edit": "allow",
+      "bash": "allow"
+    },
+    "iterate": {
+      "mode": "primary",
+      "model": "xai/grok-4.20-0309-reasoning",
+      "edit": "allow",
+      "bash": "allow"
+    },
+    "code-reviewer": {
+      "mode": "subagent",
+      "model": "xai/grok-4.20-0309-reasoning",
+      "edit": "deny",
+      "bash": "deny",
+      "webfetch": "deny",
+      "description": "Review only – no edits, no shell, no external calls. Enforce AGENTS.md."
+    },
+    "ts-review": {
+      "mode": "subagent",
+      "model": "xai/grok-4.20-0309-reasoning",
+      "description": "TS/Obsidian reviewer — API, typing, security, performance",
+      "prompt": "Strict reviewer per AGENTS.md: Makefile+Dagger only (never npm/docker/ollama/Python direct), src/main.ts + src/__tests__ patterns, Rollup CJS to dist/main.js (never edit dist/), strict TS, manifest.id=timestamp-utility install path, no desktop-only APIs. Plugin edits independent of agents/. Jest tests. Suggest fixes only."
+    },
+    "python-review": {
+      "mode": "subagent",
+      "model": "xai/grok-4.20-0309-reasoning",
+      "description": "Python/LangGraph reviewer — containerization, Ollama, testing",
+      "prompt": "Strict reviewer per AGENTS.md: Dagger/Make only for all ops, LangGraph multi-agent + MCP:3003 (start-mcp-persist & first), test-agents-unit-mock for quick, full tests need GITHUB_TOKEN/Ollama/TEST_ISSUE_URL. ruff/mypy, real issues (#20,#22,#23), no secrets. Suggest fixes only."
+    }
+  }
+}

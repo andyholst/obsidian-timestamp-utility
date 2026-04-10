@@ -10,27 +10,27 @@ from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime
 
 from src.test_suite import (
-    TestSuiteExecutor,
-    TestSuiteValidator,
+    SuiteExecutor,
+    SuiteValidator,
     LangChainBestPracticesValidator,
-    TestSuiteReporter,
-    LLMTestSuiteValidator,
-    SuiteValidationResult as TestSuiteValidationResult,
-    SuiteRiskLevel as TestSuiteRiskLevel,
-    TestExecutionMetrics,
+    SuiteReporter,
+    LLMSuiteValidator,
+    ValidationResult as TestSuiteValidationResult,
+    RiskLevel as TestSuiteRiskLevel,
+    ExecutionMetrics,
     CodeExecutionMetrics,
-    TestCodeRelationship,
-    LangChainCompliance
+    CodeRelationship,
+    LangChainCompliance,
 )
 
 
-class TestTestSuiteExecutor:
-    """Unit tests for TestSuiteExecutor"""
+class TestSuiteExecutor:
+    """Unit tests for SuiteExecutor"""
 
     @pytest.fixture
     def executor(self):
-        """Fixture for TestSuiteExecutor"""
-        return TestSuiteExecutor()
+        """Fixture for SuiteExecutor"""
+        return SuiteExecutor()
 
     def test_executor_initialization(self, executor):
         """Test executor initialization"""
@@ -66,13 +66,11 @@ export const config = {};
         smoke_test = executor._generate_smoke_test(code)
         assert "testFunc()" in smoke_test
 
-    @patch('src.test_suite.subprocess.run')
+    @patch("src.test_suite.subprocess.run")
     def test_execute_generated_code_success(self, mock_run, executor):
         """Test successful code execution"""
         mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="Code executed successfully",
-            stderr=""
+            returncode=0, stdout="Code executed successfully", stderr=""
         )
 
         result = executor._execute_generated_code("export class Test {}", {})
@@ -81,13 +79,11 @@ export const config = {};
         assert result.execution_time >= 0
         assert result.error_count == 0
 
-    @patch('src.test_suite.subprocess.run')
+    @patch("src.test_suite.subprocess.run")
     def test_execute_generated_code_failure(self, mock_run, executor):
         """Test failed code execution"""
         mock_run.return_value = MagicMock(
-            returncode=1,
-            stdout="",
-            stderr="Syntax error"
+            returncode=1, stdout="", stderr="Syntax error"
         )
 
         result = executor._execute_generated_code("invalid code", {})
@@ -95,11 +91,12 @@ export const config = {};
         assert result.success == False
         assert result.error_count == 1
 
-    @patch('src.test_suite.subprocess.run')
+    @patch("src.test_suite.subprocess.run")
     def test_execute_generated_code_timeout(self, mock_run, executor):
         """Test code execution timeout"""
         from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired(cmd=['npx', 'ts-node'], timeout=30)
+
+        mock_run.side_effect = TimeoutExpired(cmd=["npx", "ts-node"], timeout=30)
 
         result = executor._execute_generated_code("export class Test {}", {})
 
@@ -114,9 +111,9 @@ export const config = {};
 
         result = executor._parse_jest_results(stdout, stderr, temp_dir)
 
-        assert result['total'] == 2
-        assert result['passed'] == 1
-        assert result['failed'] == 1
+        assert result["total"] == 2
+        assert result["passed"] == 1
+        assert result["failed"] == 1
 
     def test_parse_jest_results_fallback(self, executor):
         """Test fallback parsing when JSON fails"""
@@ -126,18 +123,18 @@ export const config = {};
 
         result = executor._parse_jest_results(stdout, stderr, temp_dir)
 
-        assert result['passed'] == 3
-        assert result['failed'] == 1
-        assert result['total'] == 4
+        assert result["passed"] == 3
+        assert result["failed"] == 1
+        assert result["total"] == 4
 
 
-class TestTestSuiteValidator:
-    """Unit tests for TestSuiteValidator"""
+class TestSuiteValidator:
+    """Unit tests for SuiteValidator"""
 
     @pytest.fixture
     def validator(self):
-        """Fixture for TestSuiteValidator"""
-        return TestSuiteValidator()
+        """Fixture for SuiteValidator"""
+        return SuiteValidator()
 
     def test_analyze_assertion_quality_high(self, validator):
         """Test assertion quality analysis with diverse assertions"""
@@ -186,16 +183,16 @@ it('should handle error case', () => {});
         test_code = "describe('Unit Test', () => { it('works', () => {}); });"
 
         categories = validator._categorize_tests(test_code)
-        assert categories['unit'] == 1
-        assert categories['integration'] == 0
+        assert categories["unit"] == 1
+        assert categories["integration"] == 0
 
     def test_categorize_tests_integration(self, validator):
         """Test test categorization for integration tests"""
         test_code = "describe('Integration Test', () => { it('works', () => {}); });"
 
         categories = validator._categorize_tests(test_code)
-        assert categories['integration'] == 1
-        assert categories['unit'] == 1  # Also counts as unit
+        assert categories["integration"] == 1
+        assert categories["unit"] == 1  # Also counts as unit
 
 
 class TestLangChainBestPracticesValidator:
@@ -313,13 +310,13 @@ def process_tool(input: str) -> str:
         assert compliance.overall_compliance > 5.0
 
 
-class TestTestSuiteReporter:
-    """Unit tests for TestSuiteReporter"""
+class TestSuiteReporter:
+    """Unit tests for SuiteReporter"""
 
     @pytest.fixture
     def reporter(self):
-        """Fixture for TestSuiteReporter"""
-        return TestSuiteReporter()
+        """Fixture for SuiteReporter"""
+        return SuiteReporter()
 
     @pytest.fixture
     def sample_result(self):
@@ -331,7 +328,7 @@ class TestTestSuiteReporter:
             risk_level=TestSuiteRiskLevel.MEDIUM,
             critical_issues=["Issue 1"],
             warnings=["Warning 1"],
-            suggestions=["Suggestion 1"]
+            suggestions=["Suggestion 1"],
         )
 
     def test_generate_header(self, reporter, sample_result):
@@ -395,20 +392,22 @@ class TestTestSuiteReporter:
         assert "Test Suite Validation Report" in report
 
 
-class TestLLMTestSuiteValidator:
-    """Unit tests for the main LLMTestSuiteValidator"""
+class TestLLMSuiteValidator:
+    """Unit tests for the main LLMSuiteValidator"""
 
     @pytest.fixture
     def validator(self):
-        """Fixture for LLMTestSuiteValidator"""
-        return LLMTestSuiteValidator()
+        """Fixture for LLMSuiteValidator"""
+        return LLMSuiteValidator()
 
     def test_initialization(self, validator):
         """Test validator initialization"""
-        assert isinstance(validator.executor, TestSuiteExecutor)
-        assert isinstance(validator.test_validator, TestSuiteValidator)
-        assert isinstance(validator.langchain_validator, LangChainBestPracticesValidator)
-        assert isinstance(validator.reporter, TestSuiteReporter)
+        assert isinstance(validator.executor, SuiteExecutor)
+        assert isinstance(validator.test_validator, SuiteValidator)
+        assert isinstance(
+            validator.langchain_validator, LangChainBestPracticesValidator
+        )
+        assert isinstance(validator.reporter, SuiteReporter)
 
     def test_generate_hash(self, validator):
         """Test hash generation"""
@@ -443,14 +442,14 @@ class TestLLMTestSuiteValidator:
             (90, TestSuiteRiskLevel.LOW),
             (70, TestSuiteRiskLevel.MEDIUM),
             (50, TestSuiteRiskLevel.HIGH),
-            (20, TestSuiteRiskLevel.CRITICAL)
+            (20, TestSuiteRiskLevel.CRITICAL),
         ]
 
         for score, expected in test_cases:
             risk = validator._assess_risk_level(score)
             assert risk == expected
 
-    @patch('src.test_suite.TestSuiteExecutor')
+    @patch("src.test_suite.SuiteExecutor")
     def test_validate_test_suite_error_handling(self, mock_executor_class, validator):
         """Test error handling in validation"""
         mock_executor = MagicMock()
@@ -459,7 +458,7 @@ class TestLLMTestSuiteValidator:
         # Replace the executor
         validator.executor = mock_executor
 
-        result, _ = validator.validate_test_suite("code", "tests")
+        result = validator.validate_test_suite("code", "tests")
 
         assert result.overall_score == 0.0
         assert result.risk_level == TestSuiteRiskLevel.CRITICAL
@@ -506,12 +505,12 @@ class TestDataClasses:
 
     def test_test_execution_metrics(self):
         """Test test execution metrics"""
-        metrics = TestExecutionMetrics(
+        metrics = ExecutionMetrics(
             total_tests=10,
             passed_tests=8,
             failed_tests=2,
             execution_time=5.5,
-            coverage_percentage=85.0
+            coverage_percentage=85.0,
         )
 
         assert metrics.total_tests == 10
@@ -527,7 +526,7 @@ class TestDataClasses:
             execution_time=2.3,
             output_lines=5,
             error_count=0,
-            timeout_occurred=False
+            timeout_occurred=False,
         )
 
         assert metrics.success == True
@@ -538,13 +537,13 @@ class TestDataClasses:
 
     def test_test_code_relationship(self):
         """Test test-code relationship metrics"""
-        relationship = TestCodeRelationship(
+        relationship = CodeRelationship(
             test_coverage=85.0,
             assertion_quality=7.5,
             mock_usage=True,
             edge_case_coverage=5,
             integration_test_count=2,
-            unit_test_count=8
+            unit_test_count=8,
         )
 
         assert relationship.test_coverage == 85.0
@@ -562,7 +561,7 @@ class TestDataClasses:
             state_management_score=7.5,
             composability_score=9.0,
             tool_integration_score=6.5,
-            overall_compliance=7.8
+            overall_compliance=7.8,
         )
 
         assert compliance.lcel_usage == True
@@ -619,7 +618,7 @@ class TestDataClasses:
             risk_level=TestSuiteRiskLevel.MEDIUM,
             critical_issues=["Critical issue"],
             warnings=["Warning"],
-            suggestions=["Suggestion"]
+            suggestions=["Suggestion"],
         )
 
         markdown = result.to_markdown()

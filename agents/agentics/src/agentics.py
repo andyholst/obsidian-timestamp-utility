@@ -6,6 +6,7 @@ architecture following LangChain best practices and modern Python patterns.
 """
 
 import asyncio
+import os
 import sys
 from typing import List, Dict, Any, Optional
 
@@ -22,7 +23,7 @@ from .ticket_clarity_agent import TicketClarityAgent
 from .implementation_planner_agent import ImplementationPlannerAgent
 from .code_extractor_agent import CodeExtractorAgent
 from .code_generator_agent import CodeGeneratorAgent
-from .test_generator_agent import TestGeneratorAgent
+from .test_generator_agent import GeneratorAgent
 from .code_integrator_agent import CodeIntegratorAgent
 from .post_test_runner_agent import PostTestRunnerAgent
 from .code_reviewer_agent import CodeReviewerAgent
@@ -46,10 +47,24 @@ from .monitoring import structured_log
 
 # MCP and tools
 from .mcp_client import get_mcp_client, init_mcp_client
-from .tools import read_file_tool, list_files_tool, check_file_exists_tool, npm_search_tool, npm_install_tool, npm_list_tool
+from .tools import (
+    read_file_tool,
+    list_files_tool,
+    check_file_exists_tool,
+    npm_search_tool,
+    npm_install_tool,
+    npm_list_tool,
+)
 
 # MCP tools list for agent integration
-mcp_tools = [read_file_tool, list_files_tool, check_file_exists_tool, npm_search_tool, npm_install_tool, npm_list_tool]
+mcp_tools = [
+    read_file_tool,
+    list_files_tool,
+    check_file_exists_tool,
+    npm_search_tool,
+    npm_install_tool,
+    npm_list_tool,
+]
 
 # Prompts
 from .prompts import ModularPrompts
@@ -92,7 +107,9 @@ async def check_services() -> Dict[str, bool]:
     return _service_manager.check_services_health()
 
 
-async def create_composable_workflow(github_client=None, llm_reasoning=None, llm_code=None, mcp_tools=None) -> ComposableWorkflows:
+async def create_composable_workflow(
+    github_client=None, llm_reasoning=None, llm_code=None, mcp_tools=None
+) -> ComposableWorkflows:
     """
     Create and return a ComposableWorkflows instance with all components initialized.
 
@@ -108,9 +125,21 @@ async def create_composable_workflow(github_client=None, llm_reasoning=None, llm
     if _service_manager is None:
         await _init_global_services()
     # Use provided overrides or defaults
-    ollama_reasoning = llm_reasoning or (_service_manager.ollama_reasoning._client if _service_manager and hasattr(_service_manager, 'ollama_reasoning') else None)
-    ollama_code = llm_code or (_service_manager.ollama_code._client if _service_manager and hasattr(_service_manager, 'ollama_code') else None)
-    github_client = github_client or (_service_manager.github._client if _service_manager and hasattr(_service_manager, 'github') else None)
+    ollama_reasoning = llm_reasoning or (
+        _service_manager.ollama_reasoning.client
+        if _service_manager and hasattr(_service_manager, "ollama_reasoning") and _service_manager.ollama_reasoning
+        else None
+    )
+    ollama_code = llm_code or (
+        _service_manager.ollama_code.client
+        if _service_manager and hasattr(_service_manager, "ollama_code") and _service_manager.ollama_code
+        else None
+    )
+    github_client = github_client or (
+        _service_manager.github._client
+        if _service_manager and hasattr(_service_manager, "github") and _service_manager.github
+        else None
+    )
 
     # Get MCP tools if available and not overridden
     if mcp_tools is None and _mcp_client:
@@ -125,7 +154,7 @@ async def create_composable_workflow(github_client=None, llm_reasoning=None, llm
         llm_reasoning=ollama_reasoning,
         llm_code=ollama_code,
         github_client=github_client,
-        mcp_tools=mcp_tools
+        mcp_tools=mcp_tools,
     )
 
 
@@ -144,11 +173,20 @@ class AgenticsApp:
         Args:
             config: Optional configuration. If None, loads from environment.
         """
-        global _config
-        if _config is None:
-            _config = init_config()
-        self.config = config or _config
-        self.service_manager = _service_manager
+        global _config, _service_manager
+        if config is not None:
+            # Use the provided config without mutating the global _config
+            self.config = config
+            # Reset global service manager so a new one is created for this config
+            _service_manager = None
+        else:
+            # Use or initialize the global default config
+            if _config is None:
+                _config = init_config()
+            self.config = _config
+        # Always start with None - initialize() will create a fresh service manager
+        # This prevents cross-test pollution from cached global _service_manager
+        self.service_manager = None
         self.composable_workflows = None
         self.batch_processor = get_batch_processor()
         self.monitor = _monitor
@@ -166,32 +204,56 @@ class AgenticsApp:
 
         try:
             log_info(__name__, "Initializing agentics application")
-            log_info(__name__, f"Configuration: GitHub token {'set' if self.config.github_token else 'not set'}")
+            log_info(
+                __name__,
+                f"Configuration: GitHub token {'set' if self.config.github_token else 'not set'}",
+            )
             log_info(__name__, f"Ollama host: {self.config.ollama_host}")
             log_info(__name__, f"Reasoning model: {self.config.ollama_reasoning_model}")
             log_info(__name__, f"Code model: {self.config.ollama_code_model}")
 
-            # Initialize services if not already done
-            if self.service_manager is None:
-                self.service_manager = await init_services(self.config)
-                # Update global reference
-                global _service_manager
-                _service_manager = self.service_manager
-            log_info(__name__, f"Service manager initialized: {self.service_manager is not None}")
-            log_info(__name__, f"GitHub client present: {self.service_manager.github is not None if self.service_manager else False}")
-
+            # Always create a fresh service manager (self.service_manager is always None from __init__)
+            self.service_manager = await init_services(self.config)
+            # Update global reference
+            global _service_manager
+            _service_manager = self.service_manager
+            log_info(
+                __name__,
+                f"Service manager initialized: {self.service_manager is not None}",
+            )
+            log_info(
+                __name__,
+                f"GitHub client present: {self.service_manager.github is not None if self.service_manager else False}",
+            )
 
             # Perform service health checks
             await self._check_services_health()
 
-            # Initialize composable workflows if not already done
+            # Initialize composable workflows only if Ollama clients are available
             if self.composable_workflows is None:
-                self.composable_workflows = await create_composable_workflow(
-                    github_client=self.service_manager.github._client if self.service_manager.github else None,
-                    llm_reasoning=self.service_manager.ollama_reasoning._client if self.service_manager.ollama_reasoning else None,
-                    llm_code=self.service_manager.ollama_code._client if self.service_manager.ollama_code else None,
-                    mcp_tools=await self._get_mcp_tools()
+                ollama_reasoning_client = (
+                    self.service_manager.ollama_reasoning.client
+                    if self.service_manager.ollama_reasoning
+                    else None
                 )
+                ollama_code_client = (
+                    self.service_manager.ollama_code.client
+                    if self.service_manager.ollama_code
+                    else None
+                )
+                if ollama_reasoning_client is not None and ollama_code_client is not None:
+                    self.composable_workflows = await create_composable_workflow(
+                        github_client=self.service_manager.github._client
+                        if self.service_manager.github
+                        else None,
+                        llm_reasoning=ollama_reasoning_client,
+                        llm_code=ollama_code_client,
+                        mcp_tools=await self._get_mcp_tools(),
+                    )
+                else:
+                    self.monitor.info(
+                        "Skipping workflow initialization - Ollama clients not available"
+                    )
 
             self._initialized = True
             log_info(__name__, "Agentics application initialized successfully")
@@ -228,12 +290,18 @@ class AgenticsApp:
         if health_results.get("mcp", False):
             log_info(__name__, "MCP service available")
         else:
-            log_info(__name__, "MCP service not available, proceeding without MCP functionality")
-
+            log_info(
+                __name__,
+                "MCP service not available, proceeding without MCP functionality",
+            )
 
     async def _get_mcp_tools(self) -> List[Any]:
         """Get MCP tools from the service manager."""
-        if self.service_manager and hasattr(self.service_manager, 'mcp') and self.service_manager.mcp:
+        if (
+            self.service_manager
+            and hasattr(self.service_manager, "mcp")
+            and self.service_manager.mcp
+        ):
             try:
                 return await self.service_manager.mcp.get_tools()
             except Exception:
@@ -241,6 +309,7 @@ class AgenticsApp:
 
     async def _process_batch_parallel(self, issue_urls: List[str]) -> Dict[str, Any]:
         """Process multiple issues in parallel using composable workflows."""
+
         async def process_single_issue(issue_url: str) -> Dict[str, Any]:
             """Process a single issue asynchronously."""
             try:
@@ -248,33 +317,26 @@ class AgenticsApp:
                 async with self.lock:
                     result = await self.composable_workflows.process_issue(issue_url)
                 self.monitor.info("batch_issue_completed", {"issue_url": issue_url})
-                return {
-                    "issue_url": issue_url,
-                    "success": True,
-                    "result": result
-                }
+                return {"issue_url": issue_url, "success": True, "result": result}
             except Exception as e:
-                self.monitor.warning("batch_issue_failed", {"issue_url": issue_url, "error": str(e)})
-                return {
-                    "issue_url": issue_url,
-                    "success": False,
-                    "error": str(e)
-                }
+                self.monitor.warning(
+                    "batch_issue_failed", {"issue_url": issue_url, "error": str(e)}
+                )
+                return {"issue_url": issue_url, "success": False, "error": str(e)}
 
         # Use batch processor for concurrent execution
         results = await self.batch_processor.process_batch(
-            items=issue_urls,
-            processor_func=process_single_issue
+            items=issue_urls, processor_func=process_single_issue
         )
 
-        successful = sum(1 for r in results if r.get('success', False))
+        successful = sum(1 for r in results if r.get("success", False))
         failed = len(results) - successful
 
         return {
             "total_issues": len(issue_urls),
             "successful": successful,
             "failed": failed,
-            "results": results
+            "results": results,
         }
 
     async def process_issue(self, issue_url: str) -> Dict[str, Any]:
@@ -296,6 +358,11 @@ class AgenticsApp:
 
         if not validate_github_url(issue_url):
             raise ValidationError(f"Invalid GitHub issue URL: {issue_url}")
+
+        if self.composable_workflows is None:
+            raise AgenticsError(
+                "Workflow not initialized - Ollama LLM service is required but not available"
+            )
 
         self.monitor.info("issue_processing_started", {"issue_url": issue_url})
         log_info(__name__, f"Processing issue: {issue_url}")
@@ -321,25 +388,43 @@ class AgenticsApp:
         Returns:
             Batch processing results with success/failure counts and individual results.
 
-        Raises:
-            ValidationError: If any issue URL is invalid.
-            AgenticsError: If batch processing fails.
+        Note:
+            Invalid URLs are handled gracefully and reported as failed results.
         """
         if not self._initialized:
             await self.initialize()
-
-        # Validate all URLs
-        invalid_urls = [url for url in issue_urls if not validate_github_url(url)]
-        if invalid_urls:
-            raise ValidationError(f"Invalid GitHub issue URLs: {invalid_urls}")
 
         self.monitor.info("batch_processing_started", {"issue_count": len(issue_urls)})
         log_info(__name__, f"Starting batch processing of {len(issue_urls)} issues")
 
         try:
-            result = await self._process_batch_parallel(issue_urls)
-            self.monitor.info("batch_processing_completed", {"total_issues": result["total_issues"], "successful": result["successful"], "failed": result["failed"]})
-            log_info(__name__, f"Batch processing completed: {result['successful']}/{result['total_issues']} successful")
+            # Filter to valid URLs, record invalid ones as failures
+            valid_urls = []
+            invalid_results = []
+            for url in issue_urls:
+                if validate_github_url(url):
+                    valid_urls.append(url)
+                else:
+                    invalid_results.append(
+                        {"issue_url": url, "success": False, "error": f"Invalid GitHub issue URL: {url}"}
+                    )
+
+            result = await self._process_batch_parallel(valid_urls)
+            result["results"].extend(invalid_results)
+            result["total_issues"] = len(issue_urls)
+            result["failed"] += len(invalid_results)
+            self.monitor.info(
+                "batch_processing_completed",
+                {
+                    "total_issues": result["total_issues"],
+                    "successful": result["successful"],
+                    "failed": result["failed"],
+                },
+            )
+            log_info(
+                __name__,
+                f"Batch processing completed: {result['successful']}/{result['total_issues']} successful",
+            )
             return result
 
         except Exception as e:
@@ -382,11 +467,12 @@ class AgenticsApp:
 if __name__ == "__main__":
     async def main():
         """Main async execution function."""
-        if len(sys.argv) != 2:
-            print("Usage: python agentics.py <issue_url>", file=sys.stderr)
+        # Accept URL from env var or command-line arg
+        issue_url = os.getenv("URL") or (sys.argv[1] if len(sys.argv) > 1 else None)
+        if not issue_url:
+            print("Usage: python -m src.agentics <issue_url> or set URL env var", file=sys.stderr)
             sys.exit(1)
 
-        issue_url = sys.argv[1]
         log_info(__name__, f"Processing issue URL: {issue_url}")
 
         app_instance = AgenticsApp()
@@ -394,7 +480,11 @@ if __name__ == "__main__":
             await app_instance.initialize()
             result = await app_instance.process_issue(issue_url)
             log_info(__name__, "Processing completed successfully")
-            print(f"Result: {result}")
+            print(f"Result keys: {list(result.keys())}")
+            if result.get("generated_code"):
+                print(f"Generated code length: {len(result['generated_code'])}")
+            if result.get("generated_tests"):
+                print(f"Generated tests length: {len(result['generated_tests'])}")
         except Exception as e:
             log_info(__name__, f"Processing failed: {str(e)}")
             print(f"Error: {str(e)}", file=sys.stderr)
@@ -402,7 +492,4 @@ if __name__ == "__main__":
         finally:
             await app_instance.shutdown()
 
-    # Run the async main function
     asyncio.run(main())
-
-

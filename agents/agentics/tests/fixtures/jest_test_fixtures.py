@@ -292,7 +292,7 @@ MOCK_JEST_SUCCESS_OUTPUT = {
                     "fullName": "Calculator add should add two positive numbers",
                     "location": None,
                     "status": "passed",
-                    "title": "should add two positive numbers"
+                    "title": "should add two positive numbers",
                 },
                 {
                     "ancestorTitles": ["Calculator", "add"],
@@ -300,7 +300,7 @@ MOCK_JEST_SUCCESS_OUTPUT = {
                     "fullName": "Calculator add should add positive and negative numbers",
                     "location": None,
                     "status": "passed",
-                    "title": "should add positive and negative numbers"
+                    "title": "should add positive and negative numbers",
                 },
                 {
                     "ancestorTitles": ["Calculator", "subtract"],
@@ -308,7 +308,7 @@ MOCK_JEST_SUCCESS_OUTPUT = {
                     "fullName": "Calculator subtract should subtract two numbers",
                     "location": None,
                     "status": "passed",
-                    "title": "should subtract two numbers"
+                    "title": "should subtract two numbers",
                 },
                 {
                     "ancestorTitles": ["Calculator", "divide"],
@@ -316,17 +316,17 @@ MOCK_JEST_SUCCESS_OUTPUT = {
                     "fullName": "Calculator divide should throw error when dividing by zero",
                     "location": None,
                     "status": "passed",
-                    "title": "should throw error when dividing by zero"
-                }
+                    "title": "should throw error when dividing by zero",
+                },
             ],
             "endTime": 1638360000000,
             "message": "",
             "name": "/tmp/test/source.test.ts",
             "startTime": 1638360000000,
             "status": "passed",
-            "summary": ""
+            "summary": "",
         }
-    ]
+    ],
 }
 
 MOCK_JEST_FAILURE_OUTPUT = {
@@ -350,7 +350,7 @@ MOCK_JEST_FAILURE_OUTPUT = {
                     "fullName": "Calculator add should add two positive numbers",
                     "location": None,
                     "status": "passed",
-                    "title": "should add two positive numbers"
+                    "title": "should add two positive numbers",
                 },
                 {
                     "ancestorTitles": ["Calculator", "add"],
@@ -358,7 +358,7 @@ MOCK_JEST_FAILURE_OUTPUT = {
                     "fullName": "Calculator add should fail with wrong expectation",
                     "location": None,
                     "status": "failed",
-                    "title": "should fail with wrong expectation"
+                    "title": "should fail with wrong expectation",
                 },
                 {
                     "ancestorTitles": ["Calculator", "subtract"],
@@ -366,7 +366,7 @@ MOCK_JEST_FAILURE_OUTPUT = {
                     "fullName": "Calculator subtract should subtract two numbers",
                     "location": None,
                     "status": "passed",
-                    "title": "should subtract two numbers"
+                    "title": "should subtract two numbers",
                 },
                 {
                     "ancestorTitles": ["Calculator", "divide"],
@@ -374,45 +374,25 @@ MOCK_JEST_FAILURE_OUTPUT = {
                     "fullName": "Calculator divide should handle invalid test syntax",
                     "location": None,
                     "status": "failed",
-                    "title": "should handle invalid test syntax"
-                }
+                    "title": "should handle invalid test syntax",
+                },
             ],
             "endTime": 1638360000000,
             "message": "",
             "name": "/tmp/test/source.test.ts",
             "startTime": 1638360000000,
             "status": "failed",
-            "summary": ""
+            "summary": "",
         }
-    ]
+    ],
 }
 
 MOCK_COVERAGE_REPORT = {
     "total": {
-        "lines": {
-            "total": 25,
-            "covered": 20,
-            "skipped": 0,
-            "pct": 80.0
-        },
-        "functions": {
-            "total": 5,
-            "covered": 4,
-            "skipped": 0,
-            "pct": 80.0
-        },
-        "statements": {
-            "total": 28,
-            "covered": 22,
-            "skipped": 0,
-            "pct": 78.57
-        },
-        "branches": {
-            "total": 8,
-            "covered": 6,
-            "skipped": 0,
-            "pct": 75.0
-        }
+        "lines": {"total": 25, "covered": 20, "skipped": 0, "pct": 80.0},
+        "functions": {"total": 5, "covered": 4, "skipped": 0, "pct": 80.0},
+        "statements": {"total": 28, "covered": 22, "skipped": 0, "pct": 78.57},
+        "branches": {"total": 8, "covered": 6, "skipped": 0, "pct": 75.0},
     }
 }
 
@@ -423,7 +403,7 @@ JEST_CONFIG_BASIC = {
     "collectCoverage": True,
     "coverageReporters": ["json", "text"],
     "testTimeout": 10000,
-    "setupFilesAfterEnv": []
+    "setupFilesAfterEnv": [],
 }
 
 JEST_CONFIG_PARALLEL = {
@@ -433,7 +413,7 @@ JEST_CONFIG_PARALLEL = {
     "coverageReporters": ["json", "text"],
     "testTimeout": 10000,
     "maxWorkers": 2,
-    "setupFilesAfterEnv": []
+    "setupFilesAfterEnv": [],
 }
 
 JEST_CONFIG_COVERAGE_THRESHOLD = {
@@ -443,13 +423,8 @@ JEST_CONFIG_COVERAGE_THRESHOLD = {
     "coverageReporters": ["json", "text"],
     "testTimeout": 10000,
     "coverageThreshold": {
-        "global": {
-            "branches": 70,
-            "functions": 80,
-            "lines": 80,
-            "statements": 80
-        }
-    }
+        "global": {"branches": 70, "functions": 80, "lines": 80, "statements": 80}
+    },
 }
 
 # Package.json samples
@@ -462,29 +437,33 @@ PACKAGE_JSON_BASIC = {
         "jest": "^29.0.0",
         "ts-jest": "^29.0.0",
         "@types/node": "^20.0.0",
-        "typescript": "^5.0.0"
-    }
+        "typescript": "^5.0.0",
+    },
 }
 
 PACKAGE_JSON_WITH_DEPS = {
     "name": "test-validation",
     "version": "1.0.0",
     "scripts": {"test": "jest"},
-    "dependencies": {
-        "axios": "^1.0.0"
-    },
+    "dependencies": {"axios": "^1.0.0"},
     "devDependencies": {
         "@types/jest": "^29.0.0",
         "jest": "^29.0.0",
         "ts-jest": "^29.0.0",
         "@types/node": "^20.0.0",
-        "typescript": "^5.0.0"
-    }
+        "typescript": "^5.0.0",
+    },
 }
 
+
 # Helper functions for creating test data
-def create_mock_jest_result(success: bool = True, total_tests: int = 4, passed_tests: int = 4,
-                          failed_tests: int = 0, coverage_pct: float = 85.0) -> Dict[str, Any]:
+def create_mock_jest_result(
+    success: bool = True,
+    total_tests: int = 4,
+    passed_tests: int = 4,
+    failed_tests: int = 0,
+    coverage_pct: float = 85.0,
+) -> Dict[str, Any]:
     """Create a mock Jest test result"""
     return {
         "numFailedTestSuites": 1 if failed_tests > 0 else 0,
@@ -504,24 +483,30 @@ def create_mock_jest_result(success: bool = True, total_tests: int = 4, passed_t
                     {
                         "ancestorTitles": ["TestSuite"],
                         "failureMessages": ["Mock failure"] if failed_tests > 0 else [],
-                        "fullName": f"TestSuite test {i+1}",
+                        "fullName": f"TestSuite test {i + 1}",
                         "location": None,
                         "status": "failed" if i < failed_tests else "passed",
-                        "title": f"test {i+1}"
-                    } for i in range(total_tests)
+                        "title": f"test {i + 1}",
+                    }
+                    for i in range(total_tests)
                 ],
                 "endTime": 1638360000000,
                 "message": "",
                 "name": "/tmp/test/source.test.ts",
                 "startTime": 1638360000000,
                 "status": "failed" if failed_tests > 0 else "passed",
-                "summary": ""
+                "summary": "",
             }
-        ]
+        ],
     }
 
-def create_mock_coverage_report(lines_pct: float = 85.0, functions_pct: float = 90.0,
-                               statements_pct: float = 82.0, branches_pct: float = 75.0) -> Dict[str, Any]:
+
+def create_mock_coverage_report(
+    lines_pct: float = 85.0,
+    functions_pct: float = 90.0,
+    statements_pct: float = 82.0,
+    branches_pct: float = 75.0,
+) -> Dict[str, Any]:
     """Create a mock coverage report"""
     return {
         "total": {
@@ -529,25 +514,25 @@ def create_mock_coverage_report(lines_pct: float = 85.0, functions_pct: float = 
                 "total": 100,
                 "covered": int(100 * lines_pct / 100),
                 "skipped": 0,
-                "pct": lines_pct
+                "pct": lines_pct,
             },
             "functions": {
                 "total": 10,
                 "covered": int(10 * functions_pct / 100),
                 "skipped": 0,
-                "pct": functions_pct
+                "pct": functions_pct,
             },
             "statements": {
                 "total": 120,
                 "covered": int(120 * statements_pct / 100),
                 "skipped": 0,
-                "pct": statements_pct
+                "pct": statements_pct,
             },
             "branches": {
                 "total": 20,
                 "covered": int(20 * branches_pct / 100),
                 "skipped": 0,
-                "pct": branches_pct
-            }
+                "pct": branches_pct,
+            },
         }
     }

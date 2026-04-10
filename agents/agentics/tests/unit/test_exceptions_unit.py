@@ -47,17 +47,20 @@ class TestExceptionHierarchy:
 class TestExceptionMessages:
     """Test exception message formatting and string representation."""
 
-    @pytest.mark.parametrize("exc_class", [
-        ConfigurationError,
-        ServiceUnavailableError,
-        ValidationError,
-        GitHubError,
-        OllamaError,
-        MCPError,
-        WorkflowError,
-        CircuitBreakerError,
-        HealthCheckError,
-    ])
+    @pytest.mark.parametrize(
+        "exc_class",
+        [
+            ConfigurationError,
+            ServiceUnavailableError,
+            ValidationError,
+            GitHubError,
+            OllamaError,
+            MCPError,
+            WorkflowError,
+            CircuitBreakerError,
+            HealthCheckError,
+        ],
+    )
     def test_basic_exception_messages(self, exc_class):
         """Test basic exceptions with custom messages."""
         message = "Custom error message"
@@ -102,34 +105,40 @@ class TestBatchProcessingError:
 class TestExceptionInstantiation:
     """Test exception instantiation with various parameters."""
 
-    @pytest.mark.parametrize("exc_class", [
-        ConfigurationError,
-        ServiceUnavailableError,
-        ValidationError,
-        GitHubError,
-        OllamaError,
-        MCPError,
-        WorkflowError,
-        CircuitBreakerError,
-        HealthCheckError,
-    ])
+    @pytest.mark.parametrize(
+        "exc_class",
+        [
+            ConfigurationError,
+            ServiceUnavailableError,
+            ValidationError,
+            GitHubError,
+            OllamaError,
+            MCPError,
+            WorkflowError,
+            CircuitBreakerError,
+            HealthCheckError,
+        ],
+    )
     def test_instantiation_with_message(self, exc_class):
         """Test instantiation with message string."""
         message = "Test message"
         exc = exc_class(message)
         assert exc.args == (message,)
 
-    @pytest.mark.parametrize("exc_class", [
-        ConfigurationError,
-        ServiceUnavailableError,
-        ValidationError,
-        GitHubError,
-        OllamaError,
-        MCPError,
-        WorkflowError,
-        CircuitBreakerError,
-        HealthCheckError,
-    ])
+    @pytest.mark.parametrize(
+        "exc_class",
+        [
+            ConfigurationError,
+            ServiceUnavailableError,
+            ValidationError,
+            GitHubError,
+            OllamaError,
+            MCPError,
+            WorkflowError,
+            CircuitBreakerError,
+            HealthCheckError,
+        ],
+    )
     def test_instantiation_with_multiple_args(self, exc_class):
         """Test instantiation with multiple arguments."""
         args = ("Message", "extra", 123)
@@ -179,7 +188,9 @@ class TestExceptionChaining:
         """Test chaining with BatchProcessingError."""
         original = GitHubError("GitHub API failed")
         try:
-            raise BatchProcessingError("Batch failed", failed_items=["item1"]) from original
+            raise BatchProcessingError(
+                "Batch failed", failed_items=["item1"]
+            ) from original
         except BatchProcessingError as e:
             assert e.__cause__ is original
             assert e.failed_items == ["item1"]

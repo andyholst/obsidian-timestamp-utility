@@ -20,27 +20,28 @@ logger = structured_log(__name__)
 @dataclass(frozen=True)
 class ValidationResult:
     """Immutable validation result"""
+
     is_valid: bool
     errors: List[str]
     suggestions: List[str]
     confidence_score: float
 
-    def with_error(self, error: str) -> 'ValidationResult':
+    def with_error(self, error: str) -> "ValidationResult":
         """Return new result with added error"""
         return ValidationResult(
             is_valid=False,
             errors=self.errors + [error],
             suggestions=self.suggestions,
-            confidence_score=max(0, self.confidence_score - 0.1)
+            confidence_score=max(0, self.confidence_score - 0.1),
         )
 
-    def with_suggestion(self, suggestion: str) -> 'ValidationResult':
+    def with_suggestion(self, suggestion: str) -> "ValidationResult":
         """Return new result with added suggestion"""
         return ValidationResult(
             is_valid=self.is_valid,
             errors=self.errors,
             suggestions=self.suggestions + [suggestion],
-            confidence_score=self.confidence_score
+            confidence_score=self.confidence_score,
         )
 
 
@@ -50,7 +51,9 @@ class ObsidianAPIValidator:
     def __init__(self):
         self.logger = structured_log("obsidian_api_validator")
 
-    def validate_api_call(self, api_call: str, context: Dict[str, Any] = None) -> ValidationResult:
+    def validate_api_call(
+        self, api_call: str, context: Dict[str, Any] = None
+    ) -> ValidationResult:
         """
         Validate an Obsidian API call against actual documentation
 
@@ -72,35 +75,36 @@ class ObsidianAPIValidator:
             # Check if API call exists in docs
             if self._api_exists_in_docs(api_call, docs):
                 return ValidationResult(
-                    is_valid=True,
-                    errors=[],
-                    suggestions=[],
-                    confidence_score=0.95
+                    is_valid=True, errors=[], suggestions=[], confidence_score=0.95
                 )
             else:
                 # API not found, suggest alternatives
                 suggestions = self._find_similar_apis(api_call, docs)
                 return ValidationResult(
                     is_valid=False,
-                    errors=[f"API call '{api_call}' not found in Obsidian documentation"],
+                    errors=[
+                        f"API call '{api_call}' not found in Obsidian documentation"
+                    ],
                     suggestions=suggestions,
-                    confidence_score=0.3
+                    confidence_score=0.3,
                 )
 
         except Exception as e:
-            self.logger.error("obsidian_api_validation_error", {"api_call": api_call, "error": str(e)})
+            self.logger.error(
+                "obsidian_api_validation_error", {"api_call": api_call, "error": str(e)}
+            )
             return ValidationResult(
                 is_valid=False,
                 errors=[f"Failed to validate API call: {str(e)}"],
                 suggestions=["Check Obsidian API documentation manually"],
-                confidence_score=0.0
+                confidence_score=0.0,
             )
 
     def _resolve_obsidian_library_id(self) -> str:
         """Resolve Context7 library ID for Obsidian"""
         # This would use mcp_context7_resolve-library-id
         # For now, assume it's '/obsidian/docs'
-        return '/obsidian/docs'
+        return "/obsidian/docs"
 
     def _get_obsidian_api_docs(self, library_id: str, topic: str) -> Dict[str, Any]:
         """Get Obsidian API documentation using Context7"""
@@ -113,7 +117,7 @@ class ObsidianAPIValidator:
                 "app.vault.read",
                 "app.vault.modify",
                 "app.metadataCache.getFileCache",
-                "app.workspace.getActiveView"
+                "app.workspace.getActiveView",
             ]
         }
 
@@ -126,7 +130,7 @@ class ObsidianAPIValidator:
         """Find similar API calls for suggestions"""
         apis = docs.get("apis", [])
         # Simple string similarity - in real implementation, use better matching
-        similar = [api for api in apis if api_call.split('.')[0] in api]
+        similar = [api for api in apis if api_call.split(".")[0] in api]
         return similar[:3]  # Limit suggestions
 
 
@@ -136,7 +140,9 @@ class NPMDependencyValidator:
     def __init__(self):
         self.logger = structured_log("npm_dependency_validator")
 
-    def validate_package(self, package_name: str, version: Optional[str] = None) -> ValidationResult:
+    def validate_package(
+        self, package_name: str, version: Optional[str] = None
+    ) -> ValidationResult:
         """
         Validate npm package availability
 
@@ -153,10 +159,7 @@ class NPMDependencyValidator:
 
             if result["exists"]:
                 return ValidationResult(
-                    is_valid=True,
-                    errors=[],
-                    suggestions=[],
-                    confidence_score=0.98
+                    is_valid=True, errors=[], suggestions=[], confidence_score=0.98
                 )
             else:
                 # Package not found
@@ -165,19 +168,26 @@ class NPMDependencyValidator:
                     is_valid=False,
                     errors=[f"Package '{package_name}' not found on npm"],
                     suggestions=suggestions,
-                    confidence_score=0.1
+                    confidence_score=0.1,
                 )
 
         except Exception as e:
-            self.logger.error("npm_validation_error", {"package": package_name, "error": str(e)})
+            self.logger.error(
+                "npm_validation_error", {"package": package_name, "error": str(e)}
+            )
             return ValidationResult(
                 is_valid=False,
                 errors=[f"Failed to validate package: {str(e)}"],
-                suggestions=["Check package name spelling", "Verify package exists on npmjs.com"],
-                confidence_score=0.0
+                suggestions=[
+                    "Check package name spelling",
+                    "Verify package exists on npmjs.com",
+                ],
+                confidence_score=0.0,
             )
 
-    def _check_package_exists(self, package_name: str, version: Optional[str] = None) -> Dict[str, Any]:
+    def _check_package_exists(
+        self, package_name: str, version: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Check if package exists using npm view"""
         # This would use execute_command with npm view
         # Mock implementation for now
@@ -214,7 +224,9 @@ class APIValidationTools:
         return result.__dict__
 
     @tool
-    def validate_npm_package(self, package_name: str, version: Optional[str] = None) -> str:
+    def validate_npm_package(
+        self, package_name: str, version: Optional[str] = None
+    ) -> str:
         """
         Validate npm package availability
 

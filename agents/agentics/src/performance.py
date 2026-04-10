@@ -18,7 +18,7 @@ from .monitoring import structured_log
 
 monitor = structured_log(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class TTLCache(Generic[T]):
@@ -37,6 +37,7 @@ class TTLCache(Generic[T]):
 
     def _start_cleanup_thread(self):
         """Start background thread for cache cleanup"""
+
         def cleanup_worker():
             while self._running:
                 try:
@@ -55,7 +56,7 @@ class TTLCache(Generic[T]):
             expired_keys = []
 
             for key, entry in self.cache.items():
-                if current_time > entry['expires_at']:
+                if current_time > entry["expires_at"]:
                     expired_keys.append(key)
 
             for key in expired_keys:
@@ -67,10 +68,7 @@ class TTLCache(Generic[T]):
     def _get_cache_key(self, *args, **kwargs) -> str:
         """Generate cache key from arguments"""
         # Convert args and kwargs to a stable string representation
-        key_data = {
-            'args': args,
-            'kwargs': sorted(kwargs.items()) if kwargs else []
-        }
+        key_data = {"args": args, "kwargs": sorted(kwargs.items()) if kwargs else []}
         key_string = json.dumps(key_data, default=str, sort_keys=True)
         return hashlib.md5(key_string.encode()).hexdigest()
 
@@ -79,9 +77,9 @@ class TTLCache(Generic[T]):
         with self.lock:
             if key in self.cache:
                 entry = self.cache[key]
-                if datetime.now() <= entry['expires_at']:
+                if datetime.now() <= entry["expires_at"]:
                     monitor.debug(f"Cache hit for key: {key[:8]}...")
-                    return entry['value']
+                    return entry["value"]
                 else:
                     # Expired, remove it
                     del self.cache[key]
@@ -94,22 +92,25 @@ class TTLCache(Generic[T]):
             if len(self.cache) >= self.max_size:
                 # Remove 10% of entries (oldest first)
                 entries_to_remove = int(self.max_size * 0.1)
-                sorted_entries = sorted(self.cache.items(),
-                                      key=lambda x: x[1]['created_at'])
+                sorted_entries = sorted(
+                    self.cache.items(), key=lambda x: x[1]["created_at"]
+                )
 
                 for key_to_remove, _ in sorted_entries[:entries_to_remove]:
                     del self.cache[key_to_remove]
 
-                monitor.debug(f"Removed {entries_to_remove} entries due to cache size limit")
+                monitor.debug(
+                    f"Removed {entries_to_remove} entries due to cache size limit"
+                )
 
             ttl_seconds = ttl if ttl is not None else self.default_ttl
             expires_at = datetime.now() + timedelta(seconds=ttl_seconds)
 
             self.cache[key] = {
-                'value': value,
-                'expires_at': expires_at,
-                'created_at': datetime.now(),
-                'ttl': ttl_seconds
+                "value": value,
+                "expires_at": expires_at,
+                "created_at": datetime.now(),
+                "ttl": ttl_seconds,
             }
 
             monitor.debug(f"Cached value for key: {key[:8]}... (TTL: {ttl_seconds}s)")
@@ -131,15 +132,18 @@ class TTLCache(Generic[T]):
         """Get cache statistics"""
         with self.lock:
             total_entries = len(self.cache)
-            expired_entries = sum(1 for entry in self.cache.values()
-                                if datetime.now() > entry['expires_at'])
+            expired_entries = sum(
+                1
+                for entry in self.cache.values()
+                if datetime.now() > entry["expires_at"]
+            )
 
             return {
-                'total_entries': total_entries,
-                'expired_entries': expired_entries,
-                'active_entries': total_entries - expired_entries,
-                'max_size': self.max_size,
-                'default_ttl': self.default_ttl
+                "total_entries": total_entries,
+                "expired_entries": expired_entries,
+                "active_entries": total_entries - expired_entries,
+                "max_size": self.max_size,
+                "default_ttl": self.default_ttl,
             }
 
     def stop(self):
@@ -151,6 +155,7 @@ class TTLCache(Generic[T]):
 
 def cached(ttl: Optional[int] = None, key_func: Optional[Callable] = None):
     """Decorator for caching function results"""
+
     def decorator(func):
         cache = TTLCache()
 
@@ -181,13 +186,14 @@ def cached(ttl: Optional[int] = None, key_func: Optional[Callable] = None):
         wrapper.invalidate_cache = cache.invalidate
 
         return wrapper
+
     return decorator
 
 
 class AsyncTaskManager:
     """Manage async tasks with concurrency control and error handling"""
 
-    def __init__(self, max_concurrent: int = 5, timeout: float = 300.0):
+    def __init__(self, max_concurrent: int = 5, timeout: float = 3600.0):
         self.max_concurrent = max_concurrent
         self.timeout = timeout
         self.semaphore = asyncio.Semaphore(max_concurrent)
@@ -197,7 +203,9 @@ class AsyncTaskManager:
         """Execute coroutine with concurrency control"""
         async with self.semaphore:
             try:
-                return await asyncio.wait_for(coro(*args, **kwargs), timeout=self.timeout)
+                return await asyncio.wait_for(
+                    coro(*args, **kwargs), timeout=self.timeout
+                )
             except asyncio.TimeoutError:
                 self.monitor.error(f"Task timed out after {self.timeout}s")
                 raise
@@ -207,6 +215,7 @@ class AsyncTaskManager:
 
     async def execute_batch(self, tasks: List[Callable], *args, **kwargs) -> List[Any]:
         """Execute multiple tasks concurrently with error handling"""
+
         async def execute_single_task(task):
             try:
                 # Check if task is already a coroutine
@@ -220,12 +229,11 @@ class AsyncTaskManager:
                     return await loop.run_in_executor(None, task, *args, **kwargs)
             except Exception as e:
                 self.monitor.error(f"Batch task failed: {str(e)}")
-                return {"error": str(e), "task": getattr(task, '__name__', str(task))}
+                return {"error": str(e), "task": getattr(task, "__name__", str(task))}
 
         # Execute all tasks concurrently
         results = await asyncio.gather(
-            *[execute_single_task(task) for task in tasks],
-            return_exceptions=True
+            *[execute_single_task(task) for task in tasks], return_exceptions=True
         )
 
         # Handle exceptions in results
@@ -262,15 +270,21 @@ class MemoryManager:
 
         # Check if object is weakly referenceable
         try:
-            self.objects[obj_id] = weakref.ref(obj, lambda ref: self._on_object_death(obj_id))
+            self.objects[obj_id] = weakref.ref(
+                obj, lambda ref: self._on_object_death(obj_id)
+            )
         except TypeError:
             # Object not weakly referenceable (e.g., dict, list), track size only
             self.objects[obj_id] = None
-            self.monitor.debug(f"Object {obj_id} not weakly referenceable, tracking size only")
+            self.monitor.debug(
+                f"Object {obj_id} not weakly referenceable, tracking size only"
+            )
 
         self.current_memory_mb += obj_size
 
-        self.monitor.debug(f"Tracking object {obj_id}: {obj_size}MB (total: {self.current_memory_mb:.1f}MB)")
+        self.monitor.debug(
+            f"Tracking object {obj_id}: {obj_size}MB (total: {self.current_memory_mb:.1f}MB)"
+        )
 
     def untrack_object(self, obj_id: str):
         """Stop tracking an object"""
@@ -290,12 +304,15 @@ class MemoryManager:
         """Roughly estimate object size in MB"""
         try:
             if isinstance(obj, str):
-                return len(obj.encode('utf-8')) / (1024 * 1024)
+                return len(obj.encode("utf-8")) / (1024 * 1024)
             elif isinstance(obj, (list, tuple)):
                 return sum(self._estimate_size(item) for item in obj)
             elif isinstance(obj, dict):
-                return sum(self._estimate_size(k) + self._estimate_size(v) for k, v in obj.items())
-            elif hasattr(obj, '__dict__'):
+                return sum(
+                    self._estimate_size(k) + self._estimate_size(v)
+                    for k, v in obj.items()
+                )
+            elif hasattr(obj, "__dict__"):
                 return self._estimate_size(obj.__dict__)
             else:
                 # Default estimate
@@ -328,7 +345,11 @@ class MemoryManager:
 
     def _cleanup_dead_refs(self):
         """Remove dead weak references"""
-        dead_refs = [obj_id for obj_id, ref in self.objects.items() if ref is not None and ref() is None]
+        dead_refs = [
+            obj_id
+            for obj_id, ref in self.objects.items()
+            if ref is not None and ref() is None
+        ]
         for obj_id in dead_refs:
             del self.objects[obj_id]
 
@@ -351,7 +372,8 @@ class MemoryManager:
             "current_memory_mb": self.current_memory_mb,
             "max_memory_mb": self.max_memory_mb,
             "tracked_objects": len(self.objects),
-            "memory_utilization_percent": (self.current_memory_mb / self.max_memory_mb) * 100
+            "memory_utilization_percent": (self.current_memory_mb / self.max_memory_mb)
+            * 100,
         }
 
 
@@ -364,17 +386,22 @@ class BatchProcessor:
         self.task_manager = AsyncTaskManager(max_concurrent=max_concurrent_batches)
         self.monitor = structured_log(__name__)
 
-    async def process_batch(self, items: List[Any], processor_func: Callable,
-                          *args, **kwargs) -> List[Any]:
+    async def process_batch(
+        self, items: List[Any], processor_func: Callable, *args, **kwargs
+    ) -> List[Any]:
         """Process items in batches"""
         if not items:
             return []
 
         # Split into batches
-        batches = [items[i:i + self.batch_size]
-                  for i in range(0, len(items), self.batch_size)]
+        batches = [
+            items[i : i + self.batch_size]
+            for i in range(0, len(items), self.batch_size)
+        ]
 
-        self.monitor.info(f"Processing {len(items)} items in {len(batches)} batches of size {self.batch_size}")
+        self.monitor.info(
+            f"Processing {len(items)} items in {len(batches)} batches of size {self.batch_size}"
+        )
 
         # Create batch processing tasks
         async def process_single_batch(batch):
