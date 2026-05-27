@@ -9,11 +9,11 @@ services:
     environment:
       - MCP_CONFIG_PATH=/app/.kilocode/mcp.json
     ports:
-      - "3000:3000"
+      - "3003:3003"
     network_mode: host
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,8 +34,8 @@ services:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
       - PYTHONDONTWRITEBYTECODE=1
     network_mode: host
@@ -51,8 +51,8 @@ services:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
       - PYTHONDONTWRITEBYTECODE=1
     network_mode: host
@@ -69,15 +69,15 @@ services:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3000
+      - MCP_SERVER_URL=http://localhost:3003
     command: ["bash", "-c", "cd /app && python -m pytest tests/unit/ -vv -s --tb=long $${TEST_FILTER}"]
     network_mode: host
 
@@ -94,8 +94,8 @@ services:
       - PROJECT_ROOT=/app
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
@@ -103,7 +103,7 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3000
+      - MCP_SERVER_URL=http://localhost:3003
     command: ["bash", "-c", "cd /app && python -m pytest tests/integration/ -vv -s --tb=long $${TEST_FILTER}"]
     network_mode: host
 
@@ -120,15 +120,15 @@ services:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3000
+      - MCP_SERVER_URL=http://localhost:3003
     command:
       - bash
       - -c
@@ -148,15 +148,15 @@ services:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3000
+      - MCP_SERVER_URL=http://localhost:3003
     command:
       - watchmedo
       - auto-restart
@@ -185,8 +185,8 @@ services:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
@@ -194,7 +194,7 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3000
+      - MCP_SERVER_URL=http://localhost:3003
     command:
       - bash
       - -c
@@ -214,8 +214,8 @@ services:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen2.5:14b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen2.5-coder:14b}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}

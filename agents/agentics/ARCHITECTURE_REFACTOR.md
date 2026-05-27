@@ -6,7 +6,8 @@
 2. **State Mutations**: Direct state mutations make change tracking difficult
 3. **Limited Error Recovery**: Poor error recovery between agents
 4. **Tool Integration**: Tools not well integrated into agent workflows
-5. **Code/Test Collaboration**: Code and test generation are sequential, not collaborative
+5. **Code/Test Collaboration**: Code and test generation are sequential, not
+   collaborative
 
 ## Proposed Refactored Architecture
 
@@ -16,9 +17,12 @@
 2. **Immutability**: State should be immutable with clear transformation steps
 3. **Error Recovery**: Robust error recovery with fallback strategies
 4. **Tool Integration**: Tools should be first-class citizens in agent workflows
-5. **Collaborative Generation**: Code and test generation should be collaborative processes
-6. **Persistence & Checkpointing**: LangGraph checkpointers for durable workflow state across restarts and failures (use in-memory for local development)
-7. **Human-in-the-Loop (HITL)**: Strategic pauses for human intervention on critical decisions and low-confidence outputs
+5. **Collaborative Generation**: Code and test generation should be
+   collaborative processes
+6. **Persistence & Checkpointing**: LangGraph checkpointers for durable workflow
+   state across restarts and failures (use in-memory for local development)
+7. **Human-in-the-Loop (HITL)**: Strategic pauses for human intervention on
+   critical decisions and low-confidence outputs
 
 ### New Architecture Components
 
@@ -193,11 +197,13 @@ class HITLNode:
 ### Workflow Refactor
 
 #### Current: Monolithic Sequential Workflow
+
 ```
 Fetch → Clarify → Plan → Extract → Process → Generate → Review → Integrate → Test
 ```
 
 #### Proposed: Modular Collaborative Workflow with Local Enhancements
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    ISSUE PROCESSING                             │
@@ -228,26 +234,31 @@ Fetch → Clarify → Plan → Extract → Process → Generate → Review → I
 ### Implementation Plan
 
 #### Phase 1: Core Infrastructure
+
 1. Implement `AgentComposer` for modular composition
 2. Create immutable state classes
 3. Add tool integration framework
 
 #### Phase 2: Collaborative Generation
+
 1. Refactor `CodeGeneratorAgent` and `TestGeneratorAgent` for collaboration
 2. Implement cross-validation between code and tests
 3. Add iterative refinement loops
 
 #### Phase 3: Error Recovery
+
 1. Implement `ErrorRecoveryAgent`
 2. Add circuit breakers to all agent interactions
 3. Create fallback strategies for each agent type
 
 #### Phase 4: Tool Integration
+
 1. Integrate file operation tools into relevant agents
 2. Add npm search and package management tools
 3. Create tool-augmented prompts for all agents
 
 #### Phase 5: Workflow Orchestration
+
 1. Replace monolithic LangGraph with composable workflows
 2. Implement parallel processing where appropriate
 3. Add basic logging for observability
@@ -255,21 +266,30 @@ Fetch → Clarify → Plan → Extract → Process → Generate → Review → I
 ## Local Development Enhancements
 
 ### Purpose of Generating Code and Tests
-Generating concrete code and tests transforms the abstract architecture into executable prototypes that reveal real-world constraints. Key benefits:
 
-- **Validation Loop**: Tests expose architectural gaps, driving targeted refinements
+Generating concrete code and tests transforms the abstract architecture into
+executable prototypes that reveal real-world constraints. Key benefits:
+
+- **Validation Loop**: Tests expose architectural gaps, driving targeted
+  refinements
 - **Stakeholder Alignment**: Working prototypes provide tangible demonstrations
 - **Performance Insights**: Early benchmarking identifies bottlenecks
-- **Iterative Improvement**: Failed tests become precise feedback for architecture evolution
+- **Iterative Improvement**: Failed tests become precise feedback for
+  architecture evolution
 
-In short, it's not about the architecture being insufficient in isolation—it's about using code/tests to make it actionable and improvable. This process elevates a conceptual refactor into a working prototype, revealing real-world needs (e.g., via failed tests) that feed back into design improvements.
+In short, it's not about the architecture being insufficient in isolation—it's
+about using code/tests to make it actionable and improvable. This process
+elevates a conceptual refactor into a working prototype, revealing real-world
+needs (e.g., via failed tests) that feed back into design improvements.
 
 ### 1. Persistence and Checkpointing
+
 **Why Missing**: No durable state; workflow progress lost on failures/restarts.
 
 **Best Practices**: LangGraph checkpointers (MemorySaver for local dev).
 
 **What's Needed**:
+
 ```python
 from langgraph.checkpoint.memory import MemorySaver
 checkpointer = MemorySaver()
@@ -279,22 +299,29 @@ app = StateGraph(State).compile(checkpointer=checkpointer)
 **Impact**: Workflows resume within a session; suitable for local testing.
 
 ### 2. Human-in-the-Loop (HITL)
-**Why Missing**: Fully autonomous; lacks oversight for ambiguous/high-risk cases.
 
-**Best Practices**: Conditional edges to HITL nodes based on confidence thresholds.
+**Why Missing**: Fully autonomous; lacks oversight for ambiguous/high-risk
+cases.
+
+**Best Practices**: Conditional edges to HITL nodes based on confidence
+thresholds.
 
 **What's Needed**:
+
 ```python
 def route_hitl(state):
     return \"hitl\" if state[\"validation_score\"] < 80 else \"continue\"
 
 graph.add_conditional_edges(\"validate\", route_hitl, {\"hitl\": \"human_review\", \"continue\": \"integrate\"})
 ```
-(See [`LLM_CODE_VALIDATION.md`](agents/agentics/LLM_CODE_VALIDATION.md) for score calculation.)
+
+(See [`LLM_CODE_VALIDATION.md`](agents/agentics/LLM_CODE_VALIDATION.md) for
+score calculation.)
 
 **Impact**: AI efficiency + human safety net via console input.
 
 ### Next Steps for Local Setup
+
 1. Install free dependencies (e.g., langchain, langgraph via pip)
 2. Prototype core components in a local script
 3. Run validation and tests locally using provided frameworks
@@ -318,26 +345,38 @@ graph.add_conditional_edges(\"validate\", route_hitl, {\"hitl\": \"human_review\
 5. **Collaboration**: Code and test generation work together effectively
 6. **Observability**: Better monitoring and debugging capabilities
 
-This refactored architecture will ensure all agents work together seamlessly to produce high-quality TypeScript code and tests following LangChain best practices.
+This refactored architecture will ensure all agents work together seamlessly to
+produce high-quality TypeScript code and tests following LangChain best
+practices.
 
 ## Post-Test Iterative Recovery Implementation Plan
 
 ### Overview
-Implement iterative recovery loop in post-test phase for TS test failures (as seen in integration test failures):
 
-1. **PostTestRunnerAgent** detects `npm test` failure after 3 retries, parses `test_failure_post_*.log`, extracts TS errors, stores in immutable [`CodeGenerationState`](src/state.py:27)
-2. **ErrorRecoveryAgent** analyzes parsed errors + current code/tests, generates targeted fixes using LLM
-3. Re-invoke **CodeIntegratorAgent** + **CollaborativeGenerator** with fixes (up to 3 iterations)
+Implement iterative recovery loop in post-test phase for TS test failures (as
+seen in integration test failures):
+
+1. **PostTestRunnerAgent** detects `npm test` failure after 3 retries, parses
+   `test_failure_post_*.log`, extracts TS errors, stores in immutable
+   [`CodeGenerationState`](src/state.py:27)
+2. **ErrorRecoveryAgent** analyzes parsed errors + current code/tests, generates
+   targeted fixes using LLM
+3. Re-invoke **CodeIntegratorAgent** + **CollaborativeGenerator** with fixes (up
+   to 3 iterations)
 4. **PreTestRunnerAgent** runs `tsc --noEmit` compile check before full tests
-5. Success criteria: `npm test` passes (Tests: X passed, 0 failed). Fallback: HITLNode if max iterations or low confidence (<50%)
+5. Success criteria: `npm test` passes (Tests: X passed, 0 failed). Fallback:
+   HITLNode if max iterations or low confidence (<50%)
 
-Addresses log issues: missing deps (`@uuid/uuid`), constructor args, type mismatches.
+Addresses log issues: missing deps (`@uuid/uuid`), constructor args, type
+mismatches.
 
 ### Key File Modifications
 
 #### 1. [`src/post_test_runner_agent.py`](src/post_test_runner_agent.py:15)
+
 - Add `parse_test_errors()` method for regex parsing of TS errors from log
-- On failure: parse log, update state with `test_errors`, `test_log_path`, `recovery_attempt`, raise `TestRecoveryNeeded`
+- On failure: parse log, update state with `test_errors`, `test_log_path`,
+  `recovery_attempt`, raise `TestRecoveryNeeded`
 - Add `tsc --noEmit` check before tests
 
 ```python
@@ -366,9 +405,11 @@ except Exception as e:
 ```
 
 #### 2. [`src/error_recovery_agent.py`](src/error_recovery_agent.py:42)
+
 - Add `TestRecoveryNeeded`, `CompileError` to exceptions
 - Extend strategies for `POST_TEST_RUNNER`
-- New `_test_failure_recovery()`: LLM prompt with errors/code/tests → fixed code/tests + confidence
+- New `_test_failure_recovery()`: LLM prompt with errors/code/tests → fixed
+  code/tests + confidence
 
 ```python
 # Add to AgentType or use string 'post_test_runner'
@@ -406,7 +447,7 @@ Output ONLY valid JSON:
 
     fixes_response = self.llm_reasoning.invoke(prompt)
     parsed_fixes = json.loads(fixes_response.content)
-    
+
     # Immutable state update (convert to CodeGenerationState if needed)
     new_state = state | {
         'generated_code': parsed_fixes['fixed_code'],
@@ -414,11 +455,12 @@ Output ONLY valid JSON:
         'recovery_confidence': parsed_fixes['confidence'],
         'recovery_explanation': parsed_fixes['explanation']
     }
-    
+
     return {'success': True, 'applied_fixes': True, 'confidence': parsed_fixes['confidence']}
 ```
 
 #### 3. [`src/composable_workflows.py`](src/composable_workflows.py:43)
+
 - Add recovery nodes/edges in `integration_testing_workflow`
 - Conditional routing after PostTestRunner
 
@@ -448,6 +490,7 @@ graph.add_edge("error_recovery", "code_integrator")  # Loop back
 ```
 
 #### 4. State Extensions [`src/state.py`](src/state.py:27), [`src/models.py`](src/models.py:1)
+
 Add recovery fields to `CodeGenerationState`:
 
 ```python
@@ -476,14 +519,14 @@ graph TD
     subgraph \"Issue Processing\"
         Fetch --> Clarify --> Plan --> Extract
     end
-    
+
     subgraph \"Code Gen\"
         Extract --> Collab[CollaborativeGenerator]
         Collab --> Validate
         Validate -->|Score<80| HITL_CODE
         Validate --> Integrate
     end
-    
+
     subgraph \"Integration & Test Loop max 3\"
         Integrate[CodeIntegrator] --> PreTest[PreTestRunner tsc--noEmit]
         PreTest --> PostTest[PostTestRunner npm test]
@@ -493,13 +536,14 @@ graph TD
         Recovery -->|Conf>50 & <3| Integrate
         Recovery -->|Else| HITL_TEST[HITLNode]
     end
-    
+
     Review --> Output[OutputResult] --> Success[END Success]
     HITL_CODE --> Integrate
     HITL_TEST --> HITL_END[END HITL]
 ```
 
 ### Next Steps (Code Mode)
+
 1. Implement parsing + exceptions
 2. Extend ErrorRecoveryAgent strategy
 3. Add workflow loop + nodes
@@ -510,5 +554,5 @@ Plan addresses exact log failures (missing deps, TS errors post-integration).
 
 ## State Serialization
 
-Use `dataclasses.asdict(state)` for logging/dumps/monitoring to support frozen dataclasses.
-
+Use `dataclasses.asdict(state)` for logging/dumps/monitoring to support frozen
+dataclasses.

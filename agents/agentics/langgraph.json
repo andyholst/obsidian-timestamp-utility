@@ -1,0 +1,238 @@
+{
+  "$schema": "https://platform.langgraph.studio/schema/0.1.0",
+  "name": "Agentics Integration & Testing Workflow",
+  "description": "LangGraph workflow for code integration, dependency installation, testing, recovery, review, and output.",
+  "nodes": [
+    {
+      "id": "code_integrator",
+      "type": "agent",
+      "data": {
+        "name": "Code Integrator Agent",
+        "instructions": "Integrate generated code into the codebase using LLM reasoning.",
+        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b",
+        "tools": []
+      }
+    },
+    {
+      "id": "dependency_installer",
+      "type": "agent",
+      "data": {
+        "name": "Dependency Installer Agent",
+        "instructions": "Analyze and install required npm dependencies.",
+        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b",
+        "tools": [
+          "npm_install_tool",
+          "npm_list_tool"
+        ]
+      }
+    },
+    {
+      "id": "pre_test_runner",
+      "type": "function",
+      "data": {
+        "name": "Pre Test Runner",
+        "description": "Execute pre-integration tests."
+      }
+    },
+    {
+      "id": "post_test_runner",
+      "type": "function",
+      "data": {
+        "name": "Post Test Runner",
+        "description": "Run tests after integration and compute coverage metrics."
+      }
+    },
+    {
+      "id": "error_recovery",
+      "type": "agent",
+      "data": {
+        "name": "Error Recovery Agent",
+        "instructions": "Diagnose test failures and suggest recovery actions.",
+        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b"
+      }
+    },
+    {
+      "id": "hitl",
+      "type": "human",
+      "data": {
+        "name": "Human-in-the-Loop",
+        "description": "Human approval or intervention point."
+      }
+    },
+    {
+      "id": "code_reviewer",
+      "type": "agent",
+      "data": {
+        "name": "Code Reviewer Agent",
+        "instructions": "Review integrated code for quality and adherence to specs.",
+        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b"
+      }
+    },
+    {
+      "id": "output_result",
+      "type": "function",
+      "data": {
+        "name": "Output Result Agent",
+        "description": "Finalize and format output results."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "code_integrator_to_dependency_installer",
+      "source": {
+        "node": "code_integrator",
+        "type": "normal"
+      },
+      "target": {
+        "node": "dependency_installer"
+      }
+    },
+    {
+      "id": "dependency_installer_to_pre_test_runner",
+      "source": {
+        "node": "dependency_installer",
+        "type": "normal"
+      },
+      "target": {
+        "node": "pre_test_runner"
+      }
+    },
+    {
+      "id": "pre_test_runner_to_post_test_runner",
+      "source": {
+        "node": "pre_test_runner",
+        "type": "normal"
+      },
+      "target": {
+        "node": "post_test_runner"
+      }
+    },
+    {
+      "id": "post_test_runner_to_error_recovery",
+      "source": {
+        "node": "post_test_runner",
+        "type": "normal"
+      },
+      "target": {
+        "node": "error_recovery",
+        "edge": "error_recovery"
+      }
+    },
+    {
+      "id": "post_test_runner_to_hitl",
+      "source": {
+        "node": "post_test_runner",
+        "type": "normal"
+      },
+      "target": {
+        "node": "hitl",
+        "edge": "hitl"
+      }
+    },
+    {
+      "id": "error_recovery_to_code_integrator",
+      "source": {
+        "node": "error_recovery",
+        "type": "normal"
+      },
+      "target": {
+        "node": "code_integrator"
+      }
+    },
+    {
+      "id": "hitl_to_code_reviewer",
+      "source": {
+        "node": "hitl",
+        "type": "normal"
+      },
+      "target": {
+        "node": "code_reviewer"
+      }
+    },
+    {
+      "id": "code_reviewer_to_output_result",
+      "source": {
+        "node": "code_reviewer",
+        "type": "normal"
+      },
+      "target": {
+        "node": "output_result"
+      }
+    },
+    {
+      "id": "output_result_to_end",
+      "source": {
+        "node": "output_result",
+        "type": "normal"
+      },
+      "target": {
+        "node": "__end__"
+      }
+    }
+  ],
+  "schema": {
+    "type": "object",
+    "properties": {
+      "issue_url": {
+        "type": "string"
+      },
+      "ticket_content": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "requirements": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "acceptance_criteria": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "code_spec": {
+        "type": "object"
+      },
+      "test_spec": {
+        "type": "object"
+      },
+      "implementation_steps": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "npm_packages": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "generated_code": {
+        "type": "string"
+      },
+      "generated_tests": {
+        "type": "string"
+      },
+      "validation_results": {
+        "type": "object"
+      },
+      "recovery_attempt": {
+        "type": "integer"
+      },
+      "recovery_confidence": {
+        "type": "number"
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}

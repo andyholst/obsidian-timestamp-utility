@@ -7,11 +7,14 @@ TEST_SUITE_README.md and LLM_CODE_VALIDATION.md.
 """
 
 import os
+import tempfile
 
 # Set required environment variable for tests before any imports
-os.environ['PROJECT_ROOT'] = '/tmp/test_project'
+_test_project = tempfile.mkdtemp(prefix="test_project_")
+os.environ["PROJECT_ROOT"] = _test_project
 
 import pytest
+import shutil
 import json
 import tempfile
 import subprocess
@@ -21,7 +24,7 @@ from src.test_suite import (
     TestSuiteExecutor,
     TestExecutionMetrics,
     LLMTestSuiteValidator,
-    validate_llm_test_suite
+    validate_llm_test_suite,
 )
 
 
@@ -122,13 +125,13 @@ describe('Calculator', () => {
 });
 """
 
-    def test_actual_jest_test_execution_success(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_actual_jest_test_execution_success(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test successful Jest test execution with real files"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            valid_jest_tests,
-            context={"test_framework": "jest"}
+            valid_typescript_code, valid_jest_tests, context={"test_framework": "jest"}
         )
 
         # Assert
@@ -140,13 +143,13 @@ describe('Calculator', () => {
         assert test_metrics.coverage_percentage >= 0
         assert isinstance(test_metrics.error_messages, list)
 
-    def test_jest_coverage_analysis(self, jest_executor, valid_typescript_code, valid_jest_tests):
+    def test_jest_coverage_analysis(
+        self, jest_executor, valid_typescript_code, valid_jest_tests
+    ):
         """Test Jest coverage analysis functionality"""
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            valid_jest_tests,
-            context={"collect_coverage": True}
+            valid_typescript_code, valid_jest_tests, context={"collect_coverage": True}
         )
 
         # Assert
@@ -168,9 +171,7 @@ describe('Calculator', () => {
 
         # Act
         code_metrics, test_metrics = jest_executor.execute_code_and_tests(
-            valid_typescript_code,
-            invalid_tests,
-            context={"test_framework": "jest"}
+            valid_typescript_code, invalid_tests, context={"test_framework": "jest"}
         )
 
         # Assert
@@ -178,7 +179,9 @@ describe('Calculator', () => {
         # Should detect test failures or syntax errors
         assert test_metrics.failed_tests >= 0 or len(test_metrics.error_messages) > 0
 
-    def test_comprehensive_jest_validation_integration(self, valid_typescript_code, valid_jest_tests):
+    def test_comprehensive_jest_validation_integration(
+        self, valid_typescript_code, valid_jest_tests
+    ):
         """Test complete Jest validation integration with LLMTestSuiteValidator"""
         # Act
         result, code_validator_report = validate_llm_test_suite(
@@ -187,14 +190,14 @@ describe('Calculator', () => {
             context={
                 "language": "typescript",
                 "test_framework": "jest",
-                "validation_focus": "jest_execution"
+                "validation_focus": "jest_execution",
             },
-            include_code_validator=True
+            include_code_validator=True,
         )
 
         # Assert
         assert result is not None
-        assert hasattr(result, 'test_execution')
+        assert hasattr(result, "test_execution")
         assert result.test_execution.total_tests >= 0
         assert result.test_execution.coverage_percentage >= 0
         assert 0 <= result.overall_score <= 100

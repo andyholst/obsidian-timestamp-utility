@@ -55,7 +55,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **updated code extractor to only deal with main.ts and it's main.test.ts file.**
 - **refine the llm agents to reduce halicunation.**
 - **added new test asserts to cover up for refactored agents code and python code.**
-- **added more real unit tests based on refactored  llm agents.**
+- **added more real unit tests based on refactored llm agents.**
 - **be able to silent the logs to debug level to give clarity for real exceptions for failure.**
 - **improved the unit tests to run reall LLM agents excepty for the fetch integrator agent.**
 - **get the updated unit tests running with real LM except for fetch ticket agent.**

@@ -1,6 +1,10 @@
+results
+
 *.DS_Store
+scripts/**/*.venv
 # npm
 node_modules
+data
 
 # package directory
 obsidian-timestamp-utility
@@ -32,5 +36,15 @@ agentics_unit_tests_output.txt
 agentics_integration_tests_output.txt
 *.xml
 *.log
-*.txt
 agents/agentics/.cache/huggingface
+
+**/dagger-venv
+**/bin
+**/tempbin
+
+**/.venv/**
+**/venv/**
+.env
+.env copy
+
+backups

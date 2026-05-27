@@ -3,6 +3,7 @@ import os
 import pytest
 import tempfile
 import shutil
+
 pytest_plugins = ("pytest_asyncio",)
 from unittest.mock import patch, AsyncMock
 from src.circuit_breaker import circuit_breakers
@@ -15,7 +16,7 @@ from ..fixtures.mock_github_responses import (
     create_github_client_with_errors,
     create_github_error_responses,
     create_github_paginated_responses,
-    create_github_webhook_payloads
+    create_github_webhook_payloads,
 )
 from ..fixtures.mock_llm_responses import (
     create_process_llm_mock_responses,
@@ -25,7 +26,7 @@ from ..fixtures.mock_llm_responses import (
     create_llm_batch_responses,
     create_llm_with_memory,
     create_multimodal_llm_mock,
-    create_llm_with_token_limits
+    create_llm_with_token_limits,
 )
 from ..fixtures.mock_refactored_components import (
     create_mock_service_manager,
@@ -36,11 +37,11 @@ from ..fixtures.mock_refactored_components import (
     patch_environment_variables,
     patch_circuit_breakers,
     patch_health_monitor,
-    create_comprehensive_mock_context
+    create_comprehensive_mock_context,
 )
 
 # Real project root
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 
 
 @pytest.fixture(autouse=True)
@@ -52,24 +53,50 @@ def reset_circuit_breakers():
 
 
 @pytest.fixture(autouse=True)
+def reset_global_state():
+    """Reset global state between tests to prevent cross-test pollution"""
+    import src.services
+    import src.config
+    # Debug: check config before reset
+    if src.config._config is not None:
+        from unittest.mock import MagicMock
+        if isinstance(src.config._config, MagicMock):
+            print(f"WARNING: _config is MagicMock before reset! {src.config._config}")
+    src.services._service_manager = None
+    src.config._config = None
+    yield
+    src.services._service_manager = None
+    src.config._config = None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def init_test_config():
+    """Initialize config once for all tests"""
+    import os
+    os.environ.setdefault("GITHUB_TOKEN", "test_token")
+    os.environ.setdefault("OLLAMA_HOST", "http://localhost:11434")
+
+
+@pytest.fixture(autouse=True)
 def mock_github_token():
     """Mock GITHUB_TOKEN environment variable for tests"""
-    original = os.environ.get('GITHUB_TOKEN')
-    os.environ['GITHUB_TOKEN'] = 'mock_token'
+    original = os.environ.get("GITHUB_TOKEN")
+    os.environ["GITHUB_TOKEN"] = "mock_token"
     yield
     if original is not None:
-        os.environ['GITHUB_TOKEN'] = original
+        os.environ["GITHUB_TOKEN"] = original
     else:
-        os.environ.pop('GITHUB_TOKEN', None)
+        os.environ.pop("GITHUB_TOKEN", None)
 
 
 @pytest.fixture(autouse=True)
 def mock_github_health_check():
     """Mock GitHub health check to return True if client exists, False if None"""
+
     async def mock_health_check(self):
         return self._client is not None
 
-    with patch.object(GitHubClient, 'health_check', mock_health_check):
+    with patch.object(GitHubClient, "health_check", mock_health_check):
         yield
 
 
@@ -78,9 +105,10 @@ def mock_service_health():
     """Mock service health checks to always return healthy"""
     from unittest.mock import MagicMock
     from src.circuit_breaker import ServiceHealthMonitor
+
     mock_monitor = MagicMock(spec=ServiceHealthMonitor)
     mock_monitor.is_service_healthy.return_value = True
-    with patch('src.services.get_health_monitor', return_value=mock_monitor):
+    with patch("src.services.get_health_monitor", return_value=mock_monitor):
         yield
 
 
@@ -222,24 +250,27 @@ def src_backup(request, tmp_path):
     Fixture to backup and restore the src directory for each test.
     If the test uses temp_project_dir, it operates on that; otherwise, it creates a new temp dir.
     """
-    if 'temp_project_dir' in request.fixturenames:
-        project_dir = request.getfixturevalue('temp_project_dir')
+    if "temp_project_dir" in request.fixturenames:
+        project_dir = request.getfixturevalue("temp_project_dir")
     else:
         project_dir = tmp_path / "project"
         shutil.copytree(PROJECT_ROOT, str(project_dir), dirs_exist_ok=True)
 
-    src_dir = os.path.join(project_dir, 'src')
-    backup_dir = tempfile.mkdtemp(prefix='src_backup_')
-    shutil.copytree(src_dir, backup_dir, ignore=shutil.ignore_patterns('logs'))
+    src_dir = os.path.join(project_dir, "src")
+    backup_dir = tempfile.mkdtemp(prefix="src_backup_")
+    shutil.copytree(src_dir, backup_dir, ignore=shutil.ignore_patterns("logs"))
     yield project_dir
     shutil.rmtree(src_dir)
     shutil.copytree(backup_dir, src_dir)
     shutil.rmtree(backup_dir)
+
+
 @pytest_asyncio.fixture
 async def service_manager():
     """Create a service manager with initialized real services for testing."""
     from src.config import get_config
     from src.services import ServiceManager
+
     config = get_config()
     sm = ServiceManager(config)
     await sm.initialize_services()
@@ -249,20 +280,36 @@ async def service_manager():
 @pytest.fixture(scope="session", autouse=True)
 def init_unit_test_config():
     # Initialize config with test defaults
-    init_config(AgenticsConfig(
-        github_token=os.getenv("GITHUB_TOKEN", "test_token"),
-        ollama_host="http://localhost:11434"
-    ))
+    init_config(
+        AgenticsConfig(
+            github_token=os.getenv("GITHUB_TOKEN", "test_token"),
+            ollama_host="http://localhost:11434",
+        )
+    )
+
 
 def pytest_collection_finish(session):
     print(f"\n=== Collected {len(session.items)} tests before running ===")
 
+
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     stats = terminalreporter.stats
-    passed = len(stats.get('passed', []))
-    failed = len(stats.get('failed', []))
-    error = len(stats.get('error', []))
-    xpassed = len(stats.get('xpassed', []))
-    xfailed = len(stats.get('xfailed', []))
+    passed = len(stats.get("passed", []))
+    failed = len(stats.get("failed", []))
+    error = len(stats.get("error", []))
+    xpassed = len(stats.get("xpassed", []))
+    xfailed = len(stats.get("xfailed", []))
     run_count = passed + failed + error + xpassed + xfailed
-    print(f"\n=== Actually ran {run_count} tests ({passed} passed, {failed} failed, {error} error, {xpassed} xpassed, {xfailed} xfailed) ===")
+    print(
+        f"\n=== Actually ran {run_count} tests ({passed} passed, {failed} failed, {error} error, {xpassed} xpassed, {xfailed} xfailed) ==="
+    )
+
+
+@pytest.fixture
+def mock_mcp_client():
+    from unittest.mock import AsyncMock, Mock
+
+    client = Mock()
+    client.get_npm_packages = AsyncMock(return_value=[])
+    client.list_packages = AsyncMock(return_value=[])
+    return client

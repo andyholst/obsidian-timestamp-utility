@@ -1,5 +1,5 @@
 import pytest
-from src.models import CodeGenerationOutput, TestGenerationOutput
+from src.models import CodeGenerationOutput, GeneratedTests
 
 
 def test_code_generation_output():
@@ -7,7 +7,7 @@ def test_code_generation_output():
     output = CodeGenerationOutput(
         code="public generateUUID(): string { return 'uuid'; }",
         method_name="generateUUID",
-        command_id="generate-uuid"
+        command_id="generate-uuid",
     )
     assert output.code == "public generateUUID(): string { return 'uuid'; }"
     assert output.method_name == "generateUUID"
@@ -22,16 +22,14 @@ def test_code_generation_output_validation():
 
 
 def test_test_generation_output():
-    """Test TestGenerationOutput Pydantic model."""
-    output = TestGenerationOutput(
-        tests="describe('test', () => { it('works', () => {}); });"
-    )
+    """Test GeneratedTests Pydantic model."""
+    output = GeneratedTests(tests="describe('test', () => { it('works', () => {}); });")
     assert "describe" in output.tests
     assert "it" in output.tests
 
 
 def test_test_generation_output_validation():
-    """Test TestGenerationOutput validation."""
+    """Test GeneratedTests validation."""
     with pytest.raises(ValueError):
         # Missing required field
-        TestGenerationOutput()  # Missing tests
+        GeneratedTests()  # Missing tests

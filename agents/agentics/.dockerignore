@@ -79,5 +79,5 @@ docs/
 *.tmp
 *.temp
 
-src/
-tests/
+# src/
+# tests/

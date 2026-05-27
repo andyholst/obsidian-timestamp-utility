@@ -8,8 +8,8 @@ to validate LLM-generated TypeScript code and tests.
 from .test_suite import (
     validate_llm_test_suite,
     generate_test_suite_report,
-    LLMTestSuiteValidator,
-    TestSuiteValidationResult
+    LLMSuiteValidator,
+    TestSuiteValidationResult,
 )
 
 
@@ -228,8 +228,8 @@ describe('UserService', () => {
             "language": "typescript",
             "framework": "node",
             "test_framework": "jest",
-            "domain": "user_management"
-        }
+            "domain": "user_management",
+        },
     )
 
     # Generate and print the report
@@ -534,8 +534,8 @@ describe('DocumentAgent', () => {
             "language": "python",
             "framework": "langchain",
             "type": "agentics_code",
-            "domain": "document_processing"
-        }
+            "domain": "document_processing",
+        },
     )
 
     # Generate and print the report
@@ -549,7 +549,7 @@ def example_advanced_validation_with_custom_context():
     """Example showing advanced validation with custom context and detailed analysis"""
 
     # Create validator instance for more control
-    validator = LLMTestSuiteValidator()
+    validator = LLMSuiteValidator()
 
     # Sample React component code
     react_code = """
@@ -802,9 +802,9 @@ describe('UserList', () => {
             "test_library": "testing-library",
             "component_type": "list_component",
             "hooks_used": ["useState", "useCallback"],
-            "styling": "css_modules"
+            "styling": "css_modules",
         },
-        include_code_validator=True
+        include_code_validator=True,
     )
 
     # Generate detailed report
@@ -817,7 +817,9 @@ describe('UserList', () => {
     print(f"Risk Level: {result.risk_level.value.upper()}")
     print(f"Code Execution Success: {result.code_execution.success}")
     print(f"Test Coverage: {result.test_execution.coverage_percentage:.1f}%")
-    print(f"LangChain Compliance: {result.langchain_compliance.overall_compliance:.1f}/10")
+    print(
+        f"LangChain Compliance: {result.langchain_compliance.overall_compliance:.1f}/10"
+    )
 
     if result.critical_issues:
         print(f"\nCritical Issues ({len(result.critical_issues)}):")
@@ -845,9 +847,13 @@ def example_error_handling_and_edge_cases():
     # Test with malformed code
     print("1. Testing with malformed code:")
     malformed_code = "export class { invalid syntax here }"
-    malformed_tests = "describe('test', () => { it('fails', () => { expect().toBe(); }); });"
+    malformed_tests = (
+        "describe('test', () => { it('fails', () => { expect().toBe(); }); });"
+    )
 
-    result = validate_llm_test_suite(malformed_code, malformed_tests, include_code_validator=False)
+    result = validate_llm_test_suite(
+        malformed_code, malformed_tests, include_code_validator=False
+    )
     print(f"   Score: {result.overall_score:.1f}, Risk: {result.risk_level.value}")
     print(f"   Critical Issues: {len(result.critical_issues)}")
 
@@ -861,7 +867,9 @@ def example_error_handling_and_edge_cases():
     code_with_no_tests = "export const add = (a, b) => a + b;"
     empty_tests = "describe('empty', () => {});"
 
-    result = validate_llm_test_suite(code_with_no_tests, empty_tests, include_code_validator=False)
+    result = validate_llm_test_suite(
+        code_with_no_tests, empty_tests, include_code_validator=False
+    )
     print(f"   Score: {result.overall_score:.1f}, Risk: {result.risk_level.value}")
     print(f"   Test Count: {result.test_execution.total_tests}")
 
@@ -894,7 +902,7 @@ def run_all_examples():
         examples = [
             ("Basic TypeScript Service", basic_result),
             ("LangChain Agent", agent_result),
-            ("React Component", react_result)
+            ("React Component", react_result),
         ]
 
         for name, result in examples:
@@ -908,6 +916,7 @@ def run_all_examples():
     except Exception as e:
         print(f"Error running examples: {str(e)}")
         import traceback
+
         traceback.print_exc()
 
 

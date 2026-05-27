@@ -8,6 +8,7 @@ from .monitoring import structured_log, track_workflow_progress
 @dataclass
 class WorkflowConfig:
     """Configuration for creating a composable workflow."""
+
     agent_names: List[str]
     tool_names: List[str]
 
@@ -34,21 +35,34 @@ class AgentComposer:
     def create_workflow(self, name: str, config: WorkflowConfig) -> Runnable:
         """Create a composable workflow from agents and tools using advanced LCEL composition patterns."""
         # Retrieve agents and tools from registry
-        agents = [self.agents[agent_name] for agent_name in config.agent_names if agent_name in self.agents]
-        tools = [self.tools[tool_name] for tool_name in config.tool_names if tool_name in self.tools]
+        agents = [
+            self.agents[agent_name]
+            for agent_name in config.agent_names
+            if agent_name in self.agents
+        ]
+        tools = [
+            self.tools[tool_name]
+            for tool_name in config.tool_names
+            if tool_name in self.tools
+        ]
 
         if not agents:
-            self.monitor.error("workflow_creation_failed", {
-                "workflow_name": name,
-                "reason": "No valid agents found",
-                "requested_agents": config.agent_names
-            })
-            raise ValueError(f"No valid agents found for workflow '{name}'. Check agent names in config.")
+            self.monitor.error(
+                "workflow_creation_failed",
+                {
+                    "workflow_name": name,
+                    "reason": "No valid agents found",
+                    "requested_agents": config.agent_names,
+                },
+            )
+            raise ValueError(
+                f"No valid agents found for workflow '{name}'. Check agent names in config."
+            )
 
         # Bind tools to agents that support tool binding (advanced LCEL pattern)
         bound_agents = []
         for agent in agents:
-            if hasattr(agent, 'bind_tools') and tools:
+            if hasattr(agent, "bind_tools") and tools:
                 # Bind tools to LangChain agents that support it
                 bound_agents.append(agent.bind_tools(tools))
             else:
@@ -62,13 +76,18 @@ class AgentComposer:
 
         self.workflows[name] = workflow
 
-        self.monitor.info("workflow_created", {
-            "workflow_name": name,
-            "agent_count": len(agents),
-            "tool_count": len(tools),
-            "agents": config.agent_names,
-            "tools": config.tool_names,
-            "tool_binding_applied": any(hasattr(agent, 'bind_tools') for agent in agents)
-        })
+        self.monitor.info(
+            "workflow_created",
+            {
+                "workflow_name": name,
+                "agent_count": len(agents),
+                "tool_count": len(tools),
+                "agents": config.agent_names,
+                "tools": config.tool_names,
+                "tool_binding_applied": any(
+                    hasattr(agent, "bind_tools") for agent in agents
+                ),
+            },
+        )
 
         return workflow

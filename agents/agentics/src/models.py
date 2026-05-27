@@ -6,23 +6,28 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class CodeSpec:
     """Specification for code generation"""
+
     language: str
     framework: Optional[str] = None
     dependencies: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
-class TestSpec:
+class TestSpecification:
     """Specification for test generation"""
+
     test_framework: str
     test_type: str = "unit"
     coverage_requirements: Optional[dict] = None
 
-TestSpec.__test__ = False
+
+TestSpecification.__test__ = False
+
 
 @dataclass(frozen=True)
 class ValidationResults:
     """Results of validation process"""
+
     success: bool
     score: int = 0
     errors: List[str] = field(default_factory=list)
@@ -35,5 +40,5 @@ class CodeGenerationOutput(BaseModel):
     command_id: str = Field(description="The ID of the generated command")
 
 
-class TestGenerationOutput(BaseModel):
+class GeneratedTests(BaseModel):
     tests: str = Field(description="The generated Jest test code")

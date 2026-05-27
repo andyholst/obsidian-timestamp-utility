@@ -1,6 +1,7 @@
 # LLM Test Suite Validator
 
-A comprehensive testing framework for validating LLM-generated TypeScript code and tests, ensuring they work correctly together and follow best practices.
+A comprehensive testing framework for validating LLM-generated TypeScript code
+and tests, ensuring they work correctly together and follow best practices.
 
 ## Overview
 
@@ -16,24 +17,28 @@ The LLM Test Suite Validator provides a complete validation pipeline that:
 ## Key Features
 
 ### 🔧 Code Execution
+
 - Sandboxed TypeScript execution with Node.js
 - Automatic export detection and smoke testing
 - Timeout protection and memory limits
 - Comprehensive error reporting
 
 ### 🧪 Test Execution
+
 - Full Jest test suite execution
 - Coverage analysis and reporting
 - Parallel test execution support
 - Detailed failure diagnostics
 
 ### 🔗 Relationship Validation
+
 - Test-code coverage analysis
 - Assertion quality assessment
 - Mock usage detection
 - Edge case coverage evaluation
 
 ### 🏗️ LangChain Compliance
+
 - LCEL (LangChain Expression Language) usage detection
 - Error handling pattern validation
 - State management assessment
@@ -41,6 +46,7 @@ The LLM Test Suite Validator provides a complete validation pipeline that:
 - Composability scoring
 
 ### 📊 Reporting
+
 - Comprehensive markdown reports
 - Risk level assessment (Low/Medium/High/Critical)
 - Actionable recommendations
@@ -48,7 +54,8 @@ The LLM Test Suite Validator provides a complete validation pipeline that:
 
 ## Installation
 
-The test suite is part of the agentics package. Ensure you have the required dependencies:
+The test suite is part of the agentics package. Ensure you have the required
+dependencies:
 
 ```bash
 # Install project dependencies
@@ -129,10 +136,12 @@ print(f"Risk Level: {result.risk_level.value}")
 Main validation function that returns a `TestSuiteValidationResult`.
 
 **Parameters:**
+
 - `code` (str): The generated TypeScript code to validate
 - `tests` (str): The generated test code to run
 - `context` (dict, optional): Additional context information
-- `include_code_validator` (bool): Whether to integrate with code validator framework
+- `include_code_validator` (bool): Whether to integrate with code validator
+  framework
 
 **Returns:** `TestSuiteValidationResult` object
 
@@ -141,6 +150,7 @@ Main validation function that returns a `TestSuiteValidationResult`.
 Generates a comprehensive markdown report.
 
 **Parameters:**
+
 - `code` (str): The validated code
 - `tests` (str): The validated tests
 - `result` (TestSuiteValidationResult): Validation results
@@ -155,6 +165,7 @@ Generates a comprehensive markdown report.
 Main validator class with full control over validation process.
 
 **Methods:**
+
 - `validate_test_suite(code, tests, context=None, include_code_validator=True)`
 - `generate_detailed_report(code, tests, result, code_validator_report=None)`
 
@@ -163,12 +174,15 @@ Main validator class with full control over validation process.
 Contains all validation results and metrics.
 
 **Key Attributes:**
+
 - `overall_score` (float): 0-100 overall quality score
 - `risk_level` (TestSuiteRiskLevel): LOW, MEDIUM, HIGH, or CRITICAL
 - `code_execution` (CodeExecutionMetrics): Code execution results
 - `test_execution` (TestExecutionMetrics): Test execution results
-- `test_code_relationship` (TestCodeRelationship): Code-test relationship analysis
-- `langchain_compliance` (LangChainCompliance): LangChain best practices compliance
+- `test_code_relationship` (TestCodeRelationship): Code-test relationship
+  analysis
+- `langchain_compliance` (LangChainCompliance): LangChain best practices
+  compliance
 - `critical_issues` (List[str]): Critical problems found
 - `warnings` (List[str]): Warning messages
 - `suggestions` (List[str]): Improvement suggestions
@@ -176,6 +190,7 @@ Contains all validation results and metrics.
 ## Validation Metrics
 
 ### Code Execution Metrics
+
 - **Success**: Whether code executed without errors
 - **Execution Time**: Time taken to run code
 - **Output Lines**: Number of output lines generated
@@ -183,6 +198,7 @@ Contains all validation results and metrics.
 - **Timeout Occurred**: Whether execution timed out
 
 ### Test Execution Metrics
+
 - **Total Tests**: Number of tests found
 - **Passed/Failed/Skipped**: Test results breakdown
 - **Coverage Percentage**: Code coverage achieved
@@ -190,6 +206,7 @@ Contains all validation results and metrics.
 - **Error Messages**: Detailed failure information
 
 ### Test-Code Relationship
+
 - **Test Coverage**: Percentage of code covered by tests
 - **Assertion Quality**: Quality score of test assertions (0-10)
 - **Mock Usage**: Whether mocks are used appropriately
@@ -197,6 +214,7 @@ Contains all validation results and metrics.
 - **Integration/Unit Test Counts**: Breakdown of test types
 
 ### LangChain Compliance
+
 - **LCEL Usage**: Whether LangChain Expression Language is used
 - **Error Handling Score**: Quality of error handling (0-10)
 - **State Management Score**: Quality of state management (0-10)
@@ -215,7 +233,8 @@ The validator assigns risk levels based on overall scores:
 
 ## Integration with Code Validator
 
-The test suite integrates seamlessly with the existing `code_validator.py` framework:
+The test suite integrates seamlessly with the existing `code_validator.py`
+framework:
 
 ```python
 from src.code_validator import validate_generated_code
@@ -238,13 +257,15 @@ report = generate_test_suite_report(
 
 ### Environment Variables
 
-- `TEST_EXECUTION_TIMEOUT`: Maximum execution time in milliseconds (default: 30000)
+- `TEST_EXECUTION_TIMEOUT`: Maximum execution time in milliseconds
+  (default: 30000)
 - `TEST_MEMORY_LIMIT`: Memory limit for execution (default: 256MB)
 - `TS_EXECUTION_TIMEOUT`: TypeScript execution timeout (default: 5000)
 
 ### Jest Configuration
 
 The validator automatically configures Jest with:
+
 - TypeScript support via `ts-jest`
 - Coverage collection and reporting
 - 30-second test timeout
@@ -261,6 +282,7 @@ See `src/test_suite_examples.py` for comprehensive examples including:
 - Advanced configuration options
 
 Run examples with:
+
 ```bash
 python src/test_suite_examples.py
 ```
@@ -288,21 +310,25 @@ python src/test_suite_examples.py
 ### Common Issues
 
 **Code execution fails:**
+
 - Check for syntax errors in generated code
 - Ensure all dependencies are available
 - Review timeout settings
 
 **Tests not running:**
+
 - Verify Jest is installed globally
 - Check test file syntax
 - Ensure proper TypeScript configuration
 
 **Low coverage scores:**
+
 - Add more comprehensive tests
 - Include edge cases and error scenarios
 - Test all code paths
 
 **LangChain compliance issues:**
+
 - Use LCEL patterns for chaining
 - Implement proper error handling
 - Follow state management best practices
@@ -329,4 +355,5 @@ When adding new validation features:
 
 ## License
 
-This module is part of the Obsidian Timestamp Utility project and follows the same license terms.
+This module is part of the Obsidian Timestamp Utility project and follows the
+same license terms.

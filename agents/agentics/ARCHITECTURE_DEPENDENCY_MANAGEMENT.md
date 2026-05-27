@@ -1,22 +1,44 @@
 # Agentics Architecture: Automatic Dependency Management
 
 ## Current Issues
-1. **Missing Dependency Detection in Generated Code**: [`dependency_analyzer_agent.py`](agents/agentics/src/dependency_analyzer_agent.py) scans only existing `src/` files, missing imports in `generated_code` and `generated_tests` (in state).
-2. **No Automatic Installation**: Analyzer proposes `state['proposed_js_deps']` but no agent applies them to `package.json` or runs `npm install`.
-3. **Test Failures from Missing Deps**: Post-test errors like \"Cannot find module '@uuid/uuid'\" not handled by dependency recovery (e.g., Phase 3 error recovery in [`ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md)).
-4. **Workflow Timing**: Analyzer runs too early (after issue processing); should run post-generation/integration.
+
+1. **Missing Dependency Detection in Generated Code**:
+   [`dependency_analyzer_agent.py`](agents/agentics/src/dependency_analyzer_agent.py)
+   scans only existing `src/` files, missing imports in `generated_code` and
+   `generated_tests` (in state).
+2. **No Automatic Installation**: Analyzer proposes `state['proposed_js_deps']`
+   but no agent applies them to `package.json` or runs `npm install`.
+3. **Test Failures from Missing Deps**: Post-test errors like \"Cannot find
+   module '@uuid/uuid'\" not handled by dependency recovery (e.g., Phase 3 error
+   recovery in
+   [`ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md)).
+4. **Workflow Timing**: Analyzer runs too early (after issue processing); should
+   run post-generation/integration.
 
 ## Proposed Architecture
-Aligns with Phase 4 (npm tools) of [`ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md): Extend tool-integrated agents for dependency lifecycle.
+
+Aligns with Phase 4 (npm tools) of
+[`ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md): Extend
+tool-integrated agents for dependency lifecycle.
 
 ### Core Principles
-- **Proactive + Reactive**: Scan generated code pre-tests; recover from test errors.
-- **Immutable State**: Extend [`CodeGenerationState`](agents/agentics/src/state.py) with `proposed_js_deps`, `deps_updated`, `missing_modules`.
-- **Tool Integration**: Use existing [`npm_search_tool`](agents/agentics/src/tools.py), [`npm_install_tool`](agents/agentics/src/tools.py), [`read_file_tool`](agents/agentics/src/tools.py), [`write_file_tool`](agents/agentics/src/tools.py).
+
+- **Proactive + Reactive**: Scan generated code pre-tests; recover from test
+  errors.
+- **Immutable State**: Extend
+  [`CodeGenerationState`](agents/agentics/src/state.py) with `proposed_js_deps`,
+  `deps_updated`, `missing_modules`.
+- **Tool Integration**: Use existing
+  [`npm_search_tool`](agents/agentics/src/tools.py),
+  [`npm_install_tool`](agents/agentics/src/tools.py),
+  [`read_file_tool`](agents/agentics/src/tools.py),
+  [`write_file_tool`](agents/agentics/src/tools.py).
 - **Semver Safety**: Use `^latest-minor` via `npm_search_tool`.
 
 ### 1. Enhanced Detection: [`dependency_analyzer_agent.py`](agents/agentics/src/dependency_analyzer_agent.py)
-Extend to parse `state['generated_code']`, `state['generated_tests']`, + `src/` files.
+
+Extend to parse `state['generated_code']`, `state['generated_tests']`, + `src/`
+files.
 
 ```python
 # In process() (~line 73), after existing src/ scan:
@@ -45,6 +67,7 @@ state['missing_modules'] = list(missing_deps)  # For error recovery
 ```
 
 ### 2. Application: New [`DependencyManagerAgent`](agents/agentics/src/dependency_manager_agent.py) (ToolIntegratedAgent)
+
 ```python
 class DependencyManagerAgent(ToolIntegratedAgent):
     def __init__(self, llm_reasoning):
@@ -78,6 +101,7 @@ class DependencyManagerAgent(ToolIntegratedAgent):
 ```
 
 ### 3. State Extensions [`state.py`](agents/agentics/src/state.py)
+
 ```python
 @dataclass(frozen=True)
 class CodeGenerationState:
@@ -99,10 +123,14 @@ class CodeGenerationState:
     def with_new_deps(self, deps: List[str]) -> 'CodeGenerationState':
         return CodeGenerationState(**{k:v for k,v in self.__dict__.items() if k != 'new_deps'}, new_deps=deps)
 ```
+
 Update adapters.
 
 ### 4. Error Recovery Enhancements
-- [`post_test_runner_agent.py`](agents/agentics/src/post_test_runner_agent.py): Extend `parse_test_errors` for module errors.
+
+- [`post_test_runner_agent.py`](agents/agentics/src/post_test_runner_agent.py):
+  Extend `parse_test_errors` for module errors.
+
 ```python
 def parse_test_errors(self, log_path: str) -> List[Dict]:
     # Existing TS errors...
@@ -114,7 +142,9 @@ def parse_test_errors(self, log_path: str) -> List[Dict]:
     return errors + [{'type': 'module', 'module': m} for m in modules]
 ```
 
-- [`error_recovery_agent.py`](agents/agentics/src/error_recovery_agent.py): Add strategy.
+- [`error_recovery_agent.py`](agents/agentics/src/error_recovery_agent.py): Add
+  strategy.
+
 ```python
 # In _initialize_recovery_strategies():
 \"POST_TEST_RUNNER\": {
@@ -135,7 +165,9 @@ def _test_failure_recovery_or_deps(self, state, error_context, original_error):
 ```
 
 ### 5. Workflow Integration [`composable_workflows.py`](agents/agentics/src/composable_workflows.py)
+
 - Invoke analyzer post-code_gen/integration, pre-pre_test.
+
 ```python
 # In _create_full_workflow():
 graph.add_node(\"dependency_management\", dependency_management_node)  # Analyzer + Manager chain
@@ -153,50 +185,68 @@ def dependency_management_node(state):
     result_state = CodeGenerationStateToStateAdapter().invoke(cg_state)
     return result_state
 ```
+
 - Register new agents in `_register_agents()`.
 
 ### Updated Workflow Diagram
+
 ```mermaid
 graph TD
     subgraph \"Issue Processing\"
         Fetch --> Clarify --> Plan --> Extract
     end
-    
+
     subgraph \"Code Gen\"
         Extract --> Collab[CollaborativeGenerator]
         Collab --> Validate --> Integrate[CodeIntegrator]
     end
-    
+
     Integrate --> Deps[DependencyAnalyzer + Manager]
     Deps --> PreTest[PreTestRunner tsc--noEmit]
     PreTest --> PostTest[PostTestRunner npm test]
-    
+
     PostTest -->|Pass| Review
     PostTest -->|Fail + Missing Modules| Recovery[ErrorRecovery - Deps + Fixes]
     Recovery -->|<3 attempts| Integrate
-    
+
     Review --> Output --> Success
     Recovery -->|Max| HITL
 ```
 
 ## Implementation Plan
+
 #### Phase 1: State + Detection
+
 1. Extend [`state.py`](agents/agentics/src/state.py) with fields + methods.
-2. Enhance [`dependency_analyzer_agent.py`](agents/agentics/src/dependency_analyzer_agent.py) for generated code scanning.
+2. Enhance
+   [`dependency_analyzer_agent.py`](agents/agentics/src/dependency_analyzer_agent.py)
+   for generated code scanning.
 
 #### Phase 2: Manager + Recovery
-1. Create [`dependency_manager_agent.py`](agents/agentics/src/dependency_manager_agent.py).
-2. Extend [`post_test_runner_agent.py`](agents/agentics/src/post_test_runner_agent.py) + [`error_recovery_agent.py`](agents/agentics/src/error_recovery_agent.py).
+
+1. Create
+   [`dependency_manager_agent.py`](agents/agentics/src/dependency_manager_agent.py).
+2. Extend
+   [`post_test_runner_agent.py`](agents/agentics/src/post_test_runner_agent.py) +
+   [`error_recovery_agent.py`](agents/agentics/src/error_recovery_agent.py).
 
 #### Phase 3: Workflow + Tests
-1. Integrate into [`composable_workflows.py`](agents/agentics/src/composable_workflows.py).
-2. Add unit tests: `tests/unit/test_dependency_analyzer_agent_unit.py`, `tests/integration/test_npm_tools_integration.py`.
-3. Integration: Simulate generated code with `@uuid/uuid`, verify install + state.
+
+1. Integrate into
+   [`composable_workflows.py`](agents/agentics/src/composable_workflows.py).
+2. Add unit tests: `tests/unit/test_dependency_analyzer_agent_unit.py`,
+   `tests/integration/test_npm_tools_integration.py`.
+3. Integration: Simulate generated code with `@uuid/uuid`, verify install +
+   state.
 
 ## Risks & Mitigations
-- **NPM Version Resolution**: Use `npm_search_tool` for `^latest`; fallback to `latest` if fails.
-- **Peer Deps Conflicts**: Manager LLM-prompt to resolve (add peer check via `npm ls`).
-- **Lockfile Drift**: Run `npm install` post-write; ignore lockfile changes in tests.
+
+- **NPM Version Resolution**: Use `npm_search_tool` for `^latest`; fallback to
+  `latest` if fails.
+- **Peer Deps Conflicts**: Manager LLM-prompt to resolve (add peer check via
+  `npm ls`).
+- **Lockfile Drift**: Run `npm install` post-write; ignore lockfile changes in
+  tests.
 - **Non-NPM Deps**: Filter regex to npm-style (`@scope/name`).
 - **Performance**: Cache `npm_search` (existing LRU); limit to top 10 missing.
 

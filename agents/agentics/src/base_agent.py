@@ -10,11 +10,16 @@ from .state import CodeGenerationState
 from dataclasses import asdict, is_dataclass
 from .config import LOGGER_LEVEL
 from .circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
-from .monitoring import structured_log, track_agent_execution, record_circuit_breaker_state
+from .monitoring import (
+    structured_log,
+    track_agent_execution,
+    record_circuit_breaker_state,
+)
 
 
 class AgentType(Enum):
     """Agent types for recovery strategies"""
+
     CODE_GENERATOR = "code_generator"
     TEST_GENERATOR = "test_generator"
     CODE_INTEGRATOR = "code_integrator"
@@ -31,7 +36,9 @@ class BaseAgent(Runnable[CodeGenerationState, CodeGenerationState]):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(LOGGER_LEVEL)
         self.agent_type = self._get_agent_type()
-        self.circuit_breaker = get_circuit_breaker(self.name, **self._get_circuit_breaker_config())
+        self.circuit_breaker = get_circuit_breaker(
+            self.name, **self._get_circuit_breaker_config()
+        )
         self.monitor = structured_log(name)
         self.monitor.setLevel(LOGGER_LEVEL)
 
@@ -57,14 +64,24 @@ class BaseAgent(Runnable[CodeGenerationState, CodeGenerationState]):
             AgentType.TEST_GENERATOR: {"failure_threshold": 3, "recovery_timeout": 30},
             AgentType.CODE_INTEGRATOR: {"failure_threshold": 2, "recovery_timeout": 15},
             AgentType.CODE_REVIEWER: {"failure_threshold": 2, "recovery_timeout": 30},
-            AgentType.DEPENDENCY_ANALYZER: {"failure_threshold": 2, "recovery_timeout": 15},
+            AgentType.DEPENDENCY_ANALYZER: {
+                "failure_threshold": 2,
+                "recovery_timeout": 15,
+            },
             AgentType.FETCH_ISSUE: {"failure_threshold": 5, "recovery_timeout": 60},
             AgentType.TICKET_CLARITY: {"failure_threshold": 3, "recovery_timeout": 30},
-            AgentType.IMPLEMENTATION_PLANNER: {"failure_threshold": 3, "recovery_timeout": 30},
+            AgentType.IMPLEMENTATION_PLANNER: {
+                "failure_threshold": 3,
+                "recovery_timeout": 30,
+            },
         }
-        return configs.get(self.agent_type, {"failure_threshold": 5, "recovery_timeout": 60})  # Default
+        return configs.get(
+            self.agent_type, {"failure_threshold": 5, "recovery_timeout": 60}
+        )  # Default
 
-    def invoke(self, input: CodeGenerationState, config: Optional[RunnableConfig] = None) -> CodeGenerationState:
+    def invoke(
+        self, input: CodeGenerationState, config: Optional[RunnableConfig] = None
+    ) -> CodeGenerationState:
         return self(input)
 
     @track_agent_execution("base_agent")
@@ -75,7 +92,9 @@ class BaseAgent(Runnable[CodeGenerationState, CodeGenerationState]):
             self.monitor.info("agent_complete", {"agent": self.name})
             return state
         except CircuitBreakerOpenException as e:
-            self.monitor.error("circuit_breaker_open", {"agent": self.name, "error": str(e)})
+            self.monitor.error(
+                "circuit_breaker_open", {"agent": self.name, "error": str(e)}
+            )
             raise
         except Exception as e:
             error_context = self._create_error_context(state, e)
@@ -91,7 +110,9 @@ class BaseAgent(Runnable[CodeGenerationState, CodeGenerationState]):
         log_method = getattr(self.monitor, level.lower(), self.monitor.info)
         log_method(event, data)
 
-    def _create_error_context(self, state: CodeGenerationState, exception: Exception) -> Dict[str, Any]:
+    def _create_error_context(
+        self, state: CodeGenerationState, exception: Exception
+    ) -> Dict[str, Any]:
         """Create detailed error context with state snapshot."""
         if is_dataclass(state):
             state_dict = asdict(state)
@@ -102,13 +123,22 @@ class BaseAgent(Runnable[CodeGenerationState, CodeGenerationState]):
             "error_message": str(exception),
             "state_snapshot": {
                 "url": state_dict.get("issue_url") or state_dict.get("url", ""),
-                "ticket_content_length": len(str(state_dict.get("ticket_content") or "")),
+                "ticket_content_length": len(
+                    str(state_dict.get("ticket_content") or "")
+                ),
                 "result_keys": list((state_dict.get("result") or {}).keys()),
-                "generated_code_length": len(str(state_dict.get("generated_code") or "")),
-                "generated_tests_length": len(str(state_dict.get("generated_tests") or "")),
-                "relevant_files_count": len(state_dict.get("relevant_code_files", []) or []) + len(state_dict.get("relevant_test_files", []) or [])
+                "generated_code_length": len(
+                    str(state_dict.get("generated_code") or "")
+                ),
+                "generated_tests_length": len(
+                    str(state_dict.get("generated_tests") or "")
+                ),
+                "relevant_files_count": len(
+                    state_dict.get("relevant_code_files", []) or []
+                )
+                + len(state_dict.get("relevant_test_files", []) or []),
             },
-            "traceback": None  # Could add full traceback if needed
+            "traceback": None,  # Could add full traceback if needed
         }
 
     def process(self, state: CodeGenerationState) -> CodeGenerationState:

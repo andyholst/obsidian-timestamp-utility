@@ -12,3 +12,5 @@ tenacity
 pydantic
 watchdog
 pytest-asyncio
+ruff
+black

@@ -2,6 +2,7 @@ import logging
 import json
 from .utils import log_info
 
+
 class ModularPrompts:
     """Modular prompt components following LangChain best practices."""
 
@@ -26,9 +27,11 @@ class ModularPrompts:
         return f"1. **Existing Code Structure:**\n - Classes: {code_structure}\n - The plugin class extends `obsidian.Plugin`.\n - Commands are added in the `onload` method using `this.addCommand`.\n - Helper functions and modals may be defined outside the class.\n\n"
 
     @staticmethod
-    def get_code_requirements_section(raw_refined_ticket: str = "", original_ticket_content: str = ""):
+    def get_code_requirements_section(
+        raw_refined_ticket: str = "", original_ticket_content: str = ""
+    ):
         base = (
-            "2. **New Code Requirements:**\n"
+            "2. **New Code Requirements:\n"
             " - Add a new public method to the plugin class with a name derived from the task title.\n"
             " - The method should have the signature: public {method_name}(): string if no input param needed (e.g., generators). Otherwise public {method_name}(text?: string): string\n"
             " - Implement the method to process the text according to the task details, following the implementation steps, using the suggested npm packages, or implementing manually as noted. Handle null and undefined inputs by returning an empty string.\n"
@@ -45,15 +48,24 @@ class ModularPrompts:
             " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n"
         )
         if raw_refined_ticket:
-            formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
+            formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(
+                raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2)
+                if isinstance(raw_refined_ticket, dict)
+                else raw_refined_ticket
+            )
             base += f"\n\n{formatted_section}"
-            log_info("ModularPrompts", f"Raw refined ticket section: {formatted_section}")
-            log_info("ModularPrompts", f"Requirements from refined_ticket: {raw_refined_ticket.get('requirements', []) if isinstance(raw_refined_ticket, dict) else 'not dict'}")
+            log_info(
+                "ModularPrompts", f"Raw refined ticket section: {formatted_section}"
+            )
+            log_info(
+                "ModularPrompts",
+                f"Requirements from refined_ticket: {raw_refined_ticket.get('requirements', []) if isinstance(raw_refined_ticket, dict) else 'not dict'}",
+            )
             # Include full original content if preserved
-            if 'full_original_content' in raw_refined_ticket:
+            if "full_original_content" in raw_refined_ticket:
                 base += f"\n\nFull Original Ticket Content:\n{raw_refined_ticket['full_original_content']}"
         if original_ticket_content:
-            base += f"\n\nOriginal ticket content for reference: {original_ticket_content}. Use this if refined fields are incomplete."
+            base += f"\\n\\nOriginal ticket content for reference: {original_ticket_content}. Use this if refined fields are incomplete."
         return base
 
     @staticmethod
@@ -69,7 +81,9 @@ class ModularPrompts:
         )
 
     @staticmethod
-    def get_test_requirements_section(raw_refined_ticket: str = "", original_ticket_content: str = ""):
+    def get_test_requirements_section(
+        raw_refined_ticket: str = "", original_ticket_content: str = ""
+    ):
         base = (
             "IMPORTANT: For generated tests, EXACTLY match existing test style in src/__tests__/*.test.ts:\n"
             "- Use global describe, it, expect, beforeEach WITHOUT any import from 'jest'.\n"
@@ -87,20 +101,30 @@ class ModularPrompts:
             " - Do not access private methods or non-existent properties on the plugin.\n"
             " - Do not use jest.spyOn on plugin methods.\n"
             " - IMPORTANT: Do not use `plugin.commandIds` or any property access for command IDs; always use string literals like `'{command_id}'` in `mockCommands['{command_id}']`.\n"
-            "- Use `new TimestampPlugin(mockApp, {} as any)` matching existing tests. Mock `obsidian.Editor` completely: define `mockEditor` with **all** methods from Obsidian Editor API as `jest.fn()` - see [`src/__tests__/main.test.ts`](src/__tests__/main.test.ts:14) for exact mock (getDoc, refresh, setValue, replaceSelection, getValue, getLine, lineCount, etc. all `jest.fn()` with appropriate mocks like getValue: jest.fn(() => "")). Use `button.onclick = () => {}` for modals (lowercase). Match **EXACTLY** the method and command names specified in the Task Details and Generated Code sections. Follow [`src/__mocks__/obsidian.ts`](src/__mocks__/obsidian.ts) for other mocks.\n"
-             " - Tests must comprehensively cover code implementation. Ensure code satisfies all acceptance criteria exactly. If vague, default to basic command + method with app.workspace.currentFile notice.\n"
-             " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n\n"
+            "- Use `new TimestampPlugin(mockApp, {} as any)` matching existing tests. Mock `obsidian.Editor` completely: define `mockEditor` with **all** methods from Obsidian Editor API as `jest.fn()` - see [`src/__tests__/main.test.ts`](src/__tests__/main.test.ts:14) for exact mock (getDoc, refresh, setValue, replaceSelection, getValue, getLine, lineCount, etc. all `jest.fn()` with appropriate mocks like getValue: jest.fn(() => "
+            ")). Use `button.onclick = () => {}` for modals (lowercase). Match **EXACTLY** the method and command names specified in the Task Details and Generated Code sections. Follow [`src/__mocks__/obsidian.ts`](src/__mocks__/obsidian.ts) for other mocks.\n"
+            " - Tests must comprehensively cover code implementation. Ensure code satisfies all acceptance criteria exactly. If vague, default to basic command + method with app.workspace.currentFile notice.\n"
+            " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n\n"
         )
         if raw_refined_ticket:
-            formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
+            formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(
+                raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2)
+                if isinstance(raw_refined_ticket, dict)
+                else raw_refined_ticket
+            )
             base += f"\n\n{formatted_section}"
-            log_info("ModularPrompts", f"Raw refined ticket section: {formatted_section}")
-            log_info("ModularPrompts", f"Requirements from refined_ticket: {raw_refined_ticket.get('requirements', []) if isinstance(raw_refined_ticket, dict) else 'not dict'}")
+            log_info(
+                "ModularPrompts", f"Raw refined ticket section: {formatted_section}"
+            )
+            log_info(
+                "ModularPrompts",
+                f"Requirements from refined_ticket: {raw_refined_ticket.get('requirements', []) if isinstance(raw_refined_ticket, dict) else 'not dict'}",
+            )
             # Include full original content if preserved
-            if 'full_original_content' in raw_refined_ticket:
+            if "full_original_content" in raw_refined_ticket:
                 base += f"\n\nFull Original Ticket Content:\n{raw_refined_ticket['full_original_content']}"
         if original_ticket_content:
-            base += f"\n\nOriginal ticket content for reference: {original_ticket_content}. Use this if refined fields are incomplete."
+            base += f"\\n\\nOriginal ticket content for reference: {original_ticket_content}. Use this if refined fields are incomplete."
         return base
 
     @staticmethod
@@ -124,6 +148,7 @@ class ModularPrompts:
             " - MUST include 'describe(' and 'it(' or 'test(' keywords.\n"
             " - Valid Jest syntax only."
         )
+
     @staticmethod
     def get_raw_refined_ticket_section():
         return "**Full Raw Refined Ticket (JSON):**\n```json\n{raw_refined_ticket}\n```\n\n"
@@ -192,9 +217,22 @@ class ModularPrompts:
         )
 
     @staticmethod
-    def get_collaborative_generation_prompt(code_structure: str, test_structure: str, method_name: str, command_id: str, main_file: str, test_file: str, raw_refined_ticket: str = "", original_ticket_content: str = ""):
+    def get_collaborative_generation_prompt(
+        code_structure: str,
+        test_structure: str,
+        method_name: str,
+        command_id: str,
+        main_file: str,
+        test_file: str,
+        raw_refined_ticket: str = "",
+        original_ticket_content: str = "",
+    ):
         """Generate prompt for collaborative code and test generation."""
-        formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2) if isinstance(raw_refined_ticket, dict) else raw_refined_ticket)
+        formatted_section = ModularPrompts.get_raw_refined_ticket_section().format(
+            raw_refined_ticket=json.dumps(raw_refined_ticket, indent=2)
+            if isinstance(raw_refined_ticket, dict)
+            else raw_refined_ticket
+        )
         log_info("ModularPrompts", f"Raw refined ticket section: {formatted_section}")
         return (
             f"{ModularPrompts.get_base_instruction()}\n\n"

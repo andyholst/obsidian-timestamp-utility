@@ -5,8 +5,8 @@ from langchain.schema.runnable import Runnable
 from langchain.tools import Tool
 
 # Set required environment variables for imports
-os.environ.setdefault('PROJECT_ROOT', '/tmp')
-os.environ.setdefault('GITHUB_TOKEN', 'dummy')
+os.environ.setdefault("PROJECT_ROOT", "/tmp")
+os.environ.setdefault("GITHUB_TOKEN", "dummy")
 
 from src.agent_composer import AgentComposer, WorkflowConfig
 
@@ -95,7 +95,9 @@ class TestAgentComposer:
         agent2_name = "agent2"
         agent3_name = "agent3"
         workflow_name = "test_workflow"
-        config = WorkflowConfig(agent_names=[agent1_name, agent2_name, agent3_name], tool_names=[])
+        config = WorkflowConfig(
+            agent_names=[agent1_name, agent2_name, agent3_name], tool_names=[]
+        )
 
         mock_agent1 = MagicMock(spec=Runnable)
         mock_agent2 = MagicMock(spec=Runnable)
@@ -143,7 +145,9 @@ class TestAgentComposer:
     def test_create_workflow_invalid_agent_names(self, composer, mock_agent):
         """Test workflow creation with only invalid agent names."""
         workflow_name = "test_workflow"
-        config = WorkflowConfig(agent_names=["invalid_agent1", "invalid_agent2"], tool_names=[])
+        config = WorkflowConfig(
+            agent_names=["invalid_agent1", "invalid_agent2"], tool_names=[]
+        )
 
         with pytest.raises(ValueError, match="No valid agents found for workflow"):
             composer.create_workflow(workflow_name, config)
@@ -152,7 +156,10 @@ class TestAgentComposer:
         """Test workflow creation with some invalid agent names."""
         valid_agent_name = "valid_agent"
         workflow_name = "test_workflow"
-        config = WorkflowConfig(agent_names=["invalid_agent1", valid_agent_name, "invalid_agent2"], tool_names=[])
+        config = WorkflowConfig(
+            agent_names=["invalid_agent1", valid_agent_name, "invalid_agent2"],
+            tool_names=[],
+        )
 
         composer.register_agent(valid_agent_name, mock_agent)
 
@@ -183,12 +190,16 @@ class TestAgentComposer:
         # Should handle duplicates gracefully (agents list will have duplicates)
         assert len([a for a in config.agent_names if a in composer.agents]) == 2
 
-    def test_create_workflow_invalid_tool_names_ignored(self, composer, mock_agent, mock_tool):
+    def test_create_workflow_invalid_tool_names_ignored(
+        self, composer, mock_agent, mock_tool
+    ):
         """Test workflow creation ignores invalid tool names."""
         agent_name = "test_agent"
         valid_tool_name = "valid_tool"
         workflow_name = "test_workflow"
-        config = WorkflowConfig(agent_names=[agent_name], tool_names=[valid_tool_name, "invalid_tool"])
+        config = WorkflowConfig(
+            agent_names=[agent_name], tool_names=[valid_tool_name, "invalid_tool"]
+        )
 
         composer.register_agent(agent_name, mock_agent)
         composer.register_tool(valid_tool_name, mock_tool)

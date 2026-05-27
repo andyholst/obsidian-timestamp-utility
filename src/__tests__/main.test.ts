@@ -4,7 +4,7 @@ import * as obsidian from 'obsidian';
 const mockManifest: obsidian.PluginManifest = {
     id: 'obsidian-timestamp-utility',
     name: 'Timestamp Utility',
-    version: '0.4.9',
+    version: '0.4.10',
     minAppVersion: '0.15.0',
     description: 'Insert timestamps and rename files with timestamp prefixes.',
     author: 'Your Name',
@@ -73,6 +73,7 @@ const mockApp: obsidian.App = {
         trashFile: jest.fn(),
         processFrontMatter: jest.fn(),
         getAvailablePathForAttachment: jest.fn(() => Promise.resolve('')),
+        promptForDeletion: jest.fn(() => Promise.resolve(true)),
     },
     keymap: {} as any,
     scope: {} as any,
@@ -81,6 +82,9 @@ const mockApp: obsidian.App = {
     lastEvent: null as any,
     loadLocalStorage: jest.fn(() => null),
     saveLocalStorage: jest.fn(),
+    renderContext: {} as any,
+    secretStorage: {} as any,
+    isDarkMode: (() => false) as any,
 };
 
 const mockCommands: { [key: string]: obsidian.Command } = {};

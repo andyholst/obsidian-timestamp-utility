@@ -15,20 +15,20 @@ from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime
 
 # Add the src directory to the path to avoid importing the full package
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from code_validator import (
     TypeScriptValidator,
     CompilationResult,
     ExecutionResult,
-    TestResult,
-    TestValidator,
+    RunResult,
+    CodeValidator,
     LangChainValidator,
     QualityScorer,
     LLMCodeValidationPipeline,
     ValidationReport,
     RiskLevel,
-    ChainValidation
+    ChainValidation,
 )
 
 
@@ -42,12 +42,12 @@ class TestTypeScriptValidator:
 
     def test_validator_initialization(self, validator):
         """Test validator initialization with default config"""
-        assert validator.sandbox_config['timeout'] == 5000
-        assert validator.sandbox_config['memory_limit'] == '128MB'
-        assert validator.sandbox_config['network_disabled'] == True
-        assert validator.sandbox_config['filesystem_readonly'] == True
+        assert validator.sandbox_config["timeout"] == 5000
+        assert validator.sandbox_config["memory_limit"] == "128MB"
+        assert validator.sandbox_config["network_disabled"] == True
+        assert validator.sandbox_config["filesystem_readonly"] == True
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_compilation_success(self, mock_run, validator):
         """Test successful TypeScript compilation"""
         # Mock compilation success
@@ -67,14 +67,14 @@ class TestTypeScriptValidator:
         assert len(result.errors) == 0
         assert result.execution_time >= 0
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_compilation_with_errors(self, mock_run, validator):
         """Test TypeScript compilation with syntax errors"""
         # Mock compilation with errors
         mock_run.return_value = MagicMock(
             returncode=1,
             stdout="",
-            stderr="test.ts(2,10): error TS1003: Identifier expected."
+            stderr="test.ts(2,10): error TS1003: Identifier expected.",
         )
 
         invalid_code = """
@@ -91,14 +91,14 @@ class TestTypeScriptValidator:
         assert len(result.errors) > 0
         assert "Identifier expected" in result.errors[0]
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_compilation_with_warnings(self, mock_run, validator):
         """Test TypeScript compilation with warnings"""
         # Mock compilation with warnings
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="",
-            stderr="test.ts(3,5): warning TS6133: 'unusedVar' is declared but never used."
+            stderr="test.ts(3,5): warning TS6133: 'unusedVar' is declared but never used.",
         )
 
         code_with_warnings = """
@@ -116,7 +116,7 @@ class TestTypeScriptValidator:
         assert len(result.warnings) > 0
         assert "never used" in result.warnings[0]
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_compilation_tsc_not_found(self, mock_run, validator):
         """Test compilation when TypeScript compiler is not found"""
         mock_run.side_effect = FileNotFoundError("tsc command not found")
@@ -129,11 +129,11 @@ class TestTypeScriptValidator:
         assert len(result.errors) > 0
         assert "TypeScript compiler not found" in result.errors[0]
 
-    @patch('code_validator.subprocess.run')
-    @patch('code_validator.subprocess.TimeoutExpired')
+    @patch("code_validator.subprocess.run")
+    @patch("code_validator.subprocess.TimeoutExpired")
     def test_validate_compilation_timeout(self, mock_timeout, mock_run, validator):
         """Test compilation timeout handling"""
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd=['npx', 'tsc'], timeout=30)
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd=["npx", "tsc"], timeout=30)
 
         code = "export const test = 'hello';"
 
@@ -143,10 +143,12 @@ class TestTypeScriptValidator:
         assert len(result.errors) > 0
         assert "Compilation timeout" in result.errors[0]
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_runtime_safety_success(self, mock_run, validator):
         """Test successful runtime safety validation"""
-        mock_run.return_value = MagicMock(returncode=0, stdout="Code executed successfully", stderr="")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="Code executed successfully", stderr=""
+        )
         code = """
         export function calculate(a, b) {
             return a + b;
@@ -161,13 +163,13 @@ class TestTypeScriptValidator:
         assert result.execution_time >= 0
         assert result.timeout == False
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_runtime_safety_with_errors(self, mock_run, validator):
         """Test runtime safety validation with execution errors"""
         mock_run.return_value = MagicMock(
             returncode=1,
             stdout="",
-            stderr="ReferenceError: undefinedVar is not defined"
+            stderr="ReferenceError: undefinedVar is not defined",
         )
 
         code = """
@@ -182,10 +184,10 @@ class TestTypeScriptValidator:
         assert "undefinedVar is not defined" in result.errors
         assert result.timeout == False
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_runtime_safety_timeout(self, mock_run, validator):
         """Test runtime safety validation timeout"""
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd=['node'], timeout=5)
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd=["node"], timeout=5)
 
         code = """
         export function infiniteLoop(): void {
@@ -199,13 +201,11 @@ class TestTypeScriptValidator:
         assert result.timeout == True
         assert result.execution_time >= 0
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_validate_runtime_safety_sandbox_prevention(self, mock_run, validator):
         """Test that sandbox prevents dangerous operations"""
         mock_run.return_value = MagicMock(
-            returncode=1,
-            stdout="",
-            stderr="Error: Module not allowed: fs"
+            returncode=1, stdout="", stderr="Error: Module not allowed: fs"
         )
 
         code = """
@@ -237,10 +237,10 @@ class TestTypeScriptValidator:
 
         analysis = validator.analyze_types(code)
 
-        assert 'any_types' in analysis
-        assert 'null_checks' in analysis
-        assert 'generic_usage' in analysis
-        assert 'interface_compliance' in analysis
+        assert "any_types" in analysis
+        assert "null_checks" in analysis
+        assert "generic_usage" in analysis
+        assert "interface_compliance" in analysis
 
     def test_analyze_types_with_any(self, validator):
         """Test type analysis with 'any' types"""
@@ -252,7 +252,7 @@ class TestTypeScriptValidator:
 
         analysis = validator.analyze_types(code)
 
-        assert analysis['any_types'] == 2  # data parameter and return type
+        assert analysis["any_types"] == 2  # data parameter and return type
 
     def test_analyze_types_with_null_checks(self, validator):
         """Test type analysis with null checks"""
@@ -267,7 +267,7 @@ class TestTypeScriptValidator:
 
         analysis = validator.analyze_types(code)
 
-        assert analysis['null_checks'] >= 2  # !== null and !== undefined
+        assert analysis["null_checks"] >= 2  # !== null and !== undefined
 
     def test_analyze_types_with_generics(self, validator):
         """Test type analysis with generics"""
@@ -284,7 +284,7 @@ class TestTypeScriptValidator:
 
         analysis = validator.analyze_types(code)
 
-        assert analysis['generic_usage'] >= 2  # <T> in interface and function
+        assert analysis["generic_usage"] >= 2  # <T> in interface and function
 
     def test_analyze_types_with_interfaces(self, validator):
         """Test type analysis with interface implementation"""
@@ -302,22 +302,21 @@ class TestTypeScriptValidator:
 
         analysis = validator.analyze_types(code)
 
-        assert analysis['interface_compliance'] >= 1  # implements Service
+        assert analysis["interface_compliance"] >= 1  # implements Service
 
-
-    @patch('code_validator.os.getenv')
+    @patch("code_validator.os.getenv")
     def test_sandbox_config_from_environment(self, mock_getenv, validator):
         """Test that sandbox config reads from environment variables"""
         mock_getenv.side_effect = lambda key, default: {
-            'TS_EXECUTION_TIMEOUT': '10000',
-            'TS_MEMORY_LIMIT': '256MB'
+            "TS_EXECUTION_TIMEOUT": "10000",
+            "TS_MEMORY_LIMIT": "256MB",
         }.get(key, default)
 
         # Create new validator to test initialization
         new_validator = TypeScriptValidator()
 
-        assert new_validator.sandbox_config['timeout'] == 10000
-        assert new_validator.sandbox_config['memory_limit'] == '256MB'
+        assert new_validator.sandbox_config["timeout"] == 10000
+        assert new_validator.sandbox_config["memory_limit"] == "256MB"
 
 
 class TestCompilationResult:
@@ -326,10 +325,7 @@ class TestCompilationResult:
     def test_compilation_result_success(self):
         """Test successful compilation result"""
         result = CompilationResult(
-            success=True,
-            errors=[],
-            warnings=[],
-            execution_time=1.5
+            success=True, errors=[], warnings=[], execution_time=1.5
         )
 
         assert result.success == True
@@ -343,10 +339,7 @@ class TestCompilationResult:
         warnings = ["Unused variable"]
 
         result = CompilationResult(
-            success=False,
-            errors=errors,
-            warnings=warnings,
-            execution_time=2.0
+            success=False, errors=errors, warnings=warnings, execution_time=2.0
         )
 
         assert result.success == False
@@ -366,7 +359,7 @@ class TestExecutionResult:
             errors="",
             execution_time=0.5,
             memory_used=1024,
-            timeout=False
+            timeout=False,
         )
 
         assert result.success == True
@@ -383,7 +376,7 @@ class TestExecutionResult:
             output="",
             errors="ReferenceError: x is not defined",
             execution_time=1.2,
-            timeout=False
+            timeout=False,
         )
 
         assert result.success == False
@@ -399,7 +392,7 @@ class TestIntegrationScenarios:
         """Fixture for TypeScriptValidator"""
         return TypeScriptValidator()
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_complete_validation_workflow_valid_code(self, mock_run, validator):
         """Test complete validation workflow with valid TypeScript code"""
         # Mock compilation success
@@ -442,8 +435,8 @@ class TestIntegrationScenarios:
 
         # Test type analysis
         type_analysis = validator.analyze_types(valid_code)
-        assert type_analysis['interface_compliance'] == 0
-        assert type_analysis['null_checks'] >= 1
+        assert type_analysis["interface_compliance"] == 0
+        assert type_analysis["null_checks"] >= 1
 
     def test_validation_workflow_invalid_code(self, validator):
         """Test validation workflow with invalid TypeScript code"""
@@ -494,15 +487,15 @@ class TestIntegrationScenarios:
         special_result = validator.validate_compilation(special_code)
         # Should handle Unicode properly
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_error_recovery(self, mock_run, validator):
         """Test error recovery and graceful degradation"""
 
         # Simulate various failure modes
         failure_modes = [
             FileNotFoundError("Command not found"),
-            subprocess.TimeoutExpired(cmd=['node'], timeout=5),
-            Exception("Unexpected error")
+            subprocess.TimeoutExpired(cmd=["node"], timeout=5),
+            Exception("Unexpected error"),
         ]
 
         test_code = "export const test = 42;"
@@ -527,7 +520,7 @@ class TestTypeScriptValidatorRobustness:
         """Fixture for TypeScriptValidator"""
         return TypeScriptValidator()
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_concurrent_validation_calls(self, mock_run, validator):
         """Test that multiple validation calls work concurrently"""
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -542,15 +535,15 @@ class TestTypeScriptValidatorRobustness:
         assert result1.success == True
         assert result2.success == True
 
-    @patch('code_validator.tempfile.NamedTemporaryFile')
+    @patch("code_validator.tempfile.NamedTemporaryFile")
     def test_file_permission_issues(self, mock_temp_file, validator):
         """Test handling of file permission issues"""
         # Simulate permission denied
         mock_file = MagicMock()
-        mock_file.name = '/tmp/test.ts'
+        mock_file.name = "/tmp/test.ts"
         mock_temp_file.return_value.__enter__.return_value = mock_file
 
-        with patch('builtins.open', mock_open()) as mock_file_open:
+        with patch("builtins.open", mock_open()) as mock_file_open:
             mock_file_open.side_effect = PermissionError("Permission denied")
 
             result = validator.validate_compilation("export const test = 1;")
@@ -561,27 +554,22 @@ class TestTypeScriptValidatorRobustness:
     def test_memory_limits_configuration(self, validator):
         """Test memory limit configuration parsing"""
         # Test with different memory formats
-        test_cases = [
-            ('64MB', 64),
-            ('128MB', 128),
-            ('256MB', 256),
-            ('512MB', 512)
-        ]
+        test_cases = [("64MB", 64), ("128MB", 128), ("256MB", 256), ("512MB", 512)]
 
         for mem_limit, expected_mb in test_cases:
             # This would be tested by checking the subprocess call arguments
             # in a more integrated test
-            assert mem_limit.endswith('MB')
+            assert mem_limit.endswith("MB")
             assert int(mem_limit[:-2]) == expected_mb
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_subprocess_error_handling(self, mock_run, validator):
         """Test comprehensive subprocess error handling"""
         error_scenarios = [
             (FileNotFoundError("tsc not found"), "TypeScript compiler not found"),
-            (subprocess.TimeoutExpired(['npx', 'tsc'], 30), "Compilation timeout"),
+            (subprocess.TimeoutExpired(["npx", "tsc"], 30), "Compilation timeout"),
             (OSError("System error"), "Compilation failed"),
-            (Exception("Unexpected"), "Compilation failed")
+            (Exception("Unexpected"), "Compilation failed"),
         ]
 
         for exception, expected_error in error_scenarios:
@@ -591,6 +579,8 @@ class TestTypeScriptValidatorRobustness:
 
             assert result.success == False
             assert any(expected_error in error for error in result.errors)
+
+
 class TestLLMCodeValidationPipeline:
     """Unit tests for LLMCodeValidationPipeline class"""
 
@@ -602,31 +592,47 @@ class TestLLMCodeValidationPipeline:
     def test_pipeline_initialization(self, pipeline):
         """Test pipeline initialization"""
         assert isinstance(pipeline.ts_validator, TypeScriptValidator)
-        assert isinstance(pipeline.test_validator, TestValidator)
+        assert isinstance(pipeline.test_validator, CodeValidator)
         assert isinstance(pipeline.pattern_validator, LangChainValidator)
         assert isinstance(pipeline.quality_scorer, QualityScorer)
 
-    @patch('code_validator.TypeScriptValidator.validate_compilation')
-    @patch('code_validator.TypeScriptValidator.validate_runtime_safety')
-    @patch('code_validator.TestValidator.run_tests')
-    @patch('code_validator.LangChainValidator.validate_patterns')
-    @patch('code_validator.QualityScorer.calculate_score')
-    @patch('code_validator.QualityScorer.assess_risk')
-    def test_validate_typescript_code_success(self, mock_assess_risk, mock_calculate_score,
-                                          mock_validate_patterns, mock_run_tests,
-                                          mock_validate_runtime, mock_validate_compilation, pipeline):
+    @patch("code_validator.TypeScriptValidator.validate_compilation")
+    @patch("code_validator.TypeScriptValidator.validate_runtime_safety")
+    @patch("code_validator.CodeValidator.run_tests")
+    @patch("code_validator.LangChainValidator.validate_patterns")
+    @patch("code_validator.QualityScorer.calculate_score")
+    @patch("code_validator.QualityScorer.assess_risk")
+    def test_validate_typescript_code_success(
+        self,
+        mock_assess_risk,
+        mock_calculate_score,
+        mock_validate_patterns,
+        mock_run_tests,
+        mock_validate_runtime,
+        mock_validate_compilation,
+        pipeline,
+    ):
         """Test successful TypeScript code validation"""
         # Setup mocks
-        mock_validate_compilation.return_value = CompilationResult(success=True, errors=[], warnings=[])
-        mock_validate_runtime.return_value = ExecutionResult(success=True, output="Success")
-        mock_run_tests.return_value = TestResult(success=True, passed_count=5, test_count=5, coverage={'total': {'lines': {'pct': 80.0}}})
+        mock_validate_compilation.return_value = CompilationResult(
+            success=True, errors=[], warnings=[]
+        )
+        mock_validate_runtime.return_value = ExecutionResult(
+            success=True, output="Success"
+        )
+        mock_run_tests.return_value = RunResult(
+            success=True,
+            passed_count=5,
+            test_count=5,
+            coverage={"total": {"lines": {"pct": 80.0}}},
+        )
         mock_validate_patterns.return_value = ChainValidation(composability_score=8.0)
         mock_calculate_score.return_value = 88.0
         mock_assess_risk.return_value = RiskLevel.LOW
 
         code = "export class Test {}"
         tests = "describe('test', () => { it('works', () => {}); });"
-        context = {'is_agentics_code': True}
+        context = {"is_agentics_code": True}
 
         result = pipeline.validate_typescript_code(code, tests, context)
 
@@ -642,15 +648,20 @@ class TestLLMCodeValidationPipeline:
         mock_calculate_score.assert_called_once()
         mock_assess_risk.assert_called_once()
 
-    @patch('code_validator.TypeScriptValidator.validate_compilation')
-    @patch('code_validator.TypeScriptValidator.validate_runtime_safety')
-    @patch('code_validator.TestValidator.run_tests')
-    def test_validate_typescript_code_compilation_failure(self, mock_run_tests, mock_validate_runtime,
-                                                        mock_validate_compilation, pipeline):
+    @patch("code_validator.TypeScriptValidator.validate_compilation")
+    @patch("code_validator.TypeScriptValidator.validate_runtime_safety")
+    @patch("code_validator.CodeValidator.run_tests")
+    def test_validate_typescript_code_compilation_failure(
+        self, mock_run_tests, mock_validate_runtime, mock_validate_compilation, pipeline
+    ):
         """Test validation when compilation fails"""
         # Setup mocks
-        mock_validate_compilation.return_value = CompilationResult(success=False, errors=["Syntax error"])
-        mock_validate_runtime.return_value = ExecutionResult(success=False, errors="Compilation failed")
+        mock_validate_compilation.return_value = CompilationResult(
+            success=False, errors=["Syntax error"]
+        )
+        mock_validate_runtime.return_value = ExecutionResult(
+            success=False, errors="Compilation failed"
+        )
 
         code = "invalid syntax {{{"
         tests = "describe('test', () => {});"
@@ -662,65 +673,87 @@ class TestLLMCodeValidationPipeline:
         assert result.overall_score < 50  # Should be low due to failure
         assert result.risk_level in [RiskLevel.HIGH, RiskLevel.CRITICAL]
 
-    @patch('code_validator.TypeScriptValidator.validate_compilation')
-    @patch('code_validator.TypeScriptValidator.validate_runtime_safety')
-    @patch('code_validator.TestValidator.run_tests')
-    @patch('code_validator.LangChainValidator.validate_patterns')
-    def test_validate_typescript_code_with_agentics_context(self, mock_validate_patterns, mock_run_tests,
-                                                           mock_validate_runtime, mock_validate_compilation, pipeline):
+    @patch("code_validator.TypeScriptValidator.validate_compilation")
+    @patch("code_validator.TypeScriptValidator.validate_runtime_safety")
+    @patch("code_validator.CodeValidator.run_tests")
+    @patch("code_validator.LangChainValidator.validate_patterns")
+    def test_validate_typescript_code_with_agentics_context(
+        self,
+        mock_validate_patterns,
+        mock_run_tests,
+        mock_validate_runtime,
+        mock_validate_compilation,
+        pipeline,
+    ):
         """Test validation with agentics code context"""
         # Setup mocks
         mock_validate_compilation.return_value = CompilationResult(success=True)
         mock_validate_runtime.return_value = ExecutionResult(success=True)
-        mock_run_tests.return_value = TestResult(success=True, coverage={'total': {'lines': {'pct': 90.0}}})
-        mock_validate_patterns.return_value = ChainValidation(uses_lcel=True, composability_score=9.0)
+        mock_run_tests.return_value = RunResult(
+            success=True, coverage={"total": {"lines": {"pct": 90.0}}}
+        )
+        mock_validate_patterns.return_value = ChainValidation(
+            uses_lcel=True, composability_score=9.0
+        )
 
         code = "export class Agent {}"
         tests = "describe('agent', () => {});"
-        context = {'is_agentics_code': True}
+        context = {"is_agentics_code": True}
 
         result = pipeline.validate_typescript_code(code, tests, context)
 
         mock_validate_patterns.assert_called_once_with(code)
 
-    @patch('code_validator.TypeScriptValidator.validate_compilation')
-    @patch('code_validator.TypeScriptValidator.validate_runtime_safety')
-    @patch('code_validator.TestValidator.run_tests')
-    def test_validate_typescript_code_without_agentics_context(self, mock_run_tests, mock_validate_runtime,
-                                                              mock_validate_compilation, pipeline):
+    @patch("code_validator.TypeScriptValidator.validate_compilation")
+    @patch("code_validator.TypeScriptValidator.validate_runtime_safety")
+    @patch("code_validator.CodeValidator.run_tests")
+    def test_validate_typescript_code_without_agentics_context(
+        self, mock_run_tests, mock_validate_runtime, mock_validate_compilation, pipeline
+    ):
         """Test validation without agentics code context"""
         # Setup mocks
         mock_validate_compilation.return_value = CompilationResult(success=True)
         mock_validate_runtime.return_value = ExecutionResult(success=True)
-        mock_run_tests.return_value = TestResult(success=True, coverage={'total': {'lines': {'pct': 80.0}}})
+        mock_run_tests.return_value = RunResult(
+            success=True, coverage={"total": {"lines": {"pct": 80.0}}}
+        )
 
         code = "export class Component {}"
         tests = "describe('component', () => {});"
-        context = {'is_agentics_code': False}
+        context = {"is_agentics_code": False}
 
         result = pipeline.validate_typescript_code(code, tests, context)
 
-        assert result.pattern_validation is None  # Should not validate patterns for non-agentics code
+        assert (
+            result.pattern_validation is None
+        )  # Should not validate patterns for non-agentics code
 
     def test_generate_recommendations_safety_issues(self, pipeline):
         """Test recommendation generation for safety issues"""
         result = ValidationReport(
             safety_check=ExecutionResult(success=False, errors="Runtime error"),
-            test_results=TestResult(success=True),
-            pattern_validation=None
+            test_results=RunResult(success=True),
+            pattern_validation=None,
         )
 
         pipeline._generate_recommendations(result)
 
         assert len(result.critical_issues) > 0
-        assert any("execution failed" in issue.lower() for issue in result.critical_issues)
+        assert any(
+            "execution failed" in issue.lower() for issue in result.critical_issues
+        )
 
     def test_generate_recommendations_test_issues(self, pipeline):
         """Test recommendation generation for test issues"""
         result = ValidationReport(
             safety_check=ExecutionResult(success=True),
-            test_results=TestResult(success=False, failed_count=3, test_count=5, coverage={'total': {'lines': {'pct': 45.0}}}),
-            pattern_validation=None
+            test_results=RunResult(
+                success=False,
+                failed_count=3,
+                test_count=5,
+                coverage={"total": {"lines": {"pct": 45.0}}},
+            ),
+            pattern_validation=None,
         )
 
         pipeline._generate_recommendations(result)
@@ -733,17 +766,21 @@ class TestLLMCodeValidationPipeline:
         """Test recommendation generation for pattern issues"""
         result = ValidationReport(
             safety_check=ExecutionResult(success=True),
-            test_results=TestResult(success=True),
-            pattern_validation=ChainValidation(uses_lcel=False, proper_error_handling=False)
+            test_results=RunResult(success=True),
+            pattern_validation=ChainValidation(
+                uses_lcel=False, proper_error_handling=False
+            ),
         )
 
         pipeline._generate_recommendations(result)
 
         assert len(result.suggestions) > 0
         assert any("LCEL" in suggestion for suggestion in result.suggestions)
-        assert any("error handling" in suggestion.lower() for suggestion in result.warnings)
+        assert any(
+            "error handling" in suggestion.lower() for suggestion in result.warnings
+        )
 
-    @patch('code_validator.TypeScriptValidator.validate_compilation')
+    @patch("code_validator.TypeScriptValidator.validate_compilation")
     def test_pipeline_error_handling(self, mock_validate_compilation, pipeline):
         """Test pipeline error handling"""
         mock_validate_compilation.side_effect = Exception("Unexpected error")
@@ -756,7 +793,9 @@ class TestLLMCodeValidationPipeline:
         assert result.overall_score == 0.0
         assert result.risk_level == RiskLevel.CRITICAL
         assert len(result.critical_issues) > 0
-        assert any("pipeline error" in issue.lower() for issue in result.critical_issues)
+        assert any(
+            "pipeline error" in issue.lower() for issue in result.critical_issues
+        )
 
 
 class TestSafeCodeExecutor:
@@ -767,10 +806,12 @@ class TestSafeCodeExecutor:
         """Fixture for TypeScriptValidator as SafeCodeExecutor"""
         return TypeScriptValidator()
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_safe_execution_success(self, mock_run, executor):
         """Test successful safe code execution"""
-        mock_run.return_value = MagicMock(returncode=0, stdout="Code executed successfully", stderr="")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout="Code executed successfully", stderr=""
+        )
         code = """
         export function calculate(a: number, b: number): number {
             return a + b;
@@ -784,13 +825,13 @@ class TestSafeCodeExecutor:
         assert result.errors == ""
         assert result.timeout == False
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_safe_execution_with_runtime_error(self, mock_run, executor):
         """Test safe execution with runtime errors"""
         mock_run.return_value = MagicMock(
             returncode=1,
             stdout="",
-            stderr="ReferenceError: undefinedVariable is not defined"
+            stderr="ReferenceError: undefinedVariable is not defined",
         )
 
         code = """
@@ -805,11 +846,12 @@ class TestSafeCodeExecutor:
         assert "undefinedVariable" in result.errors
         assert result.timeout == False
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_safe_execution_timeout(self, mock_run, executor):
         """Test safe execution timeout handling"""
         from subprocess import TimeoutExpired
-        mock_run.side_effect = TimeoutExpired(cmd=['node'], timeout=5)
+
+        mock_run.side_effect = TimeoutExpired(cmd=["node"], timeout=5)
 
         code = """
         export function infinite(): void {
@@ -825,13 +867,11 @@ class TestSafeCodeExecutor:
         assert result.timeout == True
         assert result.execution_time >= 0
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_safe_execution_sandbox_violation(self, mock_run, executor):
         """Test sandbox violation detection"""
         mock_run.return_value = MagicMock(
-            returncode=1,
-            stdout="",
-            stderr="Error: Module not allowed: fs"
+            returncode=1, stdout="", stderr="Error: Module not allowed: fs"
         )
 
         code = """
@@ -846,13 +886,11 @@ class TestSafeCodeExecutor:
         assert result.success == False
         assert "Module not allowed" in result.errors
 
-    @patch('code_validator.subprocess.run')
+    @patch("code_validator.subprocess.run")
     def test_safe_execution_with_complex_code(self, mock_run, executor):
         """Test safe execution with complex TypeScript code"""
         mock_run.return_value = MagicMock(
-            returncode=0,
-            stdout="Code executed successfully",
-            stderr=""
+            returncode=0, stdout="Code executed successfully", stderr=""
         )
 
         code = """
@@ -882,35 +920,40 @@ class TestSafeCodeExecutor:
     def test_safe_execution_environment_isolation(self, executor):
         """Test that execution environment is properly isolated"""
         # This test verifies the sandbox configuration
-        assert executor.sandbox_config['network_disabled'] == True
-        assert executor.sandbox_config['filesystem_readonly'] == True
-        assert executor.sandbox_config['timeout'] == 5000
-        assert executor.sandbox_config['memory_limit'] == '128MB'
+        assert executor.sandbox_config["network_disabled"] == True
+        assert executor.sandbox_config["filesystem_readonly"] == True
+        assert executor.sandbox_config["timeout"] == 5000
+        assert executor.sandbox_config["memory_limit"] == "128MB"
 
 
 class TestTestValidationRunner:
-    """Unit tests for TestValidationRunner (TestValidator)"""
+    """Unit tests for TestValidationRunner (CodeValidator)"""
 
     @pytest.fixture
     def runner(self):
-        """Fixture for TestValidator as TestValidationRunner"""
-        return TestValidator()
+        """Fixture for CodeValidator as TestValidationRunner"""
+        return CodeValidator()
 
     def test_runner_initialization(self, runner):
         """Test TestValidationRunner initialization"""
-        assert runner.test_directory.startswith('/tmp') or 'ts_validation' in runner.test_directory
-        assert runner.jest_config['collectCoverage'] == True
-        assert runner.jest_config['testTimeout'] == 10000
+        assert (
+            runner.test_directory.startswith("/tmp")
+            or "ts_validation" in runner.test_directory
+        )
+        assert runner.jest_config["collectCoverage"] == True
+        assert runner.jest_config["testTimeout"] == 10000
 
-    @patch('code_validator.TestValidator._write_test_files')
-    @patch('code_validator.TestValidator._parse_jest_output')
-    @patch('code_validator.TestValidator._parse_coverage_report')
-    @patch('code_validator.subprocess.run')
-    def test_run_tests_success(self, mock_run, mock_parse_coverage, mock_parse_output, mock_write_files, runner):
+    @patch("code_validator.CodeValidator._write_test_files")
+    @patch("code_validator.CodeValidator._parse_jest_output")
+    @patch("code_validator.CodeValidator._parse_coverage_report")
+    @patch("code_validator.subprocess.run")
+    def test_run_tests_success(
+        self, mock_run, mock_parse_coverage, mock_parse_output, mock_write_files, runner
+    ):
         """Test successful test execution"""
         mock_run.return_value.returncode = 0
-        mock_parse_output.return_value = {'total': 5, 'passed': 5, 'failed': 0}
-        mock_parse_coverage.return_value = {'total': {'lines': {'pct': 85.0}}}
+        mock_parse_output.return_value = {"total": 5, "passed": 5, "failed": 0}
+        mock_parse_coverage.return_value = {"total": {"lines": {"pct": 85.0}}}
 
         code = "export class Test {}"
         tests = "describe('test', () => { it('works', () => {}); });"
@@ -921,19 +964,21 @@ class TestTestValidationRunner:
         assert result.test_count == 5
         assert result.passed_count == 5
         assert result.failed_count == 0
-        assert result.coverage['total']['lines']['pct'] == 85.0
+        assert result.coverage["total"]["lines"]["pct"] == 85.0
 
-    @patch('code_validator.TestValidator._write_test_files')
-    @patch('code_validator.TestValidator._parse_jest_output')
-    @patch('code_validator.subprocess.run')
-    def test_run_tests_failure(self, mock_run, mock_parse_output, mock_write_files, runner):
+    @patch("code_validator.CodeValidator._write_test_files")
+    @patch("code_validator.CodeValidator._parse_jest_output")
+    @patch("code_validator.subprocess.run")
+    def test_run_tests_failure(
+        self, mock_run, mock_parse_output, mock_write_files, runner
+    ):
         """Test test execution with failures"""
         mock_run.return_value = MagicMock(
             returncode=1,
             stdout='{"testResults": [{"assertionResults": [{"status": "failed"}]}]}',
-            stderr="Test failed"
+            stderr="Test failed",
         )
-        mock_parse_output.return_value = {'total': 3, 'passed': 1, 'failed': 2}
+        mock_parse_output.return_value = {"total": 3, "passed": 1, "failed": 2}
 
         code = "export class Test {}"
         tests = "describe('test', () => { it('fails', () => { throw new Error('test'); }); });"
@@ -946,12 +991,14 @@ class TestTestValidationRunner:
         assert result.failed_count == 2
         assert "Test failed" in result.errors
 
-    @patch('code_validator.TestValidator._write_test_files')
-    @patch('code_validator.subprocess.run')
-    @patch('code_validator.subprocess.TimeoutExpired')
+    @patch("code_validator.CodeValidator._write_test_files")
+    @patch("code_validator.subprocess.run")
+    @patch("code_validator.subprocess.TimeoutExpired")
     def test_run_tests_timeout(self, mock_timeout, mock_run, mock_write_files, runner):
         """Test test execution timeout"""
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd=['npx', 'jest'], timeout=60)
+        mock_run.side_effect = subprocess.TimeoutExpired(
+            cmd=["npx", "jest"], timeout=60
+        )
 
         code = "export class Test {}"
         tests = "describe('test', () => { it('slow', () => {}); });"
@@ -969,9 +1016,9 @@ class TestTestValidationRunner:
         # Call the private method directly
         result = runner._parse_jest_output(stdout, stderr)
 
-        assert result['total'] == 10
-        assert result['passed'] == 8
-        assert result['failed'] == 2
+        assert result["total"] == 10
+        assert result["passed"] == 8
+        assert result["failed"] == 2
 
     def test_parse_jest_output_json(self, runner):
         """Test Jest JSON output parsing"""
@@ -980,12 +1027,16 @@ class TestTestValidationRunner:
 
         result = runner._parse_jest_output(stdout, stderr)
 
-        assert result['total'] == 2
-        assert result['passed'] == 1
-        assert result['failed'] == 1
+        assert result["total"] == 2
+        assert result["passed"] == 1
+        assert result["failed"] == 1
 
-    @patch('code_validator.os.path.exists')
-    @patch('builtins.open', new_callable=mock_open, read_data='{"total": {"lines": {"pct": 75.0}}}')
+    @patch("code_validator.os.path.exists")
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data='{"total": {"lines": {"pct": 75.0}}}',
+    )
     def test_parse_coverage_report(self, mock_file, mock_exists, runner):
         """Test coverage report parsing"""
         mock_exists.return_value = True
@@ -993,9 +1044,9 @@ class TestTestValidationRunner:
 
         coverage = runner._parse_coverage_report(temp_dir)
 
-        assert coverage['total']['lines']['pct'] == 75.0
+        assert coverage["total"]["lines"]["pct"] == 75.0
 
-    @patch('code_validator.os.path.exists')
+    @patch("code_validator.os.path.exists")
     def test_parse_coverage_report_missing(self, mock_exists, runner):
         """Test coverage report parsing when file doesn't exist"""
         mock_exists.return_value = False
@@ -1007,24 +1058,24 @@ class TestTestValidationRunner:
 
 
 class TestCoverageAnalyzer:
-    """Unit tests for CoverageAnalyzer (TestValidator.analyze_coverage)"""
+    """Unit tests for CoverageAnalyzer (CodeValidator.analyze_coverage)"""
 
     @pytest.fixture
     def analyzer(self):
-        """Fixture for TestValidator as CoverageAnalyzer"""
-        return TestValidator()
+        """Fixture for CodeValidator as CoverageAnalyzer"""
+        return CodeValidator()
 
     def test_analyze_coverage_comprehensive(self, analyzer):
         """Test comprehensive coverage analysis"""
         coverage_data = {
-            'total': {
-                'lines': {'pct': 85.0, 'total': 100, 'covered': 85},
-                'branches': {'pct': 75.0},
-                'functions': {'pct': 90.0}
+            "total": {
+                "lines": {"pct": 85.0, "total": 100, "covered": 85},
+                "branches": {"pct": 75.0},
+                "functions": {"pct": 90.0},
             },
-            'source.ts': {
-                'lines': {1: 1, 2: 1, 3: 0, 4: 1}  # Line 3 uncovered
-            }
+            "source.ts": {
+                "lines": {1: 1, 2: 1, 3: 0, 4: 1}  # Line 3 uncovered
+            },
         }
 
         result = analyzer.analyze_coverage(coverage_data)
@@ -1038,10 +1089,10 @@ class TestCoverageAnalyzer:
     def test_analyze_coverage_perfect(self, analyzer):
         """Test coverage analysis with perfect coverage"""
         coverage_data = {
-            'total': {
-                'lines': {'pct': 100.0},
-                'branches': {'pct': 100.0},
-                'functions': {'pct': 100.0}
+            "total": {
+                "lines": {"pct": 100.0},
+                "branches": {"pct": 100.0},
+                "functions": {"pct": 100.0},
             }
         }
 
@@ -1053,10 +1104,10 @@ class TestCoverageAnalyzer:
     def test_analyze_coverage_poor(self, analyzer):
         """Test coverage analysis with poor coverage"""
         coverage_data = {
-            'total': {
-                'lines': {'pct': 25.0},
-                'branches': {'pct': 10.0},
-                'functions': {'pct': 30.0}
+            "total": {
+                "lines": {"pct": 25.0},
+                "branches": {"pct": 10.0},
+                "functions": {"pct": 30.0},
             }
         }
 
@@ -1080,8 +1131,8 @@ class TestCoverageAnalyzer:
     def test_analyze_coverage_partial_data(self, analyzer):
         """Test coverage analysis with partial data"""
         coverage_data = {
-            'total': {
-                'lines': {'pct': 80.0}
+            "total": {
+                "lines": {"pct": 80.0}
                 # Missing branches and functions
             }
         }
@@ -1095,12 +1146,8 @@ class TestCoverageAnalyzer:
     def test_analyze_coverage_with_uncovered_lines(self, analyzer):
         """Test coverage analysis with detailed uncovered lines"""
         coverage_data = {
-            'total': {
-                'lines': {'pct': 75.0}
-            },
-            'source.ts': {
-                'lines': {1: 1, 2: 0, 3: 1, 4: 0, 5: 0, 6: 1}
-            }
+            "total": {"lines": {"pct": 75.0}},
+            "source.ts": {"lines": {1: 1, 2: 0, 3: 1, 4: 0, 5: 0, 6: 1}},
         }
 
         result = analyzer.analyze_coverage(coverage_data)
@@ -1120,8 +1167,8 @@ class TestQualityScorer:
         """Test score calculation with all components present"""
         report = ValidationReport(
             safety_check=ExecutionResult(success=True),
-            test_results=TestResult(coverage={'total': {'lines': {'pct': 80.0}}}),
-            pattern_validation=ChainValidation(composability_score=8.0)
+            test_results=RunResult(coverage={"total": {"lines": {"pct": 80.0}}}),
+            pattern_validation=ChainValidation(composability_score=8.0),
         )
 
         score = scorer.calculate_score(report)
@@ -1134,7 +1181,7 @@ class TestQualityScorer:
         report = ValidationReport(
             safety_check=ExecutionResult(success=True),
             test_results=None,
-            pattern_validation=ChainValidation(composability_score=6.0)
+            pattern_validation=ChainValidation(composability_score=6.0),
         )
 
         score = scorer.calculate_score(report)
@@ -1154,8 +1201,8 @@ class TestQualityScorer:
         """Test score calculation with component failures"""
         report = ValidationReport(
             safety_check=ExecutionResult(success=False),
-            test_results=TestResult(coverage={'total': {'lines': {'pct': 30.0}}}),
-            pattern_validation=ChainValidation(composability_score=2.0)
+            test_results=RunResult(coverage={"total": {"lines": {"pct": 30.0}}}),
+            pattern_validation=ChainValidation(composability_score=2.0),
         )
 
         score = scorer.calculate_score(report)
@@ -1189,12 +1236,14 @@ class TestQualityScorer:
 
     def test_weights_configuration(self, scorer):
         """Test that weights are properly configured"""
-        assert scorer.WEIGHTS['safety'] == 0.4
-        assert scorer.WEIGHTS['test_coverage'] == 0.3
-        assert scorer.WEIGHTS['pattern_compliance'] == 0.3
+        assert scorer.WEIGHTS["safety"] == 0.4
+        assert scorer.WEIGHTS["test_coverage"] == 0.3
+        assert scorer.WEIGHTS["pattern_compliance"] == 0.3
 
         total_weight = sum(scorer.WEIGHTS.values())
         assert abs(total_weight - 1.0) < 0.001  # Should sum to 1.0
+
+
 class TestLangChainPatternValidator:
     """Unit tests for LangChainPatternValidator (LangChainValidator)"""
 
@@ -1418,7 +1467,7 @@ class TestChainCompositionValidator:
             "RunnableSequence.from([step1, step2])",
             "RunnableParallel(branch1=step1, branch2=step2)",
             "chain1 | chain2 | chain3",  # Pipe operator
-            "chain.pipe(step1).pipe(step2)"
+            "chain.pipe(step1).pipe(step2)",
         ]
 
         for pattern in lcel_patterns:
@@ -1427,7 +1476,9 @@ from langchain_core.runnables import RunnableSequence, RunnableParallel
 {pattern}
 """
             result = validator.validate_patterns(code)
-            assert result.uses_lcel == True, f"Pattern {pattern} should be detected as LCEL"
+            assert result.uses_lcel == True, (
+                f"Pattern {pattern} should be detected as LCEL"
+            )
 
     def test_chain_composition_error_handling(self, validator):
         """Test chain composition validation for error handling"""
@@ -1926,7 +1977,7 @@ increment_counter()  # Bad
 
         # Should detect the good patterns but also the mixed usage
         assert result.dataclasses_usage == True  # Has dataclass
-        assert result.immutable_state == True   # Has frozen dataclass
+        assert result.immutable_state == True  # Has frozen dataclass
         # But overall state_flow might be False due to mixed patterns
 
     def test_state_handling_state_classes_detection(self, validator):

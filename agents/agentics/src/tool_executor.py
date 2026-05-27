@@ -2,10 +2,12 @@ from typing import List, Dict, Any
 from langchain_core.tools import BaseTool
 from langchain_core.messages import ToolMessage
 
+
 class ToolExecutor:
     """
     Executor for LangChain tools. Supports both single tool execution and batch execution from AIMessage tool_calls.
     """
+
     def __init__(self, tools: List[BaseTool]):
         self.tools = {tool.name: tool for tool in tools}
 
@@ -19,12 +21,12 @@ class ToolExecutor:
         """
         Execute tool calls from AIMessage response. Returns dict {tool_name: result_str} for followup prompts.
         """
-        if not hasattr(response, 'tool_calls') or not response.tool_calls:
+        if not hasattr(response, "tool_calls") or not response.tool_calls:
             return {}
         results = {}
         for tool_call in response.tool_calls:
-            tool_name = tool_call['name']
-            args = tool_call['args']
+            tool_name = tool_call["name"]
+            args = tool_call["args"]
             result = self.execute_tool(tool_name, args)
             results[tool_name] = str(result)
         return results

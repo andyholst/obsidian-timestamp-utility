@@ -4,7 +4,10 @@ import os
 from unittest.mock import patch
 from src.process_llm_agent import ProcessLLMAgent
 from src.state import State
-from tests.fixtures.mock_llm_responses import create_process_llm_mock_responses, create_mock_prompt_template
+from tests.fixtures.mock_llm_responses import (
+    create_process_llm_mock_responses,
+    create_mock_prompt_template,
+)
 
 # Well-structured ticket content
 WELL_STRUCTURED_TICKET = """
@@ -46,23 +49,31 @@ If no note is active when the command is executed, an error message is displayed
 """
 
 # Long ticket content (for variety, though not explicitly provided, keeping it simple)
-LONG_TICKET = "# Very Long Ticket Title\n" + "Description with lots of details " * 50 + "\n- Req1\n- Req2\n- AC1\n- AC2"
+LONG_TICKET = (
+    "# Very Long Ticket Title\n"
+    + "Description with lots of details " * 50
+    + "\n- Req1\n- Req2\n- AC1\n- AC2"
+)
 
 # Expected JSON for long ticket (simplified for testing purposes)
 EXPECTED_LONG_JSON = {
     "title": "# Very Long Ticket Title",
     "description": "Description with lots of details " * 50,
     "requirements": ["Req1", "Req2"],
-    "acceptance_criteria": ["AC1", "AC2"]
+    "acceptance_criteria": ["AC1", "AC2"],
 }
+
 
 # Fixture to load expected JSON from file for well-structured and sloppy tickets
 @pytest.fixture
 def expected_ticket_json():
     """Load the expected JSON for well-structured and sloppy tickets from a file."""
-    expected_json_path = os.path.join(os.path.dirname(__file__), '..', 'fixtures', 'expected_ticket.json')
-    with open(expected_json_path, 'r') as f:
+    expected_json_path = os.path.join(
+        os.path.dirname(__file__), "..", "fixtures", "expected_ticket.json"
+    )
+    with open(expected_json_path, "r") as f:
         return json.load(f)
+
 
 # Fixtures for mock LLM responses
 @pytest.fixture
@@ -70,12 +81,16 @@ def mock_llm_responses():
     """Provide mock LLM responses for different test scenarios."""
     return create_process_llm_mock_responses()
 
+
 @pytest.fixture
 def mock_prompt_template():
     """Provide a mock prompt template."""
     return create_mock_prompt_template()
 
-def test_process_llm_agent_well_structured(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+
+def test_process_llm_agent_well_structured(
+    expected_ticket_json, mock_llm_responses, mock_prompt_template
+):
     """Test processing a well-structured ticket with mock LLM."""
     agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
@@ -86,14 +101,28 @@ def test_process_llm_agent_well_structured(expected_ticket_json, mock_llm_respon
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
-    assert isinstance(result["result"]["requirements"], list), "Requirements should be a list"
-    assert isinstance(result["result"]["acceptance_criteria"], list), "Acceptance criteria should be a list"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
+    assert isinstance(result["result"]["requirements"], list), (
+        "Requirements should be a list"
+    )
+    assert isinstance(result["result"]["acceptance_criteria"], list), (
+        "Acceptance criteria should be a list"
+    )
     assert "UUID" in result["result"]["description"], "Description should mention UUID"
-    assert len(result["result"]["requirements"]) >= 1, "Should have at least one requirement"
-    assert len(result["result"]["acceptance_criteria"]) >= 1, "Should have at least one criterion"
+    assert len(result["result"]["requirements"]) >= 1, (
+        "Should have at least one requirement"
+    )
+    assert len(result["result"]["acceptance_criteria"]) >= 1, (
+        "Should have at least one criterion"
+    )
 
-def test_process_llm_agent_sloppy(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+
+def test_process_llm_agent_sloppy(
+    expected_ticket_json, mock_llm_responses, mock_prompt_template
+):
     """Test processing a sloppy ticket with mock LLM."""
     agent = ProcessLLMAgent(mock_llm_responses["sloppy"], mock_prompt_template)
     state = State(ticket_content=SLOPPY_TICKET)
@@ -104,12 +133,24 @@ def test_process_llm_agent_sloppy(expected_ticket_json, mock_llm_responses, mock
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
-    assert isinstance(result["result"]["requirements"], list), "Requirements should be a list"
-    assert isinstance(result["result"]["acceptance_criteria"], list), "Acceptance criteria should be a list"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
+    assert isinstance(result["result"]["requirements"], list), (
+        "Requirements should be a list"
+    )
+    assert isinstance(result["result"]["acceptance_criteria"], list), (
+        "Acceptance criteria should be a list"
+    )
     assert "UUID" in result["result"]["description"], "Description should mention UUID"
-    assert len(result["result"]["requirements"]) >= 3, "Should have at least three requirements based on ticket"
-    assert len(result["result"]["acceptance_criteria"]) >= 3, "Should have at least three criteria based on ticket"
+    assert len(result["result"]["requirements"]) >= 3, (
+        "Should have at least three requirements based on ticket"
+    )
+    assert len(result["result"]["acceptance_criteria"]) >= 3, (
+        "Should have at least three criteria based on ticket"
+    )
+
 
 def test_process_llm_agent_long_ticket(mock_llm_responses, mock_prompt_template):
     """Test processing a long ticket with mock LLM."""
@@ -122,15 +163,29 @@ def test_process_llm_agent_long_ticket(mock_llm_responses, mock_prompt_template)
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
-    assert isinstance(result["result"]["requirements"], list), "Requirements should be a list"
-    assert isinstance(result["result"]["acceptance_criteria"], list), "Acceptance criteria should be a list"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
+    assert isinstance(result["result"]["requirements"], list), (
+        "Requirements should be a list"
+    )
+    assert isinstance(result["result"]["acceptance_criteria"], list), (
+        "Acceptance criteria should be a list"
+    )
     assert result["result"]["title"] == "# Very Long Ticket Title", "Title should match"
     assert len(result["result"]["description"]) > 0, "Description should be non-empty"
-    assert len(result["result"]["requirements"]) >= 2, "Should have at least two requirements"
-    assert len(result["result"]["acceptance_criteria"]) >= 2, "Should have at least two criteria"
+    assert len(result["result"]["requirements"]) >= 2, (
+        "Should have at least two requirements"
+    )
+    assert len(result["result"]["acceptance_criteria"]) >= 2, (
+        "Should have at least two criteria"
+    )
 
-def test_process_llm_agent_invalid_json(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+
+def test_process_llm_agent_invalid_json(
+    expected_ticket_json, mock_llm_responses, mock_prompt_template
+):
     """Test handling of invalid JSON response from mock LLM (assuming it could happen)."""
     agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
@@ -139,9 +194,15 @@ def test_process_llm_agent_invalid_json(expected_ticket_json, mock_llm_responses
     result = agent(state)
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
 
-def test_process_llm_agent_invalid_structure(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+
+def test_process_llm_agent_invalid_structure(
+    expected_ticket_json, mock_llm_responses, mock_prompt_template
+):
     """Test handling of invalid structure from mock LLM."""
     agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
@@ -150,9 +211,15 @@ def test_process_llm_agent_invalid_structure(expected_ticket_json, mock_llm_resp
     result = agent(state)
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
 
-def test_process_llm_agent_invalid_types(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+
+def test_process_llm_agent_invalid_types(
+    expected_ticket_json, mock_llm_responses, mock_prompt_template
+):
     """Test handling of invalid types from mock LLM."""
     agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
@@ -161,11 +228,21 @@ def test_process_llm_agent_invalid_types(expected_ticket_json, mock_llm_response
     result = agent(state)
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
-    assert isinstance(result["result"]["requirements"], list), "Requirements should be a list"
-    assert isinstance(result["result"]["acceptance_criteria"], list), "Acceptance criteria should be a list"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
+    assert isinstance(result["result"]["requirements"], list), (
+        "Requirements should be a list"
+    )
+    assert isinstance(result["result"]["acceptance_criteria"], list), (
+        "Acceptance criteria should be a list"
+    )
 
-def test_process_llm_agent_retry_success(expected_ticket_json, mock_llm_responses, mock_prompt_template):
+
+def test_process_llm_agent_retry_success(
+    expected_ticket_json, mock_llm_responses, mock_prompt_template
+):
     """Test that the agent succeeds after potential retries with mock LLM."""
     agent = ProcessLLMAgent(mock_llm_responses["well_structured"], mock_prompt_template)
     state = State(ticket_content=WELL_STRUCTURED_TICKET)
@@ -176,22 +253,36 @@ def test_process_llm_agent_retry_success(expected_ticket_json, mock_llm_response
     # Then: Verify the structure and key content
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
-    assert isinstance(result["result"]["requirements"], list), "Requirements should be a list"
-    assert isinstance(result["result"]["acceptance_criteria"], list), "Acceptance criteria should be a list"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
+    assert isinstance(result["result"]["requirements"], list), (
+        "Requirements should be a list"
+    )
+    assert isinstance(result["result"]["acceptance_criteria"], list), (
+        "Acceptance criteria should be a list"
+    )
     assert "UUID" in result["result"]["description"], "Description should mention UUID"
-    assert len(result["result"]["requirements"]) >= 1, "Should have at least one requirement"
-    assert len(result["result"]["acceptance_criteria"]) >= 1, "Should have at least one criterion"
+    assert len(result["result"]["requirements"]) >= 1, (
+        "Should have at least one requirement"
+    )
+    assert len(result["result"]["acceptance_criteria"]) >= 1, (
+        "Should have at least one criterion"
+    )
+
 
 def test_process_llm_agent_dict_input(mock_llm_responses, mock_prompt_template):
     # Given: A state with refined_ticket as a dict
     agent = ProcessLLMAgent(mock_llm_responses["dict"], mock_prompt_template)
-    state = State(refined_ticket={
-        "title": "Test Ticket",
-        "description": "Test description",
-        "requirements": ["Req1"],
-        "acceptance_criteria": ["AC1"]
-    })
+    state = State(
+        refined_ticket={
+            "title": "Test Ticket",
+            "description": "Test description",
+            "requirements": ["Req1"],
+            "acceptance_criteria": ["AC1"],
+        }
+    )
 
     # When: Processing the ticket with mock LLM
     result = agent(state)
@@ -199,8 +290,12 @@ def test_process_llm_agent_dict_input(mock_llm_responses, mock_prompt_template):
     # Then: Verify dict is processed correctly
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
     assert result["result"]["title"] == "Test Ticket", "Title should match input"
+
 
 # New test: Empty ticket content
 def test_process_llm_agent_empty_ticket(mock_llm_responses, mock_prompt_template):
@@ -213,10 +308,18 @@ def test_process_llm_agent_empty_ticket(mock_llm_responses, mock_prompt_template
     # Then: Verify minimal valid output
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
-    assert isinstance(result["result"]["requirements"], list), "Requirements should be a list"
-    assert isinstance(result["result"]["acceptance_criteria"], list), "Acceptance criteria should be a list"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"
+    assert isinstance(result["result"]["requirements"], list), (
+        "Requirements should be a list"
+    )
+    assert isinstance(result["result"]["acceptance_criteria"], list), (
+        "Acceptance criteria should be a list"
+    )
     assert len(result["result"]["title"]) > 0, "Title should be generated"
+
 
 # New test: Malformed ticket causing potential invalid JSON
 def test_process_llm_agent_malformed_ticket(mock_llm_responses, mock_prompt_template):
@@ -229,4 +332,7 @@ def test_process_llm_agent_malformed_ticket(mock_llm_responses, mock_prompt_temp
     # Then: Verify agent handles it gracefully
     assert "result" in result, "Result key missing"
     assert isinstance(result["result"], dict), "Result should be a dictionary"
-    assert all(key in result["result"] for key in ["title", "description", "requirements", "acceptance_criteria"]), "Missing required fields"
+    assert all(
+        key in result["result"]
+        for key in ["title", "description", "requirements", "acceptance_criteria"]
+    ), "Missing required fields"

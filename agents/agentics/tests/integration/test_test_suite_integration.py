@@ -9,11 +9,13 @@ import pytest
 import json
 
 from src.test_suite import (
-    LLMTestSuiteValidator,
+    LLMSuiteValidator,
     SuiteValidationResult,
+    TestSuiteValidationResult,
     SuiteRiskLevel,
+    TestSuiteRiskLevel,
     validate_llm_test_suite,
-    generate_test_suite_report
+    generate_test_suite_report,
 )
 from src.code_validator import validate_generated_code, ValidationReport
 
@@ -24,7 +26,7 @@ class TestTestSuiteIntegration:
     @pytest.fixture
     def test_suite_validator(self):
         """Fixture for test suite validator"""
-        return LLMTestSuiteValidator()
+        return LLMSuiteValidator()
 
     @pytest.fixture
     def sample_typescript_code(self):
@@ -208,14 +210,16 @@ class TextProcessor:
         return await self.processing_chain.ainvoke(initial_state)
 """
 
-    def test_full_test_suite_validation_with_code_validator(self, test_suite_validator, sample_typescript_code, sample_typescript_tests):
+    def test_full_test_suite_validation_with_code_validator(
+        self, test_suite_validator, sample_typescript_code, sample_typescript_tests
+    ):
         """Test complete integration between test suite and code validator"""
         # Act
         result = test_suite_validator.validate_test_suite(
             sample_typescript_code,
             sample_typescript_tests,
             context={"is_typescript": True},
-            include_code_validator=True
+            include_code_validator=True,
         )
 
         # Assert
@@ -237,14 +241,16 @@ class TextProcessor:
         # Check that LangChain compliance is evaluated
         assert isinstance(result.langchain_compliance.overall_compliance, (int, float))
 
-    def test_test_suite_validation_without_code_validator(self, test_suite_validator, sample_typescript_code, sample_typescript_tests):
+    def test_test_suite_validation_without_code_validator(
+        self, test_suite_validator, sample_typescript_code, sample_typescript_tests
+    ):
         """Test test suite validation without code validator integration"""
         # Act
         result = test_suite_validator.validate_test_suite(
             sample_typescript_code,
             sample_typescript_tests,
             context={"is_typescript": True},
-            include_code_validator=False
+            include_code_validator=False,
         )
 
         # Assert
@@ -252,7 +258,9 @@ class TextProcessor:
         assert result.overall_score >= 0
         assert result.overall_score <= 100
 
-    def test_langchain_code_validation(self, test_suite_validator, sample_langchain_code):
+    def test_langchain_code_validation(
+        self, test_suite_validator, sample_langchain_code
+    ):
         """Test validation of LangChain-style Python code"""
         # Create mock tests for the LangChain code
         mock_tests = """
@@ -268,7 +276,7 @@ describe('TextProcessor', () => {
             sample_langchain_code,
             mock_tests,
             context={"is_agentics_code": True},
-            include_code_validator=True
+            include_code_validator=True,
         )
 
         # Assert
@@ -277,20 +285,18 @@ describe('TextProcessor', () => {
         assert result.langchain_compliance.error_handling_score > 0
         assert result.langchain_compliance.state_management_score > 0
 
-    def test_detailed_report_generation(self, test_suite_validator, sample_typescript_code, sample_typescript_tests):
+    def test_detailed_report_generation(
+        self, test_suite_validator, sample_typescript_code, sample_typescript_tests
+    ):
         """Test detailed report generation"""
         # Arrange
         result = test_suite_validator.validate_test_suite(
-            sample_typescript_code,
-            sample_typescript_tests,
-            include_code_validator=True
+            sample_typescript_code, sample_typescript_tests, include_code_validator=True
         )
 
         # Act
         report = test_suite_validator.generate_detailed_report(
-            sample_typescript_code,
-            sample_typescript_tests,
-            result
+            sample_typescript_code, sample_typescript_tests, result
         )
 
         # Assert
@@ -308,9 +314,7 @@ describe('TextProcessor', () => {
 
         # Act
         result = test_suite_validator.validate_test_suite(
-            malformed_code,
-            malformed_tests,
-            include_code_validator=True
+            malformed_code, malformed_tests, include_code_validator=True
         )
 
         # Assert
@@ -320,7 +324,9 @@ describe('TextProcessor', () => {
     def test_empty_code_handling(self, test_suite_validator):
         """Test handling of empty code and tests"""
         # Act
-        result = test_suite_validator.validate_test_suite("", "", include_code_validator=False)
+        result = test_suite_validator.validate_test_suite(
+            "", "", include_code_validator=False
+        )
 
         # Assert
         assert isinstance(result, TestSuiteValidationResult)
@@ -334,20 +340,25 @@ describe('TextProcessor', () => {
 
         # Act
         result = test_suite_validator.validate_test_suite(
-            malformed_code,
-            malformed_tests,
-            include_code_validator=False
+            malformed_code, malformed_tests, include_code_validator=False
         )
 
         # Assert
         assert isinstance(result, TestSuiteValidationResult)
-        assert result.code_execution.success == False or result.test_execution.failed_tests > 0
+        assert (
+            result.code_execution.success == False
+            or result.test_execution.failed_tests > 0
+        )
 
     def test_global_functions(self, sample_typescript_code, sample_typescript_tests):
         """Test global convenience functions"""
         # Act
-        result, report = validate_llm_test_suite(sample_typescript_code, sample_typescript_tests)
-        report2 = generate_test_suite_report(sample_typescript_code, sample_typescript_tests, result[0])
+        result, report = validate_llm_test_suite(
+            sample_typescript_code, sample_typescript_tests
+        )
+        report2 = generate_test_suite_report(
+            sample_typescript_code, sample_typescript_tests, result
+        )
 
         # Assert
         assert isinstance(result, TestSuiteValidationResult)
@@ -360,7 +371,7 @@ describe('TextProcessor', () => {
             (85, TestSuiteRiskLevel.LOW),
             (75, TestSuiteRiskLevel.MEDIUM),
             (55, TestSuiteRiskLevel.HIGH),
-            (25, TestSuiteRiskLevel.CRITICAL)
+            (25, TestSuiteRiskLevel.CRITICAL),
         ]
 
         for score, expected_risk in test_cases:
@@ -371,9 +382,13 @@ describe('TextProcessor', () => {
             # Assess risk
             risk = test_suite_validator._assess_risk_level(score)
 
-            assert risk == expected_risk, f"Score {score} should be {expected_risk.value}, got {risk.value}"
+            assert risk == expected_risk, (
+                f"Score {score} should be {expected_risk.value}, got {risk.value}"
+            )
 
-    def test_comprehensive_validation_workflow(self, test_suite_validator, sample_typescript_code, sample_typescript_tests):
+    def test_comprehensive_validation_workflow(
+        self, test_suite_validator, sample_typescript_code, sample_typescript_tests
+    ):
         """Test the complete validation workflow end-to-end"""
         # Act
         result, _ = validate_llm_test_suite(
@@ -382,8 +397,8 @@ describe('TextProcessor', () => {
             context={
                 "project_type": "typescript",
                 "test_framework": "jest",
-                "validation_level": "comprehensive"
-            }
+                "validation_level": "comprehensive",
+            },
         )
 
         # Assert - comprehensive checks
@@ -392,15 +407,15 @@ describe('TextProcessor', () => {
         assert result.test_hash
 
         # Execution results should be populated
-        assert hasattr(result.code_execution, 'success')
-        assert hasattr(result.test_execution, 'total_tests')
+        assert hasattr(result.code_execution, "success")
+        assert hasattr(result.test_execution, "total_tests")
 
         # Relationship analysis should be performed
-        assert hasattr(result.test_code_relationship, 'test_coverage')
-        assert hasattr(result.test_code_relationship, 'assertion_quality')
+        assert hasattr(result.test_code_relationship, "test_coverage")
+        assert hasattr(result.test_code_relationship, "assertion_quality")
 
         # LangChain compliance should be evaluated
-        assert hasattr(result.langchain_compliance, 'overall_compliance')
+        assert hasattr(result.langchain_compliance, "overall_compliance")
 
         # Recommendations should be generated
         assert isinstance(result.critical_issues, list)
@@ -418,7 +433,9 @@ describe('TextProcessor', () => {
         malformed_tests = "describe('test') { it('fails') { expect().toBe() } }"
 
         # Act
-        result = test_suite_validator.validate_test_suite(malformed_code, malformed_tests)
+        result = test_suite_validator.validate_test_suite(
+            malformed_code, malformed_tests
+        )
 
         # Assert
         assert result.overall_score >= 0.0

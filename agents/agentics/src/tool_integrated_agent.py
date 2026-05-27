@@ -13,7 +13,9 @@ class ToolIntegratedAgent(BaseAgent):
     Agent with integrated tool support following LangChain patterns.
     """
 
-    def __init__(self, llm: Runnable, tools: List[BaseTool], name: str = "ToolIntegratedAgent"):
+    def __init__(
+        self, llm: Runnable, tools: List[BaseTool], name: str = "ToolIntegratedAgent"
+    ):
         super().__init__(name)  # BaseAgent requires name
         self.llm = llm
         self.tools = tools
@@ -47,10 +49,12 @@ class ToolIntegratedAgent(BaseAgent):
         """Gather tool context from state."""
         return {
             "available_tools": [tool.name for tool in self.tools],
-            "tool_descriptions": {tool.name: tool.description for tool in self.tools}
+            "tool_descriptions": {tool.name: tool.description for tool in self.tools},
         }
 
-    def _create_tool_augmented_prompt(self, state: State, tool_context: Dict[str, Any]) -> str:
+    def _create_tool_augmented_prompt(
+        self, state: State, tool_context: Dict[str, Any]
+    ) -> str:
         """Create a tool-augmented prompt."""
         base_prompt = f"Process the following state: {state}"
 
@@ -65,7 +69,9 @@ class ToolIntegratedAgent(BaseAgent):
 
         return base_prompt + tool_section
 
-    def _create_followup_prompt(self, response: Any, tool_results: Dict[str, Any]) -> str:
+    def _create_followup_prompt(
+        self, response: Any, tool_results: Dict[str, Any]
+    ) -> str:
         """Create a followup prompt with tool results."""
         prompt = f"Previous response: {response}\n\nTool results:\n"
         for tool_name, result in tool_results.items():
@@ -75,9 +81,11 @@ class ToolIntegratedAgent(BaseAgent):
 
     def _needs_tool_execution(self, response: Any) -> bool:
         """Determine if tools need to be executed based on response."""
-        return hasattr(response, 'tool_calls') and response.tool_calls
+        return hasattr(response, "tool_calls") and response.tool_calls
 
     def _update_state_with_response(self, state: State, response: Any) -> State:
         """Update state with the final response."""
-        state['tool_integrated_response'] = response.content if hasattr(response, 'content') else str(response)
+        state["tool_integrated_response"] = (
+            response.content if hasattr(response, "content") else str(response)
+        )
         return state

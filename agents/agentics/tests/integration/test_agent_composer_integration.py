@@ -59,7 +59,9 @@ async def test_sequential_multi_agent_workflow(
         composer.register_agent("base", base_agent)
         composer.register_agent("tool_agent", tool_agent)
         composer.register_tool("read_file_tool", read_file_tool)
-        config = WorkflowConfig(agent_names=["base", "tool_agent"], tool_names=["read_file_tool"])
+        config = WorkflowConfig(
+            agent_names=["base", "tool_agent"], tool_names=["read_file_tool"]
+        )
         expected_history = ["base", "tool_agent"]
 
     workflow = composer.create_workflow("sequential_test", config)
@@ -107,7 +109,7 @@ async def test_tool_binding_in_workflow(
         agent_names=["bindable"], tool_names=[tool.name for tool in tools_to_use]
     )
     workflow = composer.create_workflow("tool_binding_test", config)
-    assert hasattr(agent, 'tools')
+    assert hasattr(agent, "tools")
     assert len(agent.tools) == num_tools
     result = await workflow.ainvoke(initial_state)
 
