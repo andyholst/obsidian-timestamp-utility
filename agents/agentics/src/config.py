@@ -53,6 +53,12 @@ class AgenticsConfig(BaseModel):
     ollama_code_model: str = Field(
         default_factory=lambda: os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
     )
+    ollama_num_ctx: int = Field(
+        default_factory=lambda: int(os.getenv("OLLAMA_NUM_CTX", "8192"))
+    )
+    ollama_num_predict: int = Field(
+        default_factory=lambda: int(os.getenv("OLLAMA_NUM_PREDICT", "2048"))
+    )
 
     # Circuit breaker configuration
     circuit_breaker_failure_threshold: int = 3
@@ -102,8 +108,9 @@ class AgenticsConfig(BaseModel):
             top_k=20,
             min_p=0.0,
             presence_penalty=1.5,
-            num_ctx=4096,
-            num_predict=1024,
+            num_ctx=self.ollama_num_ctx,
+            num_predict=self.ollama_num_predict,
+            request_timeout=120,
         )
 
 

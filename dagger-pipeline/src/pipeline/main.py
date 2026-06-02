@@ -75,6 +75,7 @@ class Pipeline:
             .with_workdir("/app")
             .with_env_variable("REPO_NAME", repo_name)
             .with_env_variable("TAG", tag)
+            .with_env_variable("NODE_ENV", "development")
         )
         ctr = ctr.with_exec(
             ["git", "config", "--global", "--add", "safe.directory", "/app"]
@@ -147,7 +148,10 @@ class Pipeline:
             tag = await self.get_tag(source)
 
         ctr = await self._app_container(repo_name, tag, source)
-        test_ctr = ctr.with_exec(["sh", "-c", "npm test 2>&1"])
+        # Install dependencies (including dev deps like jest)
+        install_ctr = ctr.with_exec(["sh", "-c", "npm install --loglevel=silly 2>&1"])
+        install_log = await install_ctr.stdout()
+        test_ctr = install_ctr.with_exec(["sh", "-c", "npm test 2>&1"])
         log = await test_ctr.stdout()
         return log
 

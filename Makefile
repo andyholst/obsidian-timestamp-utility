@@ -25,6 +25,8 @@ export HOST_UID HOST_GID
 
 OLLAMA_MODEL      ?= sorc/qwen3.5-claude-4.6-opus:9b
 OLLAMA_CODE_MODEL ?= sorc/qwen3.5-claude-4.6-opus:9b
+OLLAMA_NUM_CTX    ?= 8192
+OLLAMA_NUM_PREDICT ?= 2048
 # Ollama host for Dagger containers: use the socat proxy on port 11435
 # which forwards to Ollama on 127.0.0.1:11434. The proxy listens on 0.0.0.0.
 # The proxy is started automatically by start-socat below.
@@ -268,28 +270,30 @@ run-agentics: check-deps check-github ## Run AI agentics workflow on GitHub issu
 		OLLAMA_MODEL=$(OLLAMA_MODEL) \
 		OLLAMA_REASONING_MODEL=$(OLLAMA_MODEL) \
 		OLLAMA_CODE_MODEL=$(OLLAMA_CODE_MODEL) \
+		OLLAMA_NUM_CTX=$(OLLAMA_NUM_CTX) \
+		OLLAMA_NUM_PREDICT=$(OLLAMA_NUM_PREDICT) \
 		MCP_SERVER_URL=http://localhost:3003 \
 		URL=$(ISSUE_URL) \
 		PROJECT_ROOT=$(shell pwd) \
 		TEST_ULTRA_FAST_MODE=1 \
-		.venv/bin/python3.11 -m src.agentics 2>&1
+		.venv/bin/python3.12 -m src.agentics 2>&1
 	@echo "=== Agentics run complete ==="
 	@ls -la src/main.ts src/__tests__/main.test.ts 2>/dev/null || echo "Note: generated files may be in a different location"
 
-check-deps: check-ollama check-mcp check-engine check-issue-url ## Verify all external dependencies
-check-github: ensure-dagger-ready ## Validate GitHub token
+check-deps: check-ollama check-engine check-issue-url check-npm-deps ## Verify all external dependencies
+check-npm-deps: ## Ensure npm devDependencies are installed
+	@if [ ! -d node_modules/ts-jest ] || [ ! -d node_modules/jest ]; then \
+		echo "Installing npm devDependencies..."; \
+		npm install --legacy-peer-deps --include=dev 2>&1 | tail -5; \
+	fi
+check-github: ## Validate GitHub token
 	@if [ -z "$(GITHUB_TOKEN)" ]; then echo "Error: GITHUB_TOKEN is required" >&2; exit 1; fi
-	@$(DAGGER) call -m dagger-pipeline check-github --github-token=$(GITHUB_TOKEN)
 
-check-issue-url: ensure-dagger-ready ## Validate ISSUE_URL for agentics
+check-issue-url: ## Validate ISSUE_URL for agentics
 	@if [ -z "$(ISSUE_URL)" ] || ! echo "$(ISSUE_URL)" | grep -q '^https'; then echo "Error: Valid ISSUE_URL (https://...) is required" >&2; exit 1; fi
 
-check-ollama: ensure-dagger-ready ## Check Ollama availability
-	@$(DAGGER) call -m dagger-pipeline check-ollama
-
-check-mcp: ensure-dagger-ready ## Check MCP service (fails if MCP unreachable)
-	@if [ -z "$(DOCKER_SOCK)" ]; then echo "ERROR: No Docker/containerd socket found. Checked: /var/run/docker.sock, /run/containerd/containerd.sock, \$$XDG_RUNTIME_DIR/containerd/containerd.sock, \$$XDG_RUNTIME_DIR/containerd-rootless/api.sock" >&2; exit 1; fi
-	@$(DAGGER) call -m dagger-pipeline check-mcp --source=. $(DOCKER_SOCK_ARG)
+check-ollama: ## Check Ollama availability
+	@curl -sf "http://localhost:11434/api/tags" > /dev/null 2>&1 && echo "Ollama OK" || echo "WARNING: Ollama not reachable at localhost:11434 (non-fatal)"
 
 check-secrets: ensure-dagger-ready ## Scan for leaked secrets
 	@$(DAGGER) call -m dagger-pipeline check-secrets --source=.

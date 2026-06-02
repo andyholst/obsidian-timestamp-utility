@@ -77,6 +77,22 @@ class TestLLMConfig:
         assert config.num_ctx == 16384
         assert config.num_predict == 8192
 
+    def test_llm_config_request_timeout_default(self):
+        """Default request_timeout is 30."""
+        config = LLMConfig(model="m", base_url="http://b")
+        assert config.request_timeout == 30
+
+    def test_llm_config_custom_request_timeout(self):
+        """Custom request_timeout works."""
+        config = LLMConfig(model="m", base_url="http://b", request_timeout=90)
+        assert config.request_timeout == 90
+
+    def test_llm_config_is_frozen(self):
+        """LLMConfig is a frozen dataclass - mutation should fail."""
+        config = LLMConfig(model="m", base_url="http://b")
+        with pytest.raises(Exception):
+            config.temperature = 0.5
+
 
 class TestAgenticsConfig:
     """Test AgenticsConfig Pydantic model."""
@@ -151,7 +167,32 @@ class TestAgenticsConfig:
         assert llm_config.model == "sorc/qwen3.5-claude-4.6-opus:9b"
         assert llm_config.base_url == "http://localhost:11434"
         assert llm_config.temperature == 0.7
-        assert llm_config.num_ctx == 4096
+        assert llm_config.num_ctx == 8192
+
+    def test_get_code_llm_config_longer_timeout(self, mock_env_vars):
+        """Code LLM config should have longer request timeout than reasoning."""
+        config = AgenticsConfig()
+        reasoning_config = config.get_reasoning_llm_config()
+        code_config = config.get_code_llm_config()
+        assert code_config.request_timeout > reasoning_config.request_timeout
+
+    def test_circuit_breaker_defaults(self, mock_env_vars):
+        """Circuit breaker defaults should be correct."""
+        config = AgenticsConfig()
+        assert config.circuit_breaker_failure_threshold == 3
+        assert config.circuit_breaker_recovery_timeout == 30
+        assert config.github_circuit_breaker_failure_threshold == 5
+        assert config.github_circuit_breaker_recovery_timeout == 60
+
+    def test_custom_ollama_models(self, monkeypatch):
+        """Custom LLM model names from env should work."""
+        monkeypatch.setenv("GITHUB_TOKEN", "test_token")
+        monkeypatch.setenv("OLLAMA_HOST", "http://localhost:11434")
+        monkeypatch.setenv("OLLAMA_REASONING_MODEL", "custom-reasoning:latest")
+        monkeypatch.setenv("OLLAMA_CODE_MODEL", "custom-code:latest")
+        config = AgenticsConfig()
+        assert config.ollama_reasoning_model == "custom-reasoning:latest"
+        assert config.ollama_code_model == "custom-code:latest"
 
 
 class TestGlobalConfig:

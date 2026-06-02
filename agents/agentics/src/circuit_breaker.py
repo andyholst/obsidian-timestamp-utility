@@ -2,14 +2,9 @@
 Circuit Breaker and Retry Utilities for Enhanced Error Recovery
 """
 
-import time
-import random
-import logging
-from typing import Callable, Any, Optional, Dict, List
+from typing import Callable, Any, Optional, Dict
 from datetime import datetime, timedelta
-from functools import wraps
 from enum import Enum
-import asyncio
 
 from .monitoring import record_circuit_breaker_state, structured_log
 
@@ -217,122 +212,6 @@ class CircuitBreaker:
             if self.next_attempt_time
             else None,
         }
-
-
-def exponential_backoff(
-    attempt: int, base_delay: float = 1.0, max_delay: float = 60.0, jitter: bool = True
-) -> float:
-    """Calculate exponential backoff delay with optional jitter"""
-    delay = min(base_delay * (2**attempt), max_delay)
-
-    if jitter:
-        # Add random jitter (±25% of delay)
-        jitter_range = delay * 0.25
-        delay += random.uniform(-jitter_range, jitter_range)
-
-    return max(0.1, delay)  # Minimum 100ms delay
-
-
-def retry_with_backoff(
-    max_attempts: int = 3,
-    base_delay: float = 1.0,
-    max_delay: float = 60.0,
-    jitter: bool = True,
-    exceptions: tuple = (Exception,),
-):
-    """Decorator for retrying functions with exponential backoff"""
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception = None
-
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-
-                    if attempt == max_attempts - 1:
-                        monitor.error(
-                            "retry_all_attempts_failed",
-                            data={
-                                "max_attempts": max_attempts,
-                                "func_name": func.__name__,
-                                "error": str(e),
-                            },
-                        )
-                        raise e
-
-                    delay = exponential_backoff(attempt, base_delay, max_delay, jitter)
-                    monitor.warning(
-                        "retry_attempt_failed",
-                        data={
-                            "attempt": attempt + 1,
-                            "func_name": func.__name__,
-                            "error": str(e),
-                            "retry_delay": delay,
-                        },
-                    )
-                    time.sleep(delay)
-
-            # This should never be reached, but just in case
-            raise last_exception
-
-        return wrapper
-
-    return decorator
-
-
-def retry_with_backoff_async(
-    max_attempts: int = 3,
-    base_delay: float = 1.0,
-    max_delay: float = 60.0,
-    jitter: bool = True,
-    exceptions: tuple = (Exception,),
-):
-    """Decorator for retrying async functions with exponential backoff"""
-
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            last_exception = None
-
-            for attempt in range(max_attempts):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-
-                    if attempt == max_attempts - 1:
-                        monitor.error(
-                            "retry_all_attempts_failed",
-                            data={
-                                "max_attempts": max_attempts,
-                                "func_name": func.__name__,
-                                "error": str(e),
-                            },
-                        )
-                        raise e
-
-                    delay = exponential_backoff(attempt, base_delay, max_delay, jitter)
-                    monitor.warning(
-                        "retry_attempt_failed",
-                        data={
-                            "attempt": attempt + 1,
-                            "func_name": func.__name__,
-                            "error": str(e),
-                            "retry_delay": delay,
-                        },
-                    )
-                    await asyncio.sleep(delay)
-
-            # This should never be reached, but just in case
-            raise last_exception
-
-        return wrapper
-
-    return decorator
 
 
 class ServiceHealthMonitor:

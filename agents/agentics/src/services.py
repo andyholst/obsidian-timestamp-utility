@@ -1,14 +1,14 @@
 """Service clients and health checks for external dependencies."""
 
 import asyncio
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Dict, Any
 from abc import ABC, abstractmethod
 
 from github import Github, Auth
 from langchain_ollama import OllamaLLM
 from langchain.tools import Tool
 
-from .config import LLMConfig, get_config
+from .config import LLMConfig
 from .exceptions import (
     ServiceUnavailableError,
     GitHubError,
@@ -114,7 +114,6 @@ class GitHubClient(ServiceClient):
     """Client for GitHub API services."""
 
     def __init__(self, token: str):
-        print(f"GitHubClient __init__ called, token: {token}")
         super().__init__("github")
         self.token = token
         self._client: Optional[Github] = None
@@ -125,7 +124,6 @@ class GitHubClient(ServiceClient):
         if not self.token:
             self._client = None
             return
-        print(f"GitHub _initialize_client called, token: {self.token}")
         try:
             auth = Auth.Token(self.token)
             self._client = Github(auth=auth)

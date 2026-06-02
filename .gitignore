@@ -48,3 +48,4 @@ agents/agentics/.cache/huggingface
 .env copy
 
 backups
+.agentics_backups

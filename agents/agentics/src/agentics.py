@@ -1,357 +1,90 @@
 """
-Agentics Application - Refactored for modularity, async patterns, and dependency injection.
+Agentics Application - Refactored for LangGraph best practices.
 
-This module provides the main entry point for the agentics application with improved
-architecture following LangChain best practices and modern Python patterns.
+This module provides the main entry point for the agentics application.
+Uses a single State TypedDict throughout, direct LLM calls for code generation,
+and LangGraph for workflow orchestration with self-correction loops.
 """
 
 import asyncio
 import os
 import sys
-from typing import List, Dict, Any, Optional
+from datetime import datetime
+from typing import Any, Dict, Optional
 
-from .config import init_config, get_config, AgenticsConfig
-from .services import init_services, get_service_manager
-from .workflows import init_workflows, get_workflow_manager
-from .exceptions import AgenticsError, ServiceUnavailableError, ValidationError
+from .config import AgenticsConfig, init_config
+from .eval_rubric import score_output, gate_check, RubricStore
+from .exceptions import AgenticsError, ValidationError
+from .monitoring import structured_log
+from .production_monitor import run_production_check, close_the_loop
+from .services import init_services
 from .utils import log_info, validate_github_url
-from .monitoring import structured_log
+from .workflow import AgenticsWorkflow
 
-# Agent imports
-from .fetch_issue_agent import FetchIssueAgent
-from .ticket_clarity_agent import TicketClarityAgent
-from .implementation_planner_agent import ImplementationPlannerAgent
-from .code_extractor_agent import CodeExtractorAgent
-from .code_generator_agent import CodeGeneratorAgent
-from .test_generator_agent import GeneratorAgent
-from .code_integrator_agent import CodeIntegratorAgent
-from .post_test_runner_agent import PostTestRunnerAgent
-from .code_reviewer_agent import CodeReviewerAgent
-from .output_result_agent import OutputResultAgent
-from .error_recovery_agent import ErrorRecoveryAgent
-from .feedback_agent import FeedbackAgent
-from .dependency_analyzer_agent import DependencyAnalyzerAgent
-from .pre_test_runner_agent import PreTestRunnerAgent
-from .process_llm_agent import ProcessLLMAgent
-from .tool_integrated_agent import ToolIntegratedAgent
-
-# Workflow and composition imports
-from .composable_workflows import ComposableWorkflows
-from .collaborative_generator import CollaborativeGenerator
-from .agent_composer import AgentComposer
-from .performance import get_batch_processor
-
-# Circuit breaker and monitoring
-from .circuit_breaker import get_circuit_breaker, CircuitBreaker, ServiceHealthMonitor
-from .monitoring import structured_log
-
-# MCP and tools
-from .mcp_client import get_mcp_client, init_mcp_client
-from .tools import (
-    read_file_tool,
-    list_files_tool,
-    check_file_exists_tool,
-    npm_search_tool,
-    npm_install_tool,
-    npm_list_tool,
-)
-
-# MCP tools list for agent integration
-mcp_tools = [
-    read_file_tool,
-    list_files_tool,
-    check_file_exists_tool,
-    npm_search_tool,
-    npm_install_tool,
-    npm_list_tool,
-]
-
-# Prompts
-from .prompts import ModularPrompts
-
-
-# Global configuration and services initialization
-_config = None
-_service_manager = None
-_workflow_manager = None
 _monitor = structured_log(__name__)
-
-# MCP client
-_mcp_client = None
-
-
-async def _init_global_services():
-    """Initialize global services and clients."""
-    global _service_manager, _mcp_client, _config
-
-    if _config is None:
-        _config = init_config()
-
-    if _service_manager is None:
-        _service_manager = await init_services(_config)
-
-    if _mcp_client is None:
-        _mcp_client = init_mcp_client()
-
-
-async def check_services() -> Dict[str, bool]:
-    """
-    Check the health status of all services.
-
-    Returns:
-        Dictionary mapping service names to health status.
-    """
-    if _service_manager is None:
-        await _init_global_services()
-
-    return _service_manager.check_services_health()
-
-
-async def create_composable_workflow(
-    github_client=None, llm_reasoning=None, llm_code=None, mcp_tools=None
-) -> ComposableWorkflows:
-    """
-    Create and return a ComposableWorkflows instance with all components initialized.
-
-    Args:
-        github_client: Optional GitHub client override
-        llm_reasoning: Optional reasoning LLM override
-        llm_code: Optional code LLM override
-        mcp_tools: Optional MCP tools override
-
-    Returns:
-        Initialized ComposableWorkflows instance.
-    """
-    if _service_manager is None:
-        await _init_global_services()
-    # Use provided overrides or defaults
-    ollama_reasoning = llm_reasoning or (
-        _service_manager.ollama_reasoning.client
-        if _service_manager and hasattr(_service_manager, "ollama_reasoning") and _service_manager.ollama_reasoning
-        else None
-    )
-    ollama_code = llm_code or (
-        _service_manager.ollama_code.client
-        if _service_manager and hasattr(_service_manager, "ollama_code") and _service_manager.ollama_code
-        else None
-    )
-    github_client = github_client or (
-        _service_manager.github._client
-        if _service_manager and hasattr(_service_manager, "github") and _service_manager.github
-        else None
-    )
-
-    # Get MCP tools if available and not overridden
-    if mcp_tools is None and _mcp_client:
-        try:
-            mcp_tools = await _mcp_client.get_tools()
-        except Exception:
-            mcp_tools = []
-    elif mcp_tools is None:
-        mcp_tools = []
-
-    return ComposableWorkflows(
-        llm_reasoning=ollama_reasoning,
-        llm_code=ollama_code,
-        github_client=github_client,
-        mcp_tools=mcp_tools,
-    )
 
 
 class AgenticsApp:
     """
     Main application class for the agentics system.
 
-    This class manages the lifecycle of the application, including initialization
-    of services, workflows, and provides the main API for processing issues.
+    Uses AgenticsWorkflow (LangGraph-based) for processing issues through
+    the full pipeline: fetch → clarify → plan → extract → generate → validate → integrate → test → output
     """
 
     def __init__(self, config: Optional[AgenticsConfig] = None):
-        """
-        Initialize the agentics application.
-
-        Args:
-            config: Optional configuration. If None, loads from environment.
-        """
-        global _config, _service_manager
-        if config is not None:
-            # Use the provided config without mutating the global _config
-            self.config = config
-            # Reset global service manager so a new one is created for this config
-            _service_manager = None
-        else:
-            # Use or initialize the global default config
-            if _config is None:
-                _config = init_config()
-            self.config = _config
-        # Always start with None - initialize() will create a fresh service manager
-        # This prevents cross-test pollution from cached global _service_manager
+        self.config = config or init_config()
         self.service_manager = None
-        self.composable_workflows = None
-        self.batch_processor = get_batch_processor()
+        self.workflow: Optional[AgenticsWorkflow] = None
         self.monitor = _monitor
-        self.lock = asyncio.Lock()
         self._initialized = False
+        self.rubric_store = RubricStore()
 
     async def initialize(self) -> None:
-        """
-        Initialize all application components asynchronously.
-
-        This method sets up service clients, workflows, and performs health checks.
-        """
+        """Initialize all application components."""
         if self._initialized:
             return
 
         try:
             log_info(__name__, "Initializing agentics application")
-            log_info(
-                __name__,
-                f"Configuration: GitHub token {'set' if self.config.github_token else 'not set'}",
-            )
-            log_info(__name__, f"Ollama host: {self.config.ollama_host}")
-            log_info(__name__, f"Reasoning model: {self.config.ollama_reasoning_model}")
-            log_info(__name__, f"Code model: {self.config.ollama_code_model}")
-
-            # Always create a fresh service manager (self.service_manager is always None from __init__)
             self.service_manager = await init_services(self.config)
-            # Update global reference
-            global _service_manager
-            _service_manager = self.service_manager
-            log_info(
-                __name__,
-                f"Service manager initialized: {self.service_manager is not None}",
+
+            # Create workflow with LLM clients from service manager
+            ollama_reasoning = (
+                self.service_manager.ollama_reasoning.client
+                if self.service_manager.ollama_reasoning else None
             )
-            log_info(
-                __name__,
-                f"GitHub client present: {self.service_manager.github is not None if self.service_manager else False}",
+            ollama_code = (
+                self.service_manager.ollama_code.client
+                if self.service_manager.ollama_code else None
+            )
+            github_client = (
+                self.service_manager.github._client
+                if self.service_manager.github else None
             )
 
-            # Perform service health checks
-            await self._check_services_health()
-
-            # Initialize composable workflows only if Ollama clients are available
-            if self.composable_workflows is None:
-                ollama_reasoning_client = (
-                    self.service_manager.ollama_reasoning.client
-                    if self.service_manager.ollama_reasoning
-                    else None
-                )
-                ollama_code_client = (
-                    self.service_manager.ollama_code.client
-                    if self.service_manager.ollama_code
-                    else None
-                )
-                if ollama_reasoning_client is not None and ollama_code_client is not None:
-                    self.composable_workflows = await create_composable_workflow(
-                        github_client=self.service_manager.github._client
-                        if self.service_manager.github
-                        else None,
-                        llm_reasoning=ollama_reasoning_client,
-                        llm_code=ollama_code_client,
-                        mcp_tools=await self._get_mcp_tools(),
-                    )
-                else:
-                    self.monitor.info(
-                        "Skipping workflow initialization - Ollama clients not available"
-                    )
+            self.workflow = AgenticsWorkflow(
+                llm_reasoning=ollama_reasoning,
+                llm_code=ollama_code,
+                github_client=github_client,
+                config=self.config,
+            )
 
             self._initialized = True
             log_info(__name__, "Agentics application initialized successfully")
-
         except Exception as e:
-            self.monitor.error(f"Failed to initialize application: {str(e)}")
-            raise AgenticsError(f"Application initialization failed: {str(e)}") from e
-
-    async def _check_services_health(self) -> None:
-        """
-        Perform comprehensive health checks on all services.
-
-        Raises:
-            ServiceUnavailableError: If critical services are unavailable.
-        """
-        log_info(__name__, "Performing service health checks")
-
-        health_results = await self.service_manager.check_services_health()
-
-        # Check critical services
-        critical_services = ["ollama_reasoning", "ollama_code", "github"]
-        failed_services = []
-
-        for service in critical_services:
-            if not health_results.get(service, False):
-                failed_services.append(service)
-
-        if failed_services:
-            error_msg = f"Critical services unavailable: {', '.join(failed_services)}"
-            self.monitor.error(error_msg)
-            raise ServiceUnavailableError(error_msg)
-
-        # Log MCP status (not critical)
-        if health_results.get("mcp", False):
-            log_info(__name__, "MCP service available")
-        else:
-            log_info(
-                __name__,
-                "MCP service not available, proceeding without MCP functionality",
-            )
-
-    async def _get_mcp_tools(self) -> List[Any]:
-        """Get MCP tools from the service manager."""
-        if (
-            self.service_manager
-            and hasattr(self.service_manager, "mcp")
-            and self.service_manager.mcp
-        ):
-            try:
-                return await self.service_manager.mcp.get_tools()
-            except Exception:
-                pass
-
-    async def _process_batch_parallel(self, issue_urls: List[str]) -> Dict[str, Any]:
-        """Process multiple issues in parallel using composable workflows."""
-
-        async def process_single_issue(issue_url: str) -> Dict[str, Any]:
-            """Process a single issue asynchronously."""
-            try:
-                self.monitor.info("batch_issue_started", {"issue_url": issue_url})
-                async with self.lock:
-                    result = await self.composable_workflows.process_issue(issue_url)
-                self.monitor.info("batch_issue_completed", {"issue_url": issue_url})
-                return {"issue_url": issue_url, "success": True, "result": result}
-            except Exception as e:
-                self.monitor.warning(
-                    "batch_issue_failed", {"issue_url": issue_url, "error": str(e)}
-                )
-                return {"issue_url": issue_url, "success": False, "error": str(e)}
-
-        # Use batch processor for concurrent execution
-        results = await self.batch_processor.process_batch(
-            items=issue_urls, processor_func=process_single_issue
-        )
-
-        successful = sum(1 for r in results if r.get("success", False))
-        failed = len(results) - successful
-
-        return {
-            "total_issues": len(issue_urls),
-            "successful": successful,
-            "failed": failed,
-            "results": results,
-        }
+            self.monitor.error(f"Failed to initialize: {e}")
+            raise AgenticsError(f"Initialization failed: {e}") from e
 
     async def process_issue(self, issue_url: str) -> Dict[str, Any]:
         """
-        Process a single GitHub issue.
+        Process a GitHub issue through the full workflow.
 
         Args:
             issue_url: URL of the GitHub issue to process.
 
         Returns:
             Processing result containing generated code, tests, and metadata.
-
-        Raises:
-            ValidationError: If the issue URL is invalid.
-            AgenticsError: If processing fails.
         """
         if not self._initialized:
             await self.initialize()
@@ -359,137 +92,164 @@ class AgenticsApp:
         if not validate_github_url(issue_url):
             raise ValidationError(f"Invalid GitHub issue URL: {issue_url}")
 
-        if self.composable_workflows is None:
-            raise AgenticsError(
-                "Workflow not initialized - Ollama LLM service is required but not available"
-            )
-
-        self.monitor.info("issue_processing_started", {"issue_url": issue_url})
         log_info(__name__, f"Processing issue: {issue_url}")
 
         try:
-            async with self.lock:
-                result = await self.composable_workflows.process_issue(issue_url)
-            self.monitor.info("issue_processing_completed", {"issue_url": issue_url})
+            if self.workflow is None:
+                raise AgenticsError("Workflow not initialized")
+            result = await self.workflow.process_issue(issue_url)
+
+            # ── Eval loop ──────────────────────────────────────────
+            eval_state = {
+                "generated_code": result.get("generated_code", ""),
+                "generated_tests": result.get("generated_tests", ""),
+                "refined_ticket": result.get("refined_ticket", {}),
+                "post_integration_tests_passed": result.get("post_integration_tests_passed"),
+                "existing_tests_passed": result.get("existing_tests_passed"),
+            }
+            eval_scores = score_output(eval_state)
+            gate_passed, gate_reason = gate_check(eval_scores)
+
+            self.rubric_store.record({
+                "issue_url": issue_url,
+                "total": eval_scores["total"],
+                "passed": eval_scores["passed"],
+                "scores": eval_scores["scores"],
+            })
+
+            result["eval_scores"] = eval_scores
+            result["eval_passed"] = gate_passed
+
             log_info(__name__, f"Successfully processed issue: {issue_url}")
             return result
-
         except Exception as e:
-            self.monitor.error(f"Failed to process issue {issue_url}: {str(e)}")
-            raise AgenticsError(f"Issue processing failed: {str(e)}") from e
+            self.monitor.error(f"Failed to process issue: {e}")
+            raise AgenticsError(f"Issue processing failed: {e}") from e
 
-    async def process_issues_batch(self, issue_urls: List[str]) -> Dict[str, Any]:
+    def get_quality_report(self) -> dict:
+        """Return the production_monitor quality report dict."""
+        return run_production_check()
+
+    def record_feedback(self, issue_url: str, feedback: str) -> None:
+        """Record user feedback for an issue and close the eval loop.
+
+        Validates feedback input, flags the matching rubric entry with
+        a timestamp, and closes the eval loop.
         """
-        Process multiple GitHub issues concurrently.
-
-        Args:
-            issue_urls: List of GitHub issue URLs to process.
-
-        Returns:
-            Batch processing results with success/failure counts and individual results.
-
-        Note:
-            Invalid URLs are handled gracefully and reported as failed results.
-        """
-        if not self._initialized:
-            await self.initialize()
-
-        self.monitor.info("batch_processing_started", {"issue_count": len(issue_urls)})
-        log_info(__name__, f"Starting batch processing of {len(issue_urls)} issues")
-
-        try:
-            # Filter to valid URLs, record invalid ones as failures
-            valid_urls = []
-            invalid_results = []
-            for url in issue_urls:
-                if validate_github_url(url):
-                    valid_urls.append(url)
-                else:
-                    invalid_results.append(
-                        {"issue_url": url, "success": False, "error": f"Invalid GitHub issue URL: {url}"}
-                    )
-
-            result = await self._process_batch_parallel(valid_urls)
-            result["results"].extend(invalid_results)
-            result["total_issues"] = len(issue_urls)
-            result["failed"] += len(invalid_results)
-            self.monitor.info(
-                "batch_processing_completed",
-                {
-                    "total_issues": result["total_issues"],
-                    "successful": result["successful"],
-                    "failed": result["failed"],
-                },
-            )
-            log_info(
-                __name__,
-                f"Batch processing completed: {result['successful']}/{result['total_issues']} successful",
-            )
-            return result
-
-        except Exception as e:
-            self.monitor.error(f"Batch processing failed: {str(e)}")
-            raise AgenticsError(f"Batch processing failed: {str(e)}") from e
-
-    async def get_service_health(self) -> Dict[str, bool]:
-        """
-        Get the current health status of all services.
-
-        Returns:
-            Dictionary mapping service names to health status.
-        """
-        if not self._initialized:
-            await self.initialize()
-
-        return await self.service_manager.check_services_health()
-
-    async def shutdown(self) -> None:
-        """
-        Gracefully shutdown the application and clean up resources.
-        """
-        if not self._initialized:
+        if not feedback or not feedback.strip():
+            log_info(__name__, "Empty feedback received, ignoring")
             return
 
-        log_info(__name__, "Shutting down agentics application")
+        entries = self.rubric_store._read_all()
+        for entry in reversed(entries):
+            if entry.get("issue_url") == issue_url:
+                entry["feedback"] = feedback
+                entry["flagged"] = True
+                entry["flagged_at"] = datetime.utcnow().isoformat() + "Z"
+                close_the_loop(entry)
+                log_info(__name__, f"Feedback recorded for {issue_url}")
+                return
+
+        log_info(__name__, f"No matching entry found for {issue_url}")
+
+    async def run_regression_suite(self) -> dict:
+        """Run all gold standard cases through the workflow and score them.
+
+        Loads gold standard cases from the GoldStandardSuite, runs each
+        through the workflow, and checks scores against case-specific
+        thresholds.  Requires the app to be initialized first.
+        """
+        if not self._initialized:
+            await self.initialize()
 
         try:
-            if self.service_manager:
-                await self.service_manager.close_services()
+            from .test_suite import GoldStandardSuite
 
-            self._initialized = False
-            log_info(__name__, "Agentics application shutdown complete")
+            suite = GoldStandardSuite()
+            cases = suite.get_all_cases()
 
+            if not cases:
+                return {"status": "no_cases", "total": 0, "passed": 0, "failed": 0}
+
+            results = []
+            for case in cases:
+                try:
+                    result = await self.workflow.process_issue(case["input"])
+                    eval_scores = result.get("eval_scores", {})
+
+                    # Check against case-specific thresholds
+                    thresholds = case.get("criteria_thresholds", {})
+                    case_passed = True
+                    criterion_results = {}
+                    for criterion, threshold in thresholds.items():
+                        actual = eval_scores.get("scores", {}).get(criterion, 0)
+                        criterion_results[criterion] = {
+                            "actual": actual,
+                            "threshold": threshold,
+                            "passed": actual >= threshold,
+                        }
+                        if actual < threshold:
+                            case_passed = False
+
+                    results.append({
+                        "case_id": case["id"],
+                        "passed": case_passed,
+                        "scores": eval_scores,
+                        "criterion_results": criterion_results,
+                    })
+                except Exception as e:
+                    log_info(__name__, f"Regression case {case['id']} failed: {e}")
+                    results.append({
+                        "case_id": case["id"],
+                        "passed": False,
+                        "scores": {},
+                        "error": str(e),
+                    })
+
+            passed_count = sum(1 for r in results if r["passed"])
+            return {
+                "status": "complete",
+                "total": len(cases),
+                "passed": passed_count,
+                "failed": len(cases) - passed_count,
+                "results": results,
+            }
         except Exception as e:
-            self.monitor.error(f"Error during shutdown: {str(e)}")
+            self.monitor.error(f"Regression suite failed: {e}")
+            raise AgenticsError(f"Regression suite failed: {e}") from e
+
+    async def shutdown(self) -> None:
+        """Gracefully shutdown the application."""
+        if not self._initialized:
+            return
+        log_info(__name__, "Shutting down agentics application")
+        if self.service_manager:
+            await self.service_manager.close_services()
+        self._initialized = False
 
 
-# Main execution
 if __name__ == "__main__":
     async def main():
-        """Main async execution function."""
-        # Accept URL from env var or command-line arg
         issue_url = os.getenv("URL") or (sys.argv[1] if len(sys.argv) > 1 else None)
         if not issue_url:
             print("Usage: python -m src.agentics <issue_url> or set URL env var", file=sys.stderr)
             sys.exit(1)
 
-        log_info(__name__, f"Processing issue URL: {issue_url}")
-
-        app_instance = AgenticsApp()
+        app = AgenticsApp()
         try:
-            await app_instance.initialize()
-            result = await app_instance.process_issue(issue_url)
-            log_info(__name__, "Processing completed successfully")
+            await app.initialize()
+            result = await app.process_issue(issue_url)
             print(f"Result keys: {list(result.keys())}")
             if result.get("generated_code"):
                 print(f"Generated code length: {len(result['generated_code'])}")
             if result.get("generated_tests"):
                 print(f"Generated tests length: {len(result['generated_tests'])}")
+            if result.get("eval_scores"):
+                print(f"Eval total: {result['eval_scores']['total']:.2f}, passed: {result['eval_passed']}")
         except Exception as e:
-            log_info(__name__, f"Processing failed: {str(e)}")
-            print(f"Error: {str(e)}", file=sys.stderr)
+            print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
         finally:
-            await app_instance.shutdown()
+            await app.shutdown()
 
     asyncio.run(main())

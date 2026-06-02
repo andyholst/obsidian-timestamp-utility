@@ -11,7 +11,6 @@ from tenacity import (
     retry_if_exception_type,
 )
 from .utils import log_info
-from .monitoring import structured_log
 
 
 class MCPClient:

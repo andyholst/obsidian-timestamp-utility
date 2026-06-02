@@ -71,13 +71,4 @@ class HealthCheckError(AgenticsError):
     pass
 
 
-class TestRecoveryNeeded(AgenticsError):
-    """Raised when tests fail and recovery is needed."""
 
-    pass
-
-
-class CompileError(AgenticsError):
-    """Raised when TypeScript compilation fails."""
-
-    pass

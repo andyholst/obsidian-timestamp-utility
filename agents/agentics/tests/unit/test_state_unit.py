@@ -20,23 +20,26 @@ def test_state_keys():
         "result",
         "generated_code",
         "generated_tests",
-        "existing_tests_passed",
-        "existing_coverage_all_files",
+        "method_name",
+        "command_id",
         "relevant_code_files",
         "relevant_test_files",
-        "available_dependencies",
+        "existing_tests_passed",
         "post_integration_tests_passed",
-        "post_integration_coverage_all_files",
-        "coverage_improvement",
-        "tests_improvement",
-        "feedback_metrics",
-        "conversation_history",
-        "memory",
-        "feedback",
+        "validation_score",
+        "recovery_attempt",
         "error",
         "error_type",
         "success",
-        "workflow_id",
+        "eval_scores",
+        "eval_passed",
+        "eval_reasons",
+        "failed_criteria",
+        "regression_check",
+        "integrated",
+        "integration_blocked_reason",
+        "eval_failure_context",
+        "tests_passed",
     }
 
     # When: Getting type hints
@@ -87,3 +90,120 @@ def test_state_optional_keys():
 
     # Then: Key is present
     assert "available_dependencies" in state
+
+
+def test_state_tests_passed_key():
+    """State should accept the tests_passed boolean key."""
+    state = State(
+        url="",
+        ticket_content="",
+        refined_ticket={},
+        result={},
+        generated_code="",
+        generated_tests="",
+        existing_tests_passed=0,
+        existing_coverage_all_files=0.0,
+        relevant_code_files=[],
+        relevant_test_files=[],
+    )
+    state["tests_passed"] = True
+    assert state["tests_passed"] is True
+    state["tests_passed"] = False
+    assert state["tests_passed"] is False
+
+
+def test_state_eval_failure_context_key():
+    """State should accept the eval_failure_context string key."""
+    state = State(
+        url="",
+        ticket_content="",
+        refined_ticket={},
+        result={},
+        generated_code="",
+        generated_tests="",
+        existing_tests_passed=0,
+        existing_coverage_all_files=0.0,
+        relevant_code_files=[],
+        relevant_test_files=[],
+    )
+    ctx = "Score: 0.45/1.0. Failed criteria: has_actionable_output. What was wrong: has_actionable_output=0.00."
+    state["eval_failure_context"] = ctx
+    assert state["eval_failure_context"] == ctx
+
+
+def test_state_integrated_key():
+    """State should accept the integrated boolean key."""
+    state = State(
+        url="",
+        ticket_content="",
+        refined_ticket={},
+        result={},
+        generated_code="",
+        generated_tests="",
+        existing_tests_passed=0,
+        existing_coverage_all_files=0.0,
+        relevant_code_files=[],
+        relevant_test_files=[],
+    )
+    state["integrated"] = True
+    assert state["integrated"] is True
+
+
+def test_state_integration_blocked_reason_key():
+    """State should accept the integration_blocked_reason string key."""
+    state = State(
+        url="",
+        ticket_content="",
+        refined_ticket={},
+        result={},
+        generated_code="",
+        generated_tests="",
+        existing_tests_passed=0,
+        existing_coverage_all_files=0.0,
+        relevant_code_files=[],
+        relevant_test_files=[],
+    )
+    state["integration_blocked_reason"] = "Score too low"
+    assert state["integration_blocked_reason"] == "Score too low"
+
+
+def test_state_eval_fields():
+    """State eval-related fields (eval_scores, eval_passed, eval_reasons, failed_criteria)."""
+    state = State(
+        url="",
+        ticket_content="",
+        refined_ticket={},
+        result={},
+        generated_code="",
+        generated_tests="",
+        existing_tests_passed=0,
+        existing_coverage_all_files=0.0,
+        relevant_code_files=[],
+        relevant_test_files=[],
+    )
+    state["eval_scores"] = {"has_actionable_output": 0.9}
+    state["eval_passed"] = True
+    state["eval_reasons"] = ["ok"]
+    state["failed_criteria"] = []
+    assert state["eval_scores"] == {"has_actionable_output": 0.9}
+    assert state["eval_passed"] is True
+    assert state["eval_reasons"] == ["ok"]
+    assert state["failed_criteria"] == []
+
+
+def test_state_regression_check_key():
+    """State should accept the regression_check dict key."""
+    state = State(
+        url="",
+        ticket_content="",
+        refined_ticket={},
+        result={},
+        generated_code="",
+        generated_tests="",
+        existing_tests_passed=0,
+        existing_coverage_all_files=0.0,
+        relevant_code_files=[],
+        relevant_test_files=[],
+    )
+    state["regression_check"] = {"regressed": False, "deltas": {}}
+    assert state["regression_check"]["regressed"] is False
