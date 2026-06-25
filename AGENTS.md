@@ -40,13 +40,22 @@ tsc --noEmit           # Type check without emit (belt + suspenders)
 
 ### Layer 2 — Tests (standard correctness)
 ```bash
+# Plugin tests:
 make test-app          # All tests pass
-# For agents:
-make test-agents-unit-mock   # Mocked, no Ollama needed
+
+# Agent tests (two tiers):
+make test-agents-unit-mock   # Fast, mocked, no Ollama needed (run every change)
+make test-agents             # Full integration: needs MCP running on :3003 + live Ollama
 make lint-python             # ruff + mypy clean
+
+# Integration tests (when agents change):
+# 1. make start-mcp-persist &   (start MCP in background)
+# 2. make test-agents           (run against real Ollama + MCP)
+# 3. make run-agentics ISSUE_URL=<url>  (end-to-end smoke test)
 ```
 - If tests fail → loop attempts fix before proceeding
 - Coverage target: >= 80% for new code
+- **Unit-mock** runs on every change. **Integration** runs on agent/graph changes only
 
 ### Layer 3 — Spec Compliance (strict)
 - Read VISION.md criteria
