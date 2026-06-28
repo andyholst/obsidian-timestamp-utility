@@ -398,6 +398,11 @@ class AgenticsWorkflow:
         bak_dir = os.path.join(pr, "src", ".agentics_backups")
         for d in [gen_dir, gen_test_dir, bak_dir]:
             os.makedirs(d, exist_ok=True)
+        # Clean up stale generated files from previous runs
+        for d in [gen_dir, gen_test_dir]:
+            if os.path.isdir(d):
+                for f in os.listdir(d):
+                    os.remove(os.path.join(d, f))
         with open(main_ts) as f:
             orig_main = f.read()
         with open(main_test) as f:
