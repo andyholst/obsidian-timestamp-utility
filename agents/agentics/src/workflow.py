@@ -458,9 +458,14 @@ class AgenticsWorkflow:
                         export_name = llm_ex
                     if llm_cmd and re.match(r'^[a-z][a-z0-9-]+$', llm_cmd):
                         command_id = llm_cmd
+                        # Use command_id for filename slug so it matches the issue name
+                        slug = llm_cmd[:40]
             except Exception as ex:
                 log_info("generate", f"naming LLM failed: {ex}")
-        log_info("generate", f"Derived: export={export_name}, command={command_id}")
+        log_info("generate", f"Derived: export={export_name}, command={command_id}, slug={slug}")
+        # Regenerate file paths with updated slug
+        gen_file = os.path.join(gen_dir, f"{slug}.ts")
+        gen_test_file = os.path.join(gen_test_dir, f"{slug}.test.ts")
 
         gen_code = state.get("_persisted_gen_code", "")
         gen_test_code = ""
