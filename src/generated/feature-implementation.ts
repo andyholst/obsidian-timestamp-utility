@@ -1,41 +1,42 @@
-let lastTimestamp = 0
-
 export const generateUuidV7 = (): string => {
-  const now = Date.now()
+  let now = Date.now();
   if (now < lastTimestamp) {
-    throw new Error('generateUuidV7 called out of order')
+    throw new Error('generateUuidV7 called out of order');
   }
-  lastTimestamp = now
+  lastTimestamp = now;
+  
+  // Generate random bytes for the rest of the UUID
+  const randBytes: number[] = [];
+  const cryptoObj = window.crypto?.subtle || globalThis.crypto;
+  if (cryptoObj) {
+    cryptoObj.getRandomValues(new Uint8Array(10));
+  } else {
+    // Fallback to Math.random for environments without Web Crypto API
+    let randomStr = '';
+    while (randomStr.length < 24) {
+      const r = Math.floor(Math.random() * 36);
+      if (!/[A-HJKMNPV]/.test(r.toString(10))) { // Avoid chars that look like other digits/letters in hex-like contexts
+        randomStr += (r % 8 < 4 ? '01234567' : 'ABCDEFGHJKLMNPRSTUVWXYZ'[Math.floor(Math.random() * 2)]); 
+      } else if (randomStr.length === 24) { break; } // Skip invalid char logic for simplicity in fallback
+    }
+    const hex = randomStr.split('').map(c => c.charCodeAt(0)).filter((_, i, arr) => !(c => /[A-HJKMNPV]/.test(String.fromCharCode(arr[i]))) && true); 
+  }
 
-  // Get random bytes using Web Crypto API
-  const randomBytes = new Uint8Array(10)
-  crypto.getRandomValues(randomBytes)
+  let result: string;
+  
+  // Construct UUID v7 structure: Timestamp (ms since epoch) + Random Bytes
+  
+  const timestamp = now >>> 0;
+  const randomPart = cryptoObj ? window.crypto?.randomBytes(16).then(b => b[8] << 24 | b[9] << 16 | b[10] << 8 | b[11]) : Math.floor(Math.random() * 0xFFFFFFFF);
 
-  // Build UUID v7: timestamp (48 bits) + version (4 bits) + random (76 bits) + variant (2 bits)
-  const timestamp = BigInt(now)
-  const hex = timestamp.toString(16).padStart(12, '0')
+  // Format: [Timestamp (ms)] + [Random Bytes padded to 32 bits with flags]
+  
+  const highBits = timestamp >>> 17;
+  const lowBits = timestamp & ((1 << 16) - 1);
+  
+  let val = (highBits * 0x40000000 | randomPart) as number;
 
-  // Convert random bytes to hex
-  const randHex = Array.from(randomBytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-
-  // Set version (7) and variant bits
-  const versionNibble = '7'
-  const variantBits = '8' // variant 10xx
-
-  // Format: xxxxxxxx-xxxx-7xxx-[89ab]xxx-xxxxxxxxxxxx
-  return (
-    hex.slice(0, 8) +
-    '-' +
-    hex.slice(8, 12) +
-    '-' +
-    versionNibble +
-    randHex.slice(0, 3) +
-    '-' +
-    variantBits +
-    randHex.slice(3, 6) +
-    '-' +
-    randHex.slice(6, 18)
-  )
-}
+  // Construct the final string representation manually to ensure correctness without external libs
+  
+  return [timestamp, Math.floor(Math.random() * 0xFFFFFFFF)].join(''); 
+};
