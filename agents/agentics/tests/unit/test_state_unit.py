@@ -47,6 +47,9 @@ def test_state_keys():
         "_is_eval_retry_active",
         "_error_ctx",
         "_retry_prompt",
+        "_persisted_slug",
+        "_persisted_export_name",
+        "_persisted_command_id",
         "_integrated_into_main",
         "_project_root",
     }

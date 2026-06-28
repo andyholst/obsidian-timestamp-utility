@@ -429,25 +429,31 @@ class AgenticsWorkflow:
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 shutil.copy2(fp, os.path.join(bak_dir, f"{os.path.basename(fp)}.{ts}.bak"))
 
-        # Derive export name + command id from issue URL (deterministic)
-        # Use issue number + slug from title for consistency
-        issue_slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:40] or "feature"
-        # Try to extract issue number from state
-        url = state.get("url", "")
-        issue_num = ""
-        num_match = re.search(r'/issues/(\d+)', url)
-        if num_match:
-            issue_num = num_match.group(1)
-        # Build deterministic names
-        if issue_num:
-            command_id = f"issue-{issue_num}-{issue_slug}"[:40]
-        else:
-            command_id = issue_slug[:40]
-        parts = command_id.split('-')
-        export_name = parts[0] + ''.join(p.title() for p in parts[1:])
-        if len(export_name) > 30:
-            export_name = export_name[:30]
-        # Only call naming LLM on first attempt (not on eval retry — keep same names)
+        # Derive export name + command id from issue URL (DETERMINISTIC)
+        # Use issue number for stable naming across retries
+        # Restore persisted names from previous attempts (if retrying)
+        slug = state.get("_persisted_slug", "")
+        export_name = state.get("_persisted_export_name", "")
+        command_id = state.get("_persisted_command_id", "")
+        if not slug:
+            # First attempt — derive names
+            url = state.get("url", "")
+            issue_num = ""
+            num_match = re.search(r'/issues/(\d+)', url)
+            if num_match:
+                issue_num = num_match.group(1)
+            if issue_num:
+                slug = f"issue-{issue_num}"[:40]
+                export_name = f"issue{issue_num}Command"[:30]
+                command_id = f"issue-{issue_num}-command"[:40]
+            else:
+                slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:40] or "feature"
+                parts = slug.split('-')
+                export_name = parts[0] + ''.join(p.title() for p in parts[1:])
+                if len(export_name) > 30:
+                    export_name = export_name[:30]
+                command_id = slug
+        # Naming LLM only runs on first attempt (not on eval retry — keep same names)
         if not is_eval_retry:
             naming_prompt = (
                 f"Given this GitHub issue for an Obsidian TS plugin, propose:\n"
@@ -474,12 +480,14 @@ class AgenticsWorkflow:
                         export_name = llm_ex
                     if llm_cmd and re.match(r'^[a-z][a-z0-9-]+$', llm_cmd):
                         command_id = llm_cmd
-                        # Use command_id for filename slug so it matches the issue name
-                        slug = llm_cmd[:40]
+                        slug = llm_cmd[:40]  # filename matches command name
             except Exception as ex:
                 log_info("generate", f"naming LLM failed: {ex}")
         log_info("generate", f"Derived: export={export_name}, command={command_id}, slug={slug}")
-        # Regenerate file paths with updated slug
+        # Persist names across retries
+        state["_persisted_slug"] = slug
+        state["_persisted_export_name"] = export_name
+        state["_persisted_command_id"] = command_id
         gen_file = os.path.join(gen_dir, f"{slug}.ts")
         gen_test_file = os.path.join(gen_test_dir, f"{slug}.test.ts")
 

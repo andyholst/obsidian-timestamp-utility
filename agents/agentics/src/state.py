@@ -55,3 +55,6 @@ class State(TypedDict, total=False):
     _retry_prompt: str
     _integrated_into_main: bool
     _project_root: str
+    _persisted_slug: str
+    _persisted_export_name: str
+    _persisted_command_id: str
