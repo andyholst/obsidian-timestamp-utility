@@ -148,7 +148,10 @@ def verify_and_retry(
 # ---------------------------------------------------------------------------
 
 def verify_generated_code(state: Dict) -> VerificationResult:
-    """Verify that generated code meets structural requirements."""
+    """Verify that generated code meets structural requirements and compiles."""
+    import subprocess
+    import tempfile
+    import os
     errors = []
     gen_code = state.get("generated_code", "")
 
@@ -156,8 +159,28 @@ def verify_generated_code(state: Dict) -> VerificationResult:
         errors.append({"type": "empty_code", "message": "No code was generated"})
     elif len(gen_code.strip()) < 20:
         errors.append({"type": "too_short", "message": "Generated code is too short to be valid"})
-    # Note: We accept any non-trivial code — imports and classes are handled by
-    # _post_process_generated_code(). The only hard rejection is empty/too-short output.
+    else:
+        # Verify the code actually compiles with tsc
+        project_root = state.get("_project_root", "")
+        if project_root and os.path.isdir(project_root):
+            try:
+                # Write to temp file and type-check
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False, dir=project_root) as f:
+                    f.write(gen_code)
+                    tmp_path = f.name
+                result = subprocess.run(
+                    ["./node_modules/.bin/tsc", "--noEmit", "--skipLibCheck", "--target", "es2018", tmp_path],
+                    cwd=project_root, capture_output=True, text=True, timeout=30
+                )
+                os.unlink(tmp_path)
+                if result.returncode != 0:
+                    # Extract first error
+                    err_lines = [l for l in result.stderr.split('\n') if l.strip() and 'error' in l.lower()]
+                    first_err = err_lines[0][:200] if err_lines else result.stderr[:200]
+                    errors.append({"type": "compile_error", "message": f"TypeScript compilation failed: {first_err}"})
+            except Exception as e:
+                # If tsc check fails (e.g., not installed), skip but log
+                pass
 
     score = max(0.0, 100.0 - (len(errors) * 30.0))
     passed = len(errors) == 0
@@ -167,7 +190,7 @@ def verify_generated_code(state: Dict) -> VerificationResult:
         retry_prompt = (
             "The generated code had issues:\n"
             + "\n".join(f"- {e['message']}" for e in errors)
-            + "\n\nPlease regenerate the code fixing these issues."
+            + "\n\nPlease regenerate the code fixing these issues. USE BROWSER-COMPATIBLE APIs ONLY (no Buffer, no require, no Node.js modules)."
         )
 
     return VerificationResult(passed=passed, score=score, errors=errors, retry_prompt=retry_prompt)

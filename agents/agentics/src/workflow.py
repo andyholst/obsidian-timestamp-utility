@@ -529,6 +529,7 @@ class AgenticsWorkflow:
         gen_retry_state["_is_eval_retry_active"] = is_eval_retry
         gen_retry_state["_gen_attempt"] = 0
         gen_retry_state["_error_ctx"] = ""
+        gen_retry_state["_project_root"] = self.project_root
 
         gen_final_state, gen_result = verify_and_retry(
             node_name="generate_code",

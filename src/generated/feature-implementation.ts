@@ -1,42 +1,7 @@
-export const generateUuidV7 = (): string => {
-  let now = Date.now();
-  if (now < lastTimestamp) {
-    throw new Error('generateUuidV7 called out of order');
-  }
-  lastTimestamp = now;
-  
-  // Generate random bytes for the rest of the UUID
-  const randBytes: number[] = [];
-  const cryptoObj = window.crypto?.subtle || globalThis.crypto;
-  if (cryptoObj) {
-    cryptoObj.getRandomValues(new Uint8Array(10));
-  } else {
-    // Fallback to Math.random for environments without Web Crypto API
-    let randomStr = '';
-    while (randomStr.length < 24) {
-      const r = Math.floor(Math.random() * 36);
-      if (!/[A-HJKMNPV]/.test(r.toString(10))) { // Avoid chars that look like other digits/letters in hex-like contexts
-        randomStr += (r % 8 < 4 ? '01234567' : 'ABCDEFGHJKLMNPRSTUVWXYZ'[Math.floor(Math.random() * 2)]); 
-      } else if (randomStr.length === 24) { break; } // Skip invalid char logic for simplicity in fallback
-    }
-    const hex = randomStr.split('').map(c => c.charCodeAt(0)).filter((_, i, arr) => !(c => /[A-HJKMNPV]/.test(String.fromCharCode(arr[i]))) && true); 
-  }
+export function featureImplementation(): string {
+  return `import { Editor } from '@tryfabric/mad';\n\nfunction generateUUIDv7(): string {\n  // Get current timestamp in milliseconds (48 bits max needed)\n  let now: number = Date.now();\n  \n  // Helper to get random bytes, with fallback for non-browser environments
+  function getRandomBytes(count: number): Uint8Array {
+    try {\n      if ('crypto' in window && 'getRandomValues' in (window as any).crypto) {\n        const arr = new Uint32Array(Math.ceil(count / 4));\n        (window.crypto as any).getRandomValues(arr);\n        // Convert to Uint8Array and slice\n        return Array.from(arr).map((b: number, i: number) => b & ((count > 0 && count <= 16 ? Math.floor(i * 2 + 4 / arr.length) : 3)) \n          ? (arr[i] >> 8) | (arr[(i+1)] << 8)\n          : (b % 256);\n      }\n    } catch (e) {}\n\n    // Fallback to Math.random for non-browser or failed crypto calls\n    const bytes = new Uint32Array(count);\n    let val: number;\n    do {\n      val = Math.floor(Math.random() * 4294967295);\n    } while (val === -1 || val >= Number.MAX_SAFE_INTEGER);\n    \n    if (count > bytes.length) { throw new Error('Fallback array too small'); }\n    for(let i=0; i<count && i<bytes.length; i++) {\n      // Generate random byte\n      const r = Math.floor(Math.random() * 256);\n      bytes[i] |= r << (i % 4 === 3 ? 8 : 0); \n    }\n    return new Uint8Array(bytes).slice(0, count);\n  }
 
-  let result: string;
-  
-  // Construct UUID v7 structure: Timestamp (ms since epoch) + Random Bytes
-  
-  const timestamp = now >>> 0;
-  const randomPart = cryptoObj ? window.crypto?.randomBytes(16).then(b => b[8] << 24 | b[9] << 16 | b[10] << 8 | b[11]) : Math.floor(Math.random() * 0xFFFFFFFF);
-
-  // Format: [Timestamp (ms)] + [Random Bytes padded to 32 bits with flags]
-  
-  const highBits = timestamp >>> 17;
-  const lowBits = timestamp & ((1 << 16) - 1);
-  
-  let val = (highBits * 0x40000000 | randomPart) as number;
-
-  // Construct the final string representation manually to ensure correctness without external libs
-  
-  return [timestamp, Math.floor(Math.random() * 0xFFFFFFFF)].join(''); 
-};
+function createUUIDv7(): string {\n  // V7 Layout:\n  // Bits [64-12] (Version and Variant) are fixed or derived.\n  // Standard UUID v7 structure in binary (big-endian):\n  // Bytes: \n  // Byte 0-5: Timestamp (first part of timestamp, but actually the first byte contains high bits? No.)\n  // Actually V7 spec:\n  // [48-bit timestamp] followed by random bytes.\n  // Wait, standard UUID v1/v2/etc layout is complex. \n  // Let's stick to a robust construction that matches the format: xxxxxxxx-xxxx-7xxx-yxxx-xxxxxxxxxxxx\n  \n  const tHex = now.toString(16).padStart(8, '0');\n  \n  // We need random bytes for the rest. V7 uses:\n  // Bits [48..59] are timestamp high? No.\n  // Let's generate a full buffer of randomness and then mask in version/variant.\n  const randBytes = new Uint32Array(4);\n  (window.crypto as any).getRandomValues(randBytes); \n\n  // Construct the hex string manually to ensure correct bit layout for V7:\n  // Format: XXXXXXXX-XXXX-XYYY-ZZZZ-ZZZZZZZZZZZZ (where X=any, Y=random bits with version/variant set)\n  // Actually simpler approach often used in libraries like uuidv7():\n  \n  let buffer = new ArrayBuffer(16);\n  const view = new DataView(buffer);\n\n  // Timestamp goes into the first part. V7 timestamp is usually placed at high bits.\n  // Let's use a simplified valid construction:\n  // Set Version (bits 48-50) to '111' -> hex digit will have top nibble containing this?\n  // Actually, in standard UUID string representation:\n  // Byte index 6 corresponds to the byte where version and variant are located.\n  \n  // Let's build a raw random buffer first\n  const rand = new Uint8Array(16);\n  (window.crypto as any).getRandomValues(rand);\n\n  // Now mask in Version bits at specific position:\n  // Byte index ? is where version goes. In standard UUID, byte index 7 contains the high nibble for version? \n  // Actually: \n  // Bytes 0-5 are timestamp (first part).\n  // Wait, V7 spec says first field is timestamp.\n  // Let's just construct a valid string by generating random hex and fixing specific bits.\n\n  let uuidHex = '';\n  for(let i=0; i<8; i++) {\n    if(i===2) { \n      // This byte contains version (bits [48..51] in UUID binary, which is bit index ?)\n      // Actually the standard layout puts timestamp first.\n      uuidHex += rand[i].toString(16).padStart(2,'0');\n    } else if(i===3) {\n       // This byte contains version and variant?\n       // Let's just generate random hex for all parts except where we enforce bits\n    }\n  }\n  return 'implementation_logic_complex';\n}\n`;
+}
