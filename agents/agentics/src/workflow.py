@@ -505,8 +505,8 @@ class AgenticsWorkflow:
             # We only do a quick syntax check here to avoid wasting time on broken code
             if not _is_valid_ts_syntax(gen_code):
                 log_info("generate", "Code has syntax errors, retrying...")
-                gen_code = ""
                 attempt_state["_error_ctx"] = "TypeScript syntax errors"
+                attempt_state["generated_code"] = gen_code  # keep code for verify to report
                 return attempt_state
 
             with open(gen_file, "w") as f:
