@@ -14,6 +14,12 @@ from .config import AgenticsConfig
 from .state import State
 from .utils import log_info, remove_thinking_tags
 from .eval_rubric import score_output, gate_check, record_failure, RubricStore, RegressionTracker
+from .loop_engineering import (
+    verify_and_retry,
+    verify_generated_code,
+    verify_tests_passed,
+    AGENT_MAX_RETRIES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -446,19 +452,24 @@ class AgenticsWorkflow:
 
         gen_code, gen_test_code, error_ctx = "", "", ""
 
-        # ---- Generate module code (up to 3 attempts) ----
-        for attempt in range(3):
+        # ---- Generate module code using verify-and-retry loop ----
+        def _execute_code_generation(attempt_state: dict) -> dict:
+            """Single attempt: build prompt, call LLM, validate, write file."""
+            nonlocal gen_code, error_ctx
             backup(gen_file)
-            # On eval retry, use eval_failure_context as the primary error context
-            if is_eval_retry and attempt == 0:
+
+            # Determine prompt (eval retry vs normal)
+            is_eval_retry_local = attempt_state.get("_is_eval_retry_active", False)
+            if is_eval_retry_local:
                 prompt = self._build_eval_retry_prompt(title, full_ticket, reqs, export_name,
-                                                        state["eval_failure_context"])
-                # Clear so subsequent inner-loop retries use normal prompt builder
-                is_eval_retry = False
+                                                        attempt_state.get("eval_failure_context", ""))
+                attempt_state["_is_eval_retry_active"] = False
             else:
                 prompt = self._build_module_prompt(title, full_ticket, reqs, export_name,
-                                                   is_retry=(attempt > 0), error_ctx=error_ctx,
+                                                   is_retry=(attempt_state.get("_gen_attempt", 0) > 0),
+                                                   error_ctx=attempt_state.get("_error_ctx", ""),
                                                    gen_code=gen_code)
+
             resp = self.llm_code.invoke(prompt)
             raw = remove_thinking_tags(str(resp).strip())
             if raw.startswith("```"):
@@ -470,13 +481,16 @@ class AgenticsWorkflow:
                         break
                 raw = "\n".join(lr[1:ei]).strip()
             if not raw:
-                continue
+                attempt_state["_error_ctx"] = "Empty LLM response"
+                return attempt_state
+
             raw = _post_process_generated_code(raw)
             gen_code = raw
             if gen_code and f"function {export_name}" in gen_code and f"export function {export_name}" not in gen_code:
                 gen_code = gen_code.replace(f"function {export_name}", f"export function {export_name}")
                 log_info("generate", f"Post-added export prefix to {export_name}")
 
+            # Validate structure
             verrors = []
             if "class " in gen_code or "class\n" in gen_code:
                 verrors.append("Contains 'class' declaration")
@@ -484,30 +498,59 @@ class AgenticsWorkflow:
                 verrors.append("Contains 'import' statements")
             if f"export function {export_name}" not in gen_code and f"export {{ {export_name} }}" not in gen_code:
                 verrors.append(f"Missing export function '{export_name}'")
+
             if verrors:
                 error_ctx = "; ".join(verrors)
-                log_info("generate", f"validation failed (attempt {attempt+1}): {error_ctx}")
+                log_info("generate", f"validation failed: {error_ctx}")
                 gen_code = ""
-                continue
+                attempt_state["_error_ctx"] = error_ctx
+                return attempt_state
+
+            # Quick syntax check
+            if not _is_valid_ts_syntax(gen_code):
+                log_info("generate", "Code has syntax errors, retrying...")
+                gen_code = ""
+                attempt_state["_error_ctx"] = "TypeScript syntax errors"
+                return attempt_state
 
             with open(gen_file, "w") as f:
                 f.write(gen_code)
-            log_info("generate", f"module generated (attempt {attempt+1}): export={export_name}")
+            log_info("generate", f"module generated: export={export_name}")
+            attempt_state["generated_code"] = gen_code
+            return attempt_state
 
-            # ---- Quick syntax check before running tests (avoid wasting time on broken code) ----
-            if not _is_valid_ts_syntax(gen_code):
-                log_info("generate", f"Code has syntax errors (attempt {attempt+1}), retrying...")
-                gen_code = ""
-                continue
+        def _verify_code_generation(attempt_state: dict):
+            """Verify code generation output."""
+            code = attempt_state.get("generated_code", gen_code)
+            return verify_generated_code({**attempt_state, "generated_code": code, "method_name": export_name})
 
-            break
+        # Initialize retry state
+        gen_retry_state = dict(state)
+        gen_retry_state["_is_eval_retry_active"] = is_eval_retry
+        gen_retry_state["_gen_attempt"] = 0
+        gen_retry_state["_error_ctx"] = ""
 
-        # ---- Generate tests (up to 3 validation attempts) ----
+        gen_final_state, gen_result = verify_and_retry(
+            node_name="generate_code",
+            max_attempts=AGENT_MAX_RETRIES,
+            execute_fn=_execute_code_generation,
+            verify_fn=_verify_code_generation,
+            state=gen_retry_state,
+            attempt_counter_key="_gen_attempt",
+        )
+
+        # ---- Generate tests using verify-and-retry loop ----
+        test_result = None  # Will be set by verify_and_retry if gen_code is truthy
         if gen_code:
             module_path = f"../../generated/{slug}"
             jest_env = {**os.environ, "NODE_ENV": "development"}
-            for v_attempt in range(3):
-                if v_attempt == 0 or not gen_test_code:
+
+            def _execute_test_generation(attempt_state: dict) -> dict:
+                """Single attempt: generate tests, run jest, self-correct code if needed."""
+                nonlocal gen_code, gen_test_code
+
+                # Generate tests (only on first attempt or if previous tests were cleared)
+                if not gen_test_code:
                     tp = (
                         f"Write Jest tests for this TS module:\n\n```typescript\n{gen_code}\n```\n\n"
                         f"Import: {{ {export_name} }} from '{module_path}'\n"
@@ -533,52 +576,79 @@ class AgenticsWorkflow:
                     with open(gen_test_file, "w") as f:
                         f.write(gen_test_code)
 
+                # Run tests
                 tres = subprocess.run(
                     ["npx", "jest", "--no-cache", gen_test_file],
                     cwd=pr, capture_output=True, text=True, timeout=120, env=jest_env)
-                if tres.returncode == 0:
-                    log_info("generate", f"Tests pass (attempt {v_attempt+1})")
-                    break
 
+                if tres.returncode == 0:
+                    log_info("generate", "Tests pass")
+                    attempt_state["tests_passed"] = True
+                    return attempt_state
+
+                # Tests failed — extract error context
                 full_out = tres.stdout + tres.stderr
                 el = [l for l in full_out.split("\n")
                       if l.strip().startswith("●") or "TypeError" in l
                       or "Error:" in l or "FAIL" in l]
-                error_ctx = "\n".join(el[:10]) if el else full_out[-1000:]
-                log_info("generate", f"Tests failed (attempt {v_attempt+1}): {error_ctx[:200]}")
+                err_ctx = "\n".join(el[:10]) if el else full_out[-1000:]
+                log_info("generate", f"Tests failed: {err_ctx[:200]}")
 
-                if v_attempt < 2:
-                    fp = self._build_module_prompt(title, full_ticket, reqs, export_name,
-                                                   is_retry=True, error_ctx=error_ctx, gen_code=gen_code)
-                    try:
-                        fr = self.llm_code.invoke(fp)
-                        fr_raw = remove_thinking_tags(str(fr).strip())
-                        if fr_raw.startswith("```"):
-                            fl = fr_raw.split("\n")
-                            for fi in range(len(fl) - 1, 0, -1):
-                                if fl[fi].strip().startswith("```"):
-                                    fr_raw = "\n".join(fl[1:fi]).strip()
-                                    break
-                        if fr_raw and re.search(rf'export\s+function\s+{re.escape(export_name)}', fr_raw):
-                            gen_code = _post_process_generated_code(fr_raw)
-                            if f"function {export_name}" in gen_code and f"export function {export_name}" not in gen_code:
-                                gen_code = gen_code.replace(f"function {export_name}", f"export function {export_name}")
-                            with open(gen_file, "w") as f:
-                                f.write(gen_code)
-                            log_info("generate", "Code self-corrected from test errors")
-                    except Exception:
-                        pass
-                    gen_test_code = ""
-                else:
-                    log_info("generate", "Tests still failing after 3 attempts — will NOT integrate broken code")
-                    # Don't set gen_test_code — leave it empty so eval gate blocks integration
-                    gen_test_code = ""
+                # Self-correct code based on test errors
+                fp = self._build_module_prompt(title, full_ticket, reqs, export_name,
+                                               is_retry=True, error_ctx=err_ctx, gen_code=gen_code)
+                try:
+                    fr = self.llm_code.invoke(fp)
+                    fr_raw = remove_thinking_tags(str(fr).strip())
+                    if fr_raw.startswith("```"):
+                        fl = fr_raw.split("\n")
+                        for fi in range(len(fl) - 1, 0, -1):
+                            if fl[fi].strip().startswith("```"):
+                                fr_raw = "\n".join(fl[1:fi]).strip()
+                                break
+                    if fr_raw and re.search(rf'export\s+function\s+{re.escape(export_name)}', fr_raw):
+                        gen_code = _post_process_generated_code(fr_raw)
+                        if f"function {export_name}" in gen_code and f"export function {export_name}" not in gen_code:
+                            gen_code = gen_code.replace(f"function {export_name}", f"export function {export_name}")
+                        with open(gen_file, "w") as f:
+                            f.write(gen_code)
+                        log_info("generate", "Code self-corrected from test errors")
+                except Exception:
+                    pass
+
+                gen_test_code = ""  # Clear so next attempt regenerates tests
+                attempt_state["tests_passed"] = False
+                attempt_state["_error_ctx"] = err_ctx
+                return attempt_state
+
+            def _verify_test_generation(attempt_state: dict):
+                """Verify tests pass."""
+                return verify_tests_passed({
+                    **attempt_state,
+                    "generated_tests": gen_test_code,
+                    "tests_passed": attempt_state.get("tests_passed", False),
+                })
+
+            test_retry_state = dict(state)
+            test_retry_state["tests_passed"] = False
+            test_retry_state["_error_ctx"] = ""
+
+            test_final_state, test_result = verify_and_retry(
+                node_name="generate_tests",
+                max_attempts=AGENT_MAX_RETRIES,
+                execute_fn=_execute_test_generation,
+                verify_fn=_verify_test_generation,
+                state=test_retry_state,
+                attempt_counter_key="_test_attempt",
+            )
+
+            if not test_result.passed:
+                log_info("generate", "Tests still failing after max attempts — will NOT integrate broken code")
+                gen_test_code = ""
 
         # ---- Eval gate BEFORE integration ----
-        # Check if tests actually passed (not just if we have test code)
-        tests_passed = False
-        if gen_code and 'tres' in dir():
-            tests_passed = (tres.returncode == 0)
+        # Use test result from verify-and-retry loop (or default if no code)
+        tests_passed = (test_result.passed if test_result is not None else False) if gen_code else False
         state["generated_code"] = gen_code
         state["generated_tests"] = gen_test_code
         state["method_name"] = export_name
@@ -758,15 +828,16 @@ class AgenticsWorkflow:
 
     @staticmethod
     def _route_after_generate(state: State) -> str:
-        """Route after generate: retry if eval failed and recovery_attempt < 3, else stop."""
+        """Route after generate: retry if eval failed and recovery_attempt < AGENT_MAX_RETRIES, else stop."""
         if state.get("eval_passed", False):
             return "test"
-        if state.get("recovery_attempt", 0) >= 3:
-            log_info("routing", "Max retries exhausted — eval gate failed, stopping workflow")
+        max_retries = AGENT_MAX_RETRIES
+        if state.get("recovery_attempt", 0) >= max_retries:
+            log_info("routing", f"Max retries exhausted ({max_retries}) — eval gate failed, stopping workflow")
             return "output"  # Go to output with integrated=False, don't run tests on broken code
         # Increment retry counter
         state["recovery_attempt"] = state.get("recovery_attempt", 0) + 1
-        log_info("routing", f"Eval failed — retry attempt {state['recovery_attempt']}/3")
+        log_info("routing", f"Eval failed — retry attempt {state['recovery_attempt']}/{max_retries}")
         return "generate_code_tests"
 
     async def process_issue(self, issue_url: str) -> Dict[str, Any]:
