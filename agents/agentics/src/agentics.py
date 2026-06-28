@@ -50,14 +50,17 @@ class AgenticsApp:
             self.service_manager = await init_services(self.config)
 
             # Create workflow with LLM clients from service manager
-            ollama_reasoning = (
+            # Configure LLMs with think=False to prevent qwen3.5 thinking hang
+            _raw_reasoning = (
                 self.service_manager.ollama_reasoning.client
                 if self.service_manager.ollama_reasoning else None
             )
-            ollama_code = (
+            _raw_code = (
                 self.service_manager.ollama_code.client
                 if self.service_manager.ollama_code else None
             )
+            ollama_reasoning = _raw_reasoning.bind(think=False) if _raw_reasoning else None
+            ollama_code = _raw_code.bind(think=False) if _raw_code else None
             github_client = (
                 self.service_manager.github._client
                 if self.service_manager.github else None
