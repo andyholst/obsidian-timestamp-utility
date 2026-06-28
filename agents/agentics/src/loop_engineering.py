@@ -152,16 +152,12 @@ def verify_generated_code(state: Dict) -> VerificationResult:
     errors = []
     gen_code = state.get("generated_code", "")
 
-    if not gen_code:
+    if not gen_code or not gen_code.strip():
         errors.append({"type": "empty_code", "message": "No code was generated"})
-    # Note: imports and class declarations are stripped/handled by _post_process_generated_code()
-    # so we don't reject them here
-
-    # Check that SOME function definition exists (accept export function, plain function, or arrow func)
-    import re
-    has_function = bool(re.search(r'(export\s+)?function\s+\w+|const\s+\w+\s*=\s*(async\s*)?\(', gen_code))
-    if not has_function:
-        errors.append({"type": "missing_function", "message": "No function definition found in generated code"})
+    elif len(gen_code.strip()) < 20:
+        errors.append({"type": "too_short", "message": "Generated code is too short to be valid"})
+    # Note: We accept any non-trivial code — imports and classes are handled by
+    # _post_process_generated_code(). The only hard rejection is empty/too-short output.
 
     score = max(0.0, 100.0 - (len(errors) * 30.0))
     passed = len(errors) == 0

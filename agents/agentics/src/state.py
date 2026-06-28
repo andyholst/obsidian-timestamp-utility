@@ -45,3 +45,11 @@ class State(TypedDict, total=False):
     integrated: bool
     integration_blocked_reason: str
     eval_failure_context: str
+
+    # Internal: persisted across routing retries
+    _persisted_gen_code: str
+    _gen_attempt: int
+    _test_attempt: int
+    _is_eval_retry_active: bool
+    _error_ctx: str
+    _retry_prompt: str

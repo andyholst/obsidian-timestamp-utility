@@ -450,7 +450,9 @@ class AgenticsWorkflow:
                 log_info("generate", f"naming LLM failed: {ex}")
         log_info("generate", f"Derived: export={export_name}, command={command_id}")
 
-        gen_code, gen_test_code, error_ctx = "", "", ""
+        gen_code = state.get("_persisted_gen_code", "")
+        gen_test_code = ""
+        error_ctx = ""
 
         # ---- Generate module code using verify-and-retry loop ----
         def _execute_code_generation(attempt_state: dict) -> dict:
@@ -502,6 +504,8 @@ class AgenticsWorkflow:
                 f.write(gen_code)
             log_info("generate", f"module generated: export={export_name}")
             attempt_state["generated_code"] = gen_code
+            # Persist gen_code across routing retries
+            state["_persisted_gen_code"] = gen_code
             return attempt_state
 
         def _verify_code_generation(attempt_state: dict):

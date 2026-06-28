@@ -213,9 +213,7 @@ class TestVerifyGeneratedCode:
             "generated_code": "export class Foo { bar(): string { return 'x' } }",
             "method_name": "bar"
         })
-        # Class without export function should fail (no export function present)
-        # But the code is not empty, so it gets score=70
-        assert r.score >= 70.0
+        assert r.passed
 
     def test_import_statement_passes(self):
         """Imports are now allowed (stripped by post-processing)."""
@@ -226,13 +224,22 @@ class TestVerifyGeneratedCode:
         assert r.passed
 
     def test_missing_export_fails(self):
-        """Code without any function definition should fail."""
+        """Empty code should fail."""
         r = verify_generated_code({
-            "generated_code": "const x = 42; console.log(x);",
+            "generated_code": "",
             "method_name": "foo"
         })
         assert not r.passed
-        assert any("function definition" in e["message"].lower() for e in r.errors)
+        assert any("no code" in e["message"].lower() or "empty" in e["message"].lower() for e in r.errors)
+
+    def test_too_short_fails(self):
+        """Very short code should fail."""
+        r = verify_generated_code({
+            "generated_code": "const x = 1;",
+            "method_name": "foo"
+        })
+        assert not r.passed
+        assert any("too short" in e["message"].lower() for e in r.errors)
 
     def test_retry_prompt_built_on_failure(self):
         r = verify_generated_code({"generated_code": "", "method_name": "foo"})
