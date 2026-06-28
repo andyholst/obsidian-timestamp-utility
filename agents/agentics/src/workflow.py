@@ -539,6 +539,9 @@ class AgenticsWorkflow:
             attempt_counter_key="_gen_attempt",
         )
 
+        # Sync attempt counter to recovery_attempt for routing logic
+        state["recovery_attempt"] = gen_final_state.get("_gen_attempt", 0)
+
         # ---- Generate tests using verify-and-retry loop ----
         test_result = None  # Will be set by verify_and_retry if gen_code is truthy
         if gen_code:
@@ -682,7 +685,7 @@ class AgenticsWorkflow:
             tracker = RegressionTracker()
             state["regression_check"] = tracker.check_regression(ev)
             state["validation_score"] = 0
-            state["recovery_attempt"] = 0
+            # Do NOT reset recovery_attempt here — routing logic manages it
             return state
         else:
             state["failed_criteria"] = []
@@ -751,7 +754,7 @@ class AgenticsWorkflow:
         log_info("generate", f"Baseline saved after integration")
 
         state["validation_score"] = 100 if (gen_code and gen_test_code) else 0
-        state["recovery_attempt"] = 0
+        # Do NOT reset recovery_attempt here — routing logic manages it
         return state
 
     # -- test --
@@ -813,13 +816,14 @@ class AgenticsWorkflow:
         graph.add_edge("clarify_ticket", "plan_implementation")
         graph.add_edge("plan_implementation", "extract_code")
         graph.add_edge("extract_code", "generate_code_tests")
-        # Conditional edge: if eval passed OR max retries reached → test, else → retry generate
+        # Conditional edge: if eval passed → test, if max retries → output, else → retry
         graph.add_conditional_edges(
             "generate_code_tests",
             self._route_after_generate,
             {
                 "test": "test",
                 "generate_code_tests": "generate_code_tests",
+                "output": "output",
             },
         )
         graph.add_edge("test", "output")

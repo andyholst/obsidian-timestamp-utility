@@ -48,10 +48,10 @@ class AgenticsConfig(BaseModel):
         default_factory=lambda: os.getenv("OLLAMA_HOST", "http://localhost:11434")
     )
     ollama_reasoning_model: str = Field(
-        default_factory=lambda: os.getenv("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+        default_factory=lambda: os.getenv("OLLAMA_REASONING_MODEL", "qwen3.5:9b")
     )
     ollama_code_model: str = Field(
-        default_factory=lambda: os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+        default_factory=lambda: os.getenv("OLLAMA_CODE_MODEL", "qwen3.5:9b")
     )
     ollama_num_ctx: int = Field(
         default_factory=lambda: int(os.getenv("OLLAMA_NUM_CTX", "8192"))

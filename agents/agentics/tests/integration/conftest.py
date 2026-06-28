@@ -293,9 +293,9 @@ def real_ollama_config():
             model=config.ollama_code_model,
             base_url=config.ollama_host,
             temperature=0.1,
-            timeout=5.0,
+            request_timeout=10,
         )
-        llm.invoke("healthy")
+        llm.invoke("healthy", think=False)
     except Exception:
         pytest.skip("Ollama server or code model unhealthy")
     return config
