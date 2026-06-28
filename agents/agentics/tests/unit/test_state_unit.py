@@ -40,6 +40,13 @@ def test_state_keys():
         "integration_blocked_reason",
         "eval_failure_context",
         "tests_passed",
+        # Internal: persisted across routing retries
+        "_persisted_gen_code",
+        "_gen_attempt",
+        "_test_attempt",
+        "_is_eval_retry_active",
+        "_error_ctx",
+        "_retry_prompt",
     }
 
     # When: Getting type hints
