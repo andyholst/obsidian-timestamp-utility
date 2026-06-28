@@ -442,7 +442,7 @@ class AgenticsWorkflow:
                 f"Given this GitHub issue for an Obsidian TS plugin, propose:\n"
                 f"1. A short camelCase function name (e.g. 'generateUuidV7')\n"
                 f"2. A kebab-case command id (e.g. 'insert-uuid-v7')\n\n"
-                f"Issue title: {title}\nIssue content:\n{full_ticket[:1500]}\n\n"
+                f"Issue title: {title}\nIssue content:\n{ticket[:1500]}\n\n"
                 f'Output JSON only: {{"export_name":"...","command_id":"..."}}'
             )
             try:
