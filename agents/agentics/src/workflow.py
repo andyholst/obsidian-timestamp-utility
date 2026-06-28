@@ -358,8 +358,9 @@ class AgenticsWorkflow:
                 f"Saved as src/generated/<slug>.ts, imported by main.ts.\n\n"
                 f"=== RULES ===\n"
                 f"- Valid TS. No markdown fences. No import statements.\n"
-                f"- Use browser/Node built-ins (Date, crypto). No class declarations.\n"
+                f"- Use BROWSER-ONLY APIs (Date, crypto, Math). NO Node.js APIs (no Buffer, no require, no fs, no path).\n"
                 f"- Start with 'export function', return string. No 'export default'.\n"
+                f"- Use crypto.getRandomValues() for random bytes, NOT Buffer.from().\n"
             )
         return (
             f"Fix this TypeScript module that failed tests.\n\n"
@@ -381,8 +382,9 @@ class AgenticsWorkflow:
             f"Saved as src/generated/<slug>.ts, imported by main.ts.\n\n"
             f"=== RULES ===\n"
             f"- Valid TS. No markdown fences. No import statements.\n"
-            f"- Use browser/Node built-ins (Date, crypto). No class declarations.\n"
+            f"- Use BROWSER-ONLY APIs (Date, crypto, Math). NO Node.js APIs (no Buffer, no require, no fs, no path).\n"
             f"- Start with 'export function', return string. No 'export default'.\n"
+            f"- Use crypto.getRandomValues() for random bytes, NOT Buffer.from().\n"
             f"- Address the eval feedback above to improve quality.\n"
         )
 
@@ -429,13 +431,24 @@ class AgenticsWorkflow:
                 ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 shutil.copy2(fp, os.path.join(bak_dir, f"{os.path.basename(fp)}.{ts}.bak"))
 
-        # Derive export name + command id
-        parts = slug.split('-')
+        # Derive export name + command id from issue URL (deterministic)
+        # Use issue number + slug from title for consistency
+        issue_slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:40] or "feature"
+        # Try to extract issue number from state
+        url = state.get("url", "")
+        issue_num = ""
+        num_match = re.search(r'/issues/(\d+)', url)
+        if num_match:
+            issue_num = num_match.group(1)
+        # Build deterministic names
+        if issue_num:
+            command_id = f"issue-{issue_num}-{issue_slug}"[:40]
+        else:
+            command_id = issue_slug[:40]
+        parts = command_id.split('-')
         export_name = parts[0] + ''.join(p.title() for p in parts[1:])
         if len(export_name) > 30:
             export_name = export_name[:30]
-        command_id = slug
-
         # Only call naming LLM on first attempt (not on eval retry — keep same names)
         if not is_eval_retry:
             naming_prompt = (

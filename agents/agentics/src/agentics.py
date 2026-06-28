@@ -238,6 +238,15 @@ if __name__ == "__main__":
             print("Usage: python -m src.agentics <issue_url> or set URL env var", file=sys.stderr)
             sys.exit(1)
 
+        # Clean up stale generated files from previous runs BEFORE starting
+        import glob as glob_mod
+        project_root = os.getenv("PROJECT_ROOT", "")
+        if project_root:
+            for pattern in ["src/generated/*.ts", "src/__tests__/generated/*.test.ts"]:
+                for f in glob_mod.glob(os.path.join(project_root, pattern)):
+                    os.remove(f)
+                    print(f"Cleaned stale file: {f}")
+
         app = AgenticsApp()
         try:
             await app.initialize()
