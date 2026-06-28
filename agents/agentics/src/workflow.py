@@ -70,10 +70,19 @@ def _strip_llm_generated_test_blocks(test_code: str) -> str:
 
 
 def _post_process_generated_code(code: str) -> str:
-    """Clean LLM code: remove imports, fix hex underscores, squash blank lines."""
+    """Clean LLM code: remove imports, fix hex underscores, squash blank lines,
+    auto-fix const reassignment (common LLM error → change const to let)."""
     code = re.sub(r'^\s*import\s+.*;\s*$', '', code, flags=re.MULTILINE)
     code = re.sub(r'0x([0-9a-fA-F]+)_([0-9a-fA-F]+)',
                   lambda m: '0x' + m.group(1) + m.group(2), code)
+    # Auto-fix const reassignment: const x = 5; x = 10; → let x = 5; x = 10;
+    for match in re.finditer(r'const\s+(\w+)\s*=\s*([^;]+)', code):
+        var_name = match.group(1)
+        decl_end = match.end()
+        remaining = code[decl_end:]
+        reassign = re.search(rf'\b{var_name}\s*([\+\-\*\/\%\&\|\^]?)=\s*(?!=)', remaining)
+        if reassign:
+            code = code[:match.start()] + 'let ' + code[match.start() + 5:]  # replace 'const' with 'let'
     code = re.sub(r'\n{3,}', '\n\n', code)
     return code.strip()
 
