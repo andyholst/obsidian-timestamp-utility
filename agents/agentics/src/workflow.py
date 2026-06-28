@@ -490,23 +490,8 @@ class AgenticsWorkflow:
                 gen_code = gen_code.replace(f"function {export_name}", f"export function {export_name}")
                 log_info("generate", f"Post-added export prefix to {export_name}")
 
-            # Validate structure
-            verrors = []
-            if "class " in gen_code or "class\n" in gen_code:
-                verrors.append("Contains 'class' declaration")
-            if "import " in gen_code:
-                verrors.append("Contains 'import' statements")
-            if f"export function {export_name}" not in gen_code and f"export {{ {export_name} }}" not in gen_code:
-                verrors.append(f"Missing export function '{export_name}'")
-
-            if verrors:
-                error_ctx = "; ".join(verrors)
-                log_info("generate", f"validation failed: {error_ctx}")
-                gen_code = ""
-                attempt_state["_error_ctx"] = error_ctx
-                return attempt_state
-
-            # Quick syntax check
+            # Note: Full validation is handled by verify_and_retry() via verify_generated_code()
+            # We only do a quick syntax check here to avoid wasting time on broken code
             if not _is_valid_ts_syntax(gen_code):
                 log_info("generate", "Code has syntax errors, retrying...")
                 gen_code = ""
@@ -522,6 +507,8 @@ class AgenticsWorkflow:
         def _verify_code_generation(attempt_state: dict):
             """Verify code generation output."""
             code = attempt_state.get("generated_code", gen_code)
+            # DEBUG: log what we're validating
+            log_info("generate", f"DEBUG verify: code_len={len(code)}, has_export={'export function' in code}, method={export_name}")
             return verify_generated_code({**attempt_state, "generated_code": code, "method_name": export_name})
 
         # Initialize retry state
