@@ -49,3 +49,5 @@ agents/agentics/.cache/huggingface
 
 backups
 .agentics_backups
+agents/agentics/.venv_new
+agents/agentics/.venv312

@@ -86,7 +86,7 @@ class OllamaClient(ServiceClient):
         try:
             # Run health check in thread pool to avoid blocking
             response = await asyncio.get_event_loop().run_in_executor(
-                None, client.invoke, "Hello"
+                None, lambda: client.invoke("Hello", think=False)
             )
             return bool(response and len(response.strip()) > 0)
         except Exception:
@@ -105,7 +105,7 @@ class OllamaClient(ServiceClient):
 
         @self.circuit_breaker.call
         def _invoke():
-            return self.client.invoke(prompt)
+            return self.client.invoke(prompt, think=False)
 
         return _invoke()
 
