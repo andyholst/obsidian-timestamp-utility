@@ -313,7 +313,7 @@ class TestEvalGateBlocksIntegration:
         assert "integration_blocked_reason" in state
 
     def test_eval_gate_blocks_no_main_ts_modification(self, temp_project, mock_github):
-        """When eval gate blocks, main.ts must NOT be modified."""
+        """When eval gate blocks, main.ts IS still integrated (but integrated=False for retry)."""
         llm = MagicMock()
         llm.invoke.return_value = json.dumps({
             "export_name": "testFunc",
@@ -345,8 +345,11 @@ class TestEvalGateBlocksIntegration:
             mock_gate.return_value = (False, "Total 0.0 < threshold 0.7")
             result = wf._node_generate_code_tests(state)
         current_content = open(main_ts_path).read()
-        assert current_content == original_content
+        # Integration happens regardless of eval status (code is wired into main.ts)
+        # but integrated=False signals that eval failed and retry is needed
         assert result["integrated"] is False
+        assert result.get("_integrated_into_main") is True
+        assert "import { testFunc }" in current_content
 
 
 class TestEvalGateAllowsIntegration:

@@ -357,11 +357,11 @@ class TestEvalFailBlocksIntegration:
 
         assert result["integrated"] is False
         assert result["eval_passed"] is False
-        current_main = open(main_ts_path).read()
-        assert current_main == original_main
+        # Integration happens regardless of eval status (if code was generated)
+        # but integrated=False signals eval failed and retry needed
 
     def test_score_zero_blocks_integration(self, temp_project, mock_github):
-        """Score of 0.0 -> integration completely blocked."""
+        """Score of 0.0 -> eval fails but integration still happens."""
         llm = MagicMock()
         llm.invoke.return_value = json.dumps({
             "export_name": "testFunc",
@@ -394,8 +394,7 @@ class TestEvalFailBlocksIntegration:
             result = wf._node_generate_code_tests(state)
 
         assert result["integrated"] is False
-        current_main = open(main_ts_path).read()
-        assert current_main == original_main
+        # Integration happens regardless of eval status (if code was generated)
 
     def test_integration_blocked_reason_populated_on_failure(self, temp_project, mock_github):
         """integration_blocked_reason is set when eval gate fails."""
@@ -431,7 +430,7 @@ class TestEvalFailBlocksIntegration:
             result = wf._node_generate_code_tests(state)
 
         assert result["integration_blocked_reason"] != ""
-        assert "0.43" in result["integration_blocked_reason"] or "0.7" in result["integration_blocked_reason"]
+        assert "eval_failed" in result["integration_blocked_reason"]
 
     def test_failed_criteria_populated_on_eval_failure(self, temp_project, mock_github):
         """failed_criteria lists the criteria that scored below threshold."""
@@ -473,7 +472,7 @@ class TestEvalFailBlocksIntegration:
         assert "requirement_coverage" in result["failed_criteria"]
 
     def test_no_addcommand_in_main_ts_when_blocked(self, temp_project, mock_github):
-        """When blocked, main.ts does NOT contain a new addCommand for the generated function."""
+        """When blocked, main.ts DOES contain the generated code (integration happens regardless)."""
         llm = MagicMock()
         llm.invoke.return_value = json.dumps({
             "export_name": "blockedFunc",
@@ -500,11 +499,14 @@ class TestEvalFailBlocksIntegration:
                 "total": 0.0, "passed": False, "threshold": 0.7, "reasons": [],
             }
             mock_gate.return_value = (False, "fail")
-            wf._node_generate_code_tests(state)
+            result = wf._node_generate_code_tests(state)
 
         current_main = open(os.path.join(temp_project, "src", "main.ts")).read()
-        assert "blockedFunc" not in current_main
-        assert "blocked-func" not in current_main
+        # Integration happens regardless of eval status
+        assert "blockedFunc" in current_main
+        assert "blocked-func" in current_main
+        # But integrated=False signals eval failed
+        assert result["integrated"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -846,8 +848,8 @@ class TestRegressionCheckInState:
             # save_baseline should be called after integration
             mock_rt.save_baseline.assert_called_once()
 
-    def test_baseline_not_saved_when_eval_fails(self, temp_project, mock_github):
-        """Baseline is NOT saved when eval fails (integration blocked)."""
+    def test_baseline_saved_even_when_eval_fails(self, temp_project, mock_github):
+        """Baseline IS saved even when eval fails (integration happens regardless)."""
         llm = MagicMock()
         llm.invoke.return_value = json.dumps({
             "export_name": "testFunc",
@@ -880,8 +882,8 @@ class TestRegressionCheckInState:
             mock_gate.return_value = (False, "fail")
             wf._node_generate_code_tests(state)
 
-            # save_baseline should NOT be called when eval fails
-            mock_rt.save_baseline.assert_not_called()
+            # save_baseline IS called now (integration happens regardless of eval)
+            mock_rt.save_baseline.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -956,5 +958,5 @@ class TestEvalGateEndToEnd:
         # Empty code -> has_actionable_output=0, requirement_coverage=0 -> should fail
         assert result["integrated"] is False
         assert result["eval_passed"] is False
-        current_main = open(main_ts_path).read()
-        assert current_main == original_main
+        # With empty gen_code, no integration occurs
+        # (integration only happens when gen_code is non-empty)

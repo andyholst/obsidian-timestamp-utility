@@ -47,6 +47,8 @@ def test_state_keys():
         "_is_eval_retry_active",
         "_error_ctx",
         "_retry_prompt",
+        "_integrated_into_main",
+        "_project_root",
     }
 
     # When: Getting type hints

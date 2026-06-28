@@ -53,3 +53,5 @@ class State(TypedDict, total=False):
     _is_eval_retry_active: bool
     _error_ctx: str
     _retry_prompt: str
+    _integrated_into_main: bool
+    _project_root: str

@@ -403,6 +403,9 @@ class AgenticsWorkflow:
         with open(main_test) as f:
             orig_test = _strip_llm_generated_test_blocks(f.read())
 
+        # Track whether integration has happened (persist across retries)
+        integrated_into_main = state.get("_integrated_into_main", False)
+
         refined = state.get("refined_ticket", {})
         ticket = state.get("ticket_content", "")
         task = refined.get("description", "") or ticket[:500]
@@ -682,22 +685,21 @@ class AgenticsWorkflow:
                 f"What to fix: {what_to_fix}."
             )
             log_info("generate", f"Eval failure context for retry: {state['eval_failure_context']}")
-            # Regression check even on failure
-            tracker = RegressionTracker()
-            state["regression_check"] = tracker.check_regression(ev)
-            state["validation_score"] = 0
-            # Do NOT reset recovery_attempt here — routing logic manages it
-            return state
+            state["integrated"] = False
+            state["integration_blocked_reason"] = f"eval_failed: {', '.join(failure.get('failed_criteria', []))}"
         else:
             state["failed_criteria"] = []
             state["integrated"] = True
             state["integration_blocked_reason"] = ""
             state["eval_failure_context"] = ""
-            log_info("generate", f"Eval gate PASSED — proceeding to integration")
+            log_info("generate", f"Eval gate PASSED")
 
-        # ---- Integrate: import + addCommand in main.ts (only if eval passed) ----
+        # ---- Integrate: import + addCommand in main.ts (ALWAYS, even on eval failure) ----
+        # Integration happens regardless of eval status so the generated code is wired
+        # into main.ts for testing. The eval gate determines whether to retry.
+        # Only integrate ONCE — skip on retries to avoid duplicating the command.
         integrated_main = orig_main  # default: no changes
-        if gen_code:
+        if gen_code and not integrated_into_main:
             backup(main_ts)
             import_line = f"import {{ {export_name} }} from './generated/{slug}';"
             if import_line not in orig_main:
@@ -732,6 +734,8 @@ class AgenticsWorkflow:
             with open(main_ts, "w") as f:
                 f.write(integrated_main)
             log_info("generate", f"Integration done: import + addCommand for {export_name}")
+            # Mark as integrated so we don't re-integrate on retry
+            state["_integrated_into_main"] = True
 
         # ---- Integrate tests into a SEPARATE file (not main.test.ts) ----
         if gen_test_code:
