@@ -616,6 +616,15 @@ class AgenticsWorkflow:
                 attempt_state["_error_ctx"] = "Empty LLM response"
                 return attempt_state
 
+            # Quick validation: code must have valid TypeScript keywords
+            # Check for common LLM corruption patterns
+            has_valid_keywords = bool(re.search(r'\b(const|let|var|function|return|new)\b', gen_code))
+            has_valid_export = bool(re.search(r'export\s+function\s+\w+', gen_code))
+            if not has_valid_keywords or not has_valid_export:
+                log_info("generate", "Invalid LLM output (missing keywords/export), retrying...")
+                attempt_state["_error_ctx"] = "Invalid LLM output: missing TypeScript keywords or export"
+                return attempt_state
+
             # Self-correction: if we have test errors from previous attempts, apply fixes
             prev_test_errors = attempt_state.get("_test_errors", "")
             if prev_test_errors:
