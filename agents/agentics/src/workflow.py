@@ -606,7 +606,14 @@ class AgenticsWorkflow:
             lines.append(f"  {mapped}" if not mapped.startswith("  ") else mapped)
 
         if not has_return:
-            lines.append("  return 'implemented'")
+            # Use the last declared variable as return value, or join all hex parts
+            hex_vars = [v for v in seen_vars if "hex" in v or "uuid" in v or "id" in v or "result" in v]
+            if hex_vars:
+                lines.append(f"  return {hex_vars[-1]}")
+            elif "ts" in seen_vars:
+                lines.append("  return String(ts)")
+            else:
+                lines.append("  return 'implemented'")
 
         body = "\n".join(lines)
         return f"export function {export_name}(): string {{\n{body};\n}}\n"
