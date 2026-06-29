@@ -621,12 +621,19 @@ class AgenticsWorkflow:
                                 if tl[ti].strip().startswith("```"):
                                     tr_raw = "\n".join(tl[1:ti]).strip()
                                     break
-                        # Ensure import statement is present
+                        # Ensure import statement is present and correct
                         if tr_raw and "describe(" in tr_raw:
                             import_line = f"import {{ {export_name} }} from '{module_path}';"
-                            if import_line not in tr_raw:
-                                tr_raw = import_line + "\n\n" + tr_raw
-                            gen_test_code = tr_raw
+                            # Check if first non-empty line is already a correct import
+                            first_line = next((l.strip() for l in tr_raw.split(chr(10)) if l.strip()), "")
+                            if first_line == import_line:
+                                gen_test_code = tr_raw  # Already correct
+                            else:
+                                # Prepend import (remove any malformed import first)
+                                lines = tr_raw.split(chr(10))
+                                while lines and lines[0].strip().startswith("import"):
+                                    lines.pop(0)
+                                gen_test_code = import_line + "\n\n" + chr(10).join(lines)
                         else:
                             gen_test_code = _fallback_tests(export_name, slug)
                         if gen_test_code == _fallback_tests(export_name, slug):
