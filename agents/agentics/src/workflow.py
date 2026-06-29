@@ -621,7 +621,14 @@ class AgenticsWorkflow:
                                 if tl[ti].strip().startswith("```"):
                                     tr_raw = "\n".join(tl[1:ti]).strip()
                                     break
-                        gen_test_code = tr_raw if (tr_raw and "describe(" in tr_raw) else _fallback_tests(export_name, slug)
+                        # Ensure import statement is present
+                        if tr_raw and "describe(" in tr_raw:
+                            import_line = f"import {{ export_name }} from '{module_path}';"
+                            if import_line not in tr_raw:
+                                tr_raw = import_line + "\n\n" + tr_raw
+                            gen_test_code = tr_raw
+                        else:
+                            gen_test_code = _fallback_tests(export_name, slug)
                         if gen_test_code == _fallback_tests(export_name, slug):
                             log_info("generate", f"using fallback tests for {export_name}")
                     except Exception as e:

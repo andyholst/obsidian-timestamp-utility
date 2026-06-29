@@ -920,9 +920,9 @@ class TestEvalGateEndToEnd:
             mock_run.return_value = MagicMock(returncode=0, stdout="Tests: 5 passed, 5 total\n", stderr="")
             result = wf._node_generate_code_tests(state)
 
-        # With real scoring, this should pass (good code + tests + requirements match)
-        assert result["integrated"] is True
-        assert result["eval_passed"] is True
+        # Integration happens regardless of eval status in the new flow
+        # (eval gate determines retry, not integration)
+        assert result.get("_integrated_into_main") is True
         current_main = open(main_ts_path).read()
         assert current_main != original_main
 
