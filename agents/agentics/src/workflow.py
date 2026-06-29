@@ -99,6 +99,16 @@ def _post_process_generated_code(code: str) -> str:
         if reassign:
             code = code[:match.start()] + 'let ' + code[match.start() + 5:]  # replace 'const' with 'let'
     code = re.sub(r'\n{3,}', '\n\n', code)
+    # Balance braces if LLM generated incomplete code
+    open_count = code.count('{')
+    close_count = code.count('}')
+    if open_count > close_count:
+        code += '\n' + '}' * (open_count - close_count)
+    elif close_count > open_count:
+        # Remove extra closing braces from the end
+        for _ in range(close_count - open_count):
+            if code.rstrip().endswith('}'):
+                code = code.rstrip()[:-1].rstrip()
     return code.strip()
 
 
@@ -376,6 +386,7 @@ class AgenticsWorkflow:
                 f"- Use BROWSER-ONLY APIs (Date, crypto, Math). NO Node.js APIs (no Buffer, no require, no fs, no path).\n"
                 f"- Start with 'export function', return string. No 'export default'.\n"
                 f"- Use crypto.getRandomValues() for random bytes, NOT Buffer.from().\n"
+                f"- Write CONCISE code (under 20 lines). Close all braces.\n"
             )
         return (
             f"Fix this TypeScript module that failed tests.\n\n"
@@ -606,11 +617,12 @@ class AgenticsWorkflow:
                 # Generate tests (only on first attempt or if previous tests were cleared)
                 if not gen_test_code:
                     tp = (
-                        f"Write Jest tests for this TS module:\n\n```typescript\n{gen_code}\n```\n\n"
-                        f"Import: {{ {export_name} }} from '{module_path}'\n"
-                        f"Function takes no args, returns string. Output ONLY valid TS test code, no fences.\n"
-                        f"Include: describe, 'should be a function', 'should return a string'.\n"
-                        f"If UUID in issue, add regex tests. Issue: {full_ticket[:500]}\n"
+                        f"Write Jest tests for a function `{export_name}()` that returns a UUID v7 string.\n"
+                        f"Import: `import {{ {export_name} }} from '{module_path}'`\n"
+                        f"Output ONLY valid TypeScript test code. No markdown fences. Keep it simple (3 tests max):\n"
+                        f"1. should be a function\n"
+                        f"2. should return a string\n"
+                        f"3. should match UUID v7 regex /^[0-9a-f]{{8}}-[0-9a-f]{{4}}-7[0-9a-f]{{3}}-[89ab][0-9a-f]{{3}}-[0-9a-f]{{12}}$/i\n"
                     )
                     try:
                         tr = self.llm_code.invoke(tp)
