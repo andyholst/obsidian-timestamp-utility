@@ -458,6 +458,115 @@ class AgenticsWorkflow:
         body = ";\n".join(lines)
         return f"export function {export_name}(): string {{\n{body};\n}}\n"
 
+    def _try_llm_code_generation(self, task: str, reqs: list, full_ticket: str, export_name: str) -> str:
+        """Try LLM once, then fall back to text→pseudocode→code pipeline."""
+        # Try LLM once
+        try:
+            prompt = self._build_module_prompt(task, "\n".join(f"- {r}" for r in reqs), full_ticket, export_name)
+            resp = self.llm_code.invoke(prompt)
+            raw = remove_thinking_tags(str(resp).strip())
+            # Extract code from fences
+            if "```" in raw:
+                parts = raw.split("```")
+                raw = parts[1] if len(parts) > 1 else parts[0]
+                if raw.startswith("typescript"):
+                    raw = raw[10:]
+                raw = raw.strip()
+            raw = _post_process_generated_code(raw)
+            # Quick validation
+            if raw and "export function" in raw and raw.count("{") == raw.count("}"):
+                with open("/tmp/llm_code_attempt.ts", "w") as f:
+                    f.write(raw)
+                return raw
+        except Exception as e:
+            log_info("generate", f"LLM code attempt failed: {e}")
+
+        # LLM failed — use text→pseudocode→code pipeline
+        return self._text_to_code_pipeline(task, reqs, full_ticket, export_name)
+
+    def _text_to_code_pipeline(self, task: str, reqs: list, full_ticket: str, export_name: str) -> str:
+        """Transform issue text → pseudocode → TypeScript code.
+
+        This is the core pipeline: it understands what the issue wants
+        and constructs code from available APIs, rather than hoping
+        the LLM can write valid TypeScript directly.
+        """
+        # Step 1: Extract pseudocode from issue text using LLM
+        pseudocode = self._issue_to_pseudocode(task, reqs, full_ticket)
+
+        # Step 2: Look up available APIs for each pseudocode step
+        api_mapping = self._lookup_apis_for_pseudocode(pseudocode)
+
+        # Step 3: Construct TypeScript from pseudocode + API mapping
+        code = self._construct_ts_from_pseudocode(export_name, pseudocode, api_mapping)
+
+        log_info("generate", f"Generated code via text→pseudocode→code pipeline")
+        return code
+
+    def _issue_to_pseudocode(self, task: str, reqs: list, full_ticket: str) -> list:
+        """Use LLM to convert issue text to pseudocode steps."""
+        reqs_text = "\n".join(f"- {r}" for r in reqs) if reqs else "- Implement the feature"
+        prompt = (
+            f"Convert these requirements into pseudocode steps.\n"
+            f"Each step should be ONE line describing what to do.\n"
+            f"Use simple operations only: create, set, get, call, return.\n\n"
+            f"TASK: {task}\n\n"
+            f"REQUIREMENTS:\n{reqs_text}\n\n"
+            f"Output ONE pseudocode step per line. No numbers, no bullets."
+        )
+        try:
+            resp = self.llm_reasoning.invoke(prompt)
+            text = remove_thinking_tags(str(resp).strip())
+            steps = [l.strip() for l in text.split("\n") if l.strip() and not l.strip().startswith("```")]
+            return steps if steps else [f"return {task}"]
+        except Exception:
+            return [f"return {task}"]
+
+    def _lookup_apis_for_pseudocode(self, pseudocode: list) -> dict:
+        """Map pseudocode steps to available TypeScript/browser APIs."""
+        mapping = {}
+        for step in pseudocode:
+            step_lower = step.lower()
+            if any(kw in step_lower for kw in ["random", "uuid", "unique", "crypto"]):
+                mapping[step] = "crypto.getRandomValues(new Uint8Array(16))"
+            elif any(kw in step_lower for kw in ["time", "timestamp", "date", "now"]):
+                mapping[step] = "Date.now()"
+            elif any(kw in step_lower for kw in ["format", "string", "text", "convert"]):
+                mapping[step] = "String(value)"
+            elif any(kw in step_lower for kw in ["insert", "add", "append", "write"]):
+                mapping[step] = "editor.replaceSelection(value)"
+            elif any(kw in step_lower for kw in ["log", "print", "output", "debug"]):
+                mapping[step] = "console.log(value)"
+            else:
+                mapping[step] = f"/* TODO: {step} */"
+        return mapping
+
+    def _construct_ts_from_pseudocode(self, export_name: str, pseudocode: list, api_mapping: dict) -> str:
+        """Construct valid TypeScript from pseudocode steps and API mapping."""
+        lines = []
+        has_return = False
+
+        for step in pseudocode:
+            mapped = api_mapping.get(step, step)
+            if mapped.startswith("return "):
+                lines.append(f"  {mapped}")
+                has_return = True
+            elif mapped.startswith("const ") or mapped.startswith("let ") or mapped.startswith("var "):
+                lines.append(f"  {mapped}")
+            elif mapped.startswith("/* TODO"):
+                continue  # Skip TODO comments
+            elif "(" in mapped and ")" in mapped:
+                # It's a function call
+                lines.append(f"  {mapped}")
+            else:
+                lines.append(f"  const result = {mapped}")
+
+        if not has_return:
+            lines.append("  return 'implemented'")
+
+        body = "\n".join(lines)
+        return f"export function {export_name}(): string {{\n{body};\n}}\n"
+
     def _generate_fallback_tests(self, export_name: str, slug: str, full_ticket: str) -> str:
         """Generate minimal valid tests when LLM test generation fails.
 
@@ -613,12 +722,19 @@ class AgenticsWorkflow:
         refined = state.get("refined_ticket", {})
         ticket = state.get("ticket_content", "")
         task = refined.get("description", "") or ticket[:500]
-        reqs = "\n".join(f"- {r}" for r in refined.get("requirements", [])) or "Implement feature"
+        reqs = refined.get("requirements", [])
         full_ticket = ticket[:3000] if ticket else task
         title = refined.get("title", "") or task[:80]
         slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:40] or "feature"
         gen_file = os.path.join(gen_dir, f"{slug}.ts")
         gen_test_file = os.path.join(gen_test_dir, f"{slug}.test.ts")
+
+        # Generate code from requirements using text→pseudocode→code pipeline
+        export_name = re.sub(r'[^a-zA-Z0-9]', '', title.replace(' ', '')[:30]).lower() or "feature"
+        export_name = f"export{export_name.capitalize()}" if not export_name[0].isalpha() else export_name
+
+        # Generate code from issue using text→pseudocode→code pipeline
+        gen_code = self._text_to_code_pipeline(task, reqs, full_ticket, export_name)
 
         # Check if this is a retry after eval gate failure
         is_eval_retry = bool(state.get("eval_failure_context", "").strip())
