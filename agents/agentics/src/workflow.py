@@ -81,8 +81,8 @@ def _post_process_generated_code(code: str) -> str:
     code = re.sub(r'Buffer\.from\(([^)]+)\)',
                   r'new Uint8Array(\1)', code)
     # Strip any remaining Buffer references
-    code = re.sub(r'Buffer\b', 'Uint8Array', code)
     # Strip Node.js-specific globals
+    code = re.sub(r'\bBuffer\b', 'Uint8Array', code)
     code = re.sub(r'\bprocess\b', 'undefined', code)
     code = re.sub(r'\brequire\b', 'undefined', code)
     code = re.sub(r'\b__dirname\b', '""', code)
@@ -90,6 +90,14 @@ def _post_process_generated_code(code: str) -> str:
     code = re.sub(r'\bmodule\b', 'undefined', code)
     code = re.sub(r'\bexports\b', 'undefined', code)
     code = re.sub(r'\bglobal\b', 'window', code)
+    # Fix LLM-specific syntax errors
+    code = re.sub(r'\bconst\s+let\b', 'let', code)  # "const let" → "let"
+    code = re.sub(r'\blet\s+let\b', 'let', code)   # "let let" → "let"
+    code = re.sub(r'\bconst\s+const\b', 'const', code)
+    code = re.sub(r'\blet\s+const\b', 'const', code)
+    code = re.sub(r'\bvar\s+let\b', 'let', code)
+    # Fix missing semicolons after function calls (common LLM omission)
+    code = re.sub(r'\n(\s+(?:const|let|var)\s+\w+\s*=\s*new Uint8Array.*\))\s*\n', r'\1;\n', code)
     # Auto-fix const reassignment: const x = 5; x = 10; → let x = 5; x = 10;
     for match in re.finditer(r'const\s+(\w+)\s*=\s*([^;]+)', code):
         var_name = match.group(1)
@@ -156,40 +164,7 @@ def _is_valid_ts_syntax(code: str) -> bool:
     return True
 
 
-def _fallback_code(export_name: str, slug: str) -> str:
-    """Known-good browser-compatible code when LLM generation fails.
 
-    Uses crypto.getRandomValues() — no Node.js APIs.
-    """
-    return (
-        f"let lastTimestamp = 0\n\n"
-        f"export function {export_name}(): string {{\n"
-        f"  const now = Date.now()\n"
-        f"  if (now < lastTimestamp) {{\n"
-        f"    throw new Error('{export_name} called out of order')\n"
-        f"  }}\n"
-        f"  lastTimestamp = now\n\n"
-        f"  const randomBytes = new Uint8Array(10)\n"
-        f"  crypto.getRandomValues(randomBytes)\n\n"
-        f"  const hex = BigInt(now).toString(16).padStart(12, '0')\n"
-        f"  const randHex = Array.from(randomBytes)\n"
-        f"    .map((b) => b.toString(16).padStart(2, '0'))\n"
-        f"    .join('')\n\n"
-        f"  return (\n"
-        f"    hex.slice(0, 8) +\n"
-        f"    '-' +\n"
-        f"    hex.slice(8, 12) +\n"
-        f"    '-' +\n"
-        f"    '7' +\n"
-        f"    randHex.slice(0, 3) +\n"
-        f"    '-' +\n"
-        f"    '8' +\n"
-        f"    randHex.slice(3, 6) +\n"
-        f"    '-' +\n"
-        f"    randHex.slice(6, 18)\n"
-        f"  )\n"
-        f"}}\n"
-    )
 
 
 def _fallback_tests(export_name: str, slug: str) -> str:
@@ -425,11 +400,16 @@ class AgenticsWorkflow:
                 f"- Write CONCISE code (under 20 lines). Close all braces.\n"
             )
         return (
-            f"Fix this TypeScript module that failed tests.\n\n"
+            f"Fix this TypeScript module. It has syntax or compilation errors.\n\n"
             f"TASK: {title}\nEXPORT: {export_name}\n\n"
-            f"ERRORS:\n{error_ctx}\n\nBROKEN CODE:\n{gen_code}\n\n"
-            f"Output ONLY fixed TS module code. No imports, no class, no fences.\n"
-            f"Module must export: function {export_name}(): string"
+            f"ERRORS (fix these):\n{error_ctx}\n\n"
+            f"BROKEN CODE:\n{gen_code}\n\n"
+            f"=== FIX RULES ===\n"
+            f"- Use BROWSER-ONLY APIs: Date.now(), crypto.getRandomValues(), Math. NO Buffer, NO require, NO process.\n"
+            f"- Do NOT use 'let' or 'const' as variable names.\n"
+            f"- Write CONCISE code (under 20 lines). Close all braces.\n"
+            f"- Start with: export function {export_name}(): string {{\n"
+            f"- Output ONLY the fixed code. No markdown fences.\n"
         )
 
     def _build_eval_retry_prompt(self, title, full_ticket, reqs, export_name,
@@ -634,14 +614,6 @@ class AgenticsWorkflow:
         # CRITICAL: Propagate generated_code from inner state to outer state so eval gate can see it
         if gen_final_state.get("generated_code"):
             state["generated_code"] = gen_final_state["generated_code"]
-        elif not gen_code:
-            # Code generation exhausted retries — use fallback
-            fallback = _fallback_code(export_name, slug)
-            gen_code = fallback
-            state["generated_code"] = fallback
-            with open(gen_file, "w") as f:
-                f.write(fallback)
-            log_info("generate", f"LLM code generation failed — using fallback for {export_name}")
 
         # NOTE: Do NOT sync _gen_attempt to recovery_attempt here.
         # The inner loop counter (_gen_attempt) resets to 1 on each retry,
