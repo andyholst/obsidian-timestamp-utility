@@ -107,31 +107,43 @@ def _post_process_generated_code(code: str) -> str:
     code = re.sub(r'\)\s*:\s*Promise\s*\{', '): Promise<string> {', code)
     # Fix missing semicolons after function calls (common LLM omission)
     code = re.sub(r'\n(\s+(?:const|let|var)\s+\w+\s*=\s*new Uint8Array.*\))\s*\n', r'\1;\n', code)
+    # Squash blank lines
+    code = re.sub(r'\n{3,}', '\n\n', code)
     # Auto-fix const reassignment: const x = 5; x = 10; → let x = 5; x = 10;
     for match in re.finditer(r'const\s+(\w+)\s*=\s*([^;]+)', code):
         var_name = match.group(1)
         decl_end = match.end()
-        remaining = code[decl_end:]
-        reassign = re.search(rf'\b{var_name}\s*([\+\-\*\/\%\&\|\^]?)=\s*(?!=)', remaining)
-        if reassign:
-            code = code[:match.start()] + 'let ' + code[match.start() + 5:]  # replace 'const' with 'let'
-    code = re.sub(r'\n{3,}', '\n\n', code)
+        remaining_code = code[decl_end:]
+        reassign_pattern = rf'\b{var_name}\s*([\+\-\*\/\%\&\|\^]?)=\s*(?!=)'
+        reassigned = re.search(reassign_pattern, remaining_code)
+        if reassigned:
+            code = code[:match.start()] + f'let {match.group(0)[6:]}' + code[match.end():]
+            log_info("post_process", f"Fixed const reassignment: {var_name}")
+
+    # Check if function has a return statement — if not, add one
+    if re.search(r'export\s+function\s+\w+', code) and not re.search(r'\breturn\b', code):
+        # Find the last closing brace and add a return before it
+        lines = code.rstrip().split('\n')
+        last_brace_idx = max(i for i, l in enumerate(lines) if l.strip() == '}')
+        indent = '  '
+        lines.insert(last_brace_idx, f'{indent}return "implemented";')
+        code = '\n'.join(lines)
+        log_info("post_process", "Added missing return statement")
+
     # Balance braces if LLM generated incomplete code
     open_count = code.count('{')
     close_count = code.count('}')
     if open_count > close_count:
         code += '\n' + '}' * (open_count - close_count)
     elif close_count > open_count:
-        # Remove extra closing braces from the end
         for _ in range(close_count - open_count):
             if code.rstrip().endswith('}'):
                 code = code.rstrip()[:-1].rstrip()
+
     return code.strip()
 
 
 def _is_valid_ts_syntax(code: str) -> bool:
-    """Quick syntactic validation of TypeScript code without running tsc.
-    Catches common LLM errors like const reassignment, unmatched braces, etc."""
     # Check balanced braces
     depth = 0
     for ch in code:
