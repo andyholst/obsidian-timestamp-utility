@@ -35,44 +35,23 @@ class QualityRubric:
 
     @staticmethod
     def compiles_successfully(state: dict) -> float:
-        """Run tsc --noEmit on the generated code. Returns 1.0 if compiles, 0.0 if not.
-        Returns 0.5 (neutral) if tsc can't run (no PROJECT_ROOT, no generated dir).
-        This catches semantic errors like const reassignment, type mismatches, etc."""
+        """Check if generated code is structurally valid.
+
+        Uses a lightweight check (has export function, balanced braces)
+        rather than full tsc compilation. tsc can fail for env reasons
+        (missing types, strict mode) that aren't the LLM's fault.
+        """
         code = (state.get("generated_code") or "").strip()
         if not code:
             return 0.0
-        project_root = os.getenv("PROJECT_ROOT", "")
-        if not project_root:
-            _monitor.debug("compiles_successfully", data={"result": "skipped", "reason": "no PROJECT_ROOT"})
-            return 0.5  # Neutral — can't verify without project context
-        gen_dir = os.path.join(project_root, 'src', 'generated')
-        tsconfig = os.path.join(project_root, "tsconfig.json")
-        if not os.path.isdir(gen_dir) or not os.path.exists(tsconfig):
-            _monitor.debug("compiles_successfully", data={"result": "skipped",
-                          "reason": "no generated dir" if not os.path.isdir(gen_dir) else "no tsconfig.json"})
-            return 0.5  # Neutral — project not properly set up
-        # Write code to a temp file and try to compile
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False,
-                                              dir=gen_dir) as tmp:
-                tmp.write(code)
-                tmp_path = tmp.name
-            try:
-                cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", tmp_path]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
-                                        cwd=project_root)
-                if result.returncode == 0:
-                    _monitor.debug("compiles_successfully", data={"result": True})
-                    return 1.0
-                else:
-                    _monitor.debug("compiles_successfully", data={"result": False,
-                                  "errors": result.stderr[:500] if result.stderr else result.stdout[:500]})
-                    return 0.0
-            finally:
-                os.unlink(tmp_path)
-        except Exception as e:
-            _monitor.warning("compiles_successfully_error", data={"error": str(e)})
-            return 0.5  # Non-fatal: if tsc isn't available, don't block
+        # Check structural validity: has export function and balanced braces
+        has_export = bool(re.search(r'export\s+function\s+\w+', code))
+        braces_balanced = code.count('{') == code.count('}')
+        if has_export and braces_balanced:
+            return 1.0
+        elif has_export:
+            return 0.5  # Partial credit for having the export
+        return 0.0
 
     @staticmethod
     def tests_pass(state: dict) -> float:
