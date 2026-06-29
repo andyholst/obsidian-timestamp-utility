@@ -571,15 +571,29 @@ class AgenticsWorkflow:
         """Construct TypeScript from pseudocode.
 
         The pseudocode is already TypeScript-like, so this just
-        assembles the lines and ensures a return statement.
+        assembles the lines, deduplicates, and ensures a return statement.
         """
         lines = []
         has_return = False
+        seen_vars = set()
 
         for step in pseudocode:
             mapped = api_mapping.get(step, step.strip())
+            # Skip empty
+            if not mapped or mapped.startswith("/* TODO"):
+                continue
+            # Handle return statements
             if mapped.startswith("return "):
                 has_return = True
+                lines.append(f"  {mapped}")
+                continue
+            # Deduplicate variable declarations by variable name
+            if mapped.startswith("const ") or mapped.startswith("let "):
+                # Extract variable name
+                var_name = mapped.split("=")[0].strip().split()[-1]
+                if var_name in seen_vars:
+                    continue
+                seen_vars.add(var_name)
             lines.append(f"  {mapped}" if not mapped.startswith("  ") else mapped)
 
         if not has_return:
