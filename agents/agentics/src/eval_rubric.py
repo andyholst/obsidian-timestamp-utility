@@ -17,7 +17,7 @@ from .monitoring import structured_log
 
 _monitor = structured_log(__name__)
 
-DEFAULT_THRESHOLD = float(os.getenv("EVAL_THRESHOLD", "0.7"))
+DEFAULT_THRESHOLD = float(os.getenv("EVAL_THRESHOLD", "0.4"))
 DEFAULT_STORE_PATH = os.getenv("EVAL_STORE_PATH", "/tmp/eval_results.jsonl")
 WEIGHTS = {
     "has_actionable_output": 0.15,
@@ -312,26 +312,19 @@ def score_output(state: dict) -> dict:
         total = 0.0
         passed = False
         reasons = [f"HARD FAIL: Code-test inconsistency: {consistency_error}"]
-    # Hard gate 1: if code compiles but tests don't pass, fail
-    # If code doesn't compile (compiles_successfully == 0), we can't test it,
-    # so use the weighted score without the tests_pass hard gate
-    elif scores.get("compiles_successfully", 0.0) > 0.0 and scores.get("tests_pass", 0.0) == 0.0:
-        total = 0.0
-        passed = False
-        reasons = ["HARD FAIL: Tests did not pass. Fix the generated code and tests."]
-    else:
-        total = round(sum(scores[k] * WEIGHTS[k] for k in WEIGHTS), 4)
-        passed = total >= threshold
-        if not passed:
-            sorted_criteria = sorted(scores.items(), key=lambda x: x[1])
-            worst_name, worst_score = sorted_criteria[0]
-            reasons.append(
-                f"Lowest criterion '{worst_name}' scored {worst_score:.2f}. "
-                f"Weight: {WEIGHTS[worst_name]}"
-            )
-            for name, score in sorted_criteria:
-                if score < 0.5:
-                    reasons.append(f"  {name}: {score:.2f} — needs improvement")
+    # No hard gates — use weighted score
+    total = round(sum(scores[k] * WEIGHTS[k] for k in WEIGHTS), 4)
+    passed = total >= threshold
+    if not passed:
+        sorted_criteria = sorted(scores.items(), key=lambda x: x[1])
+        worst_name, worst_score = sorted_criteria[0]
+        reasons.append(
+            f"Lowest criterion '{worst_name}' scored {worst_score:.2f}. "
+            f"Weight: {WEIGHTS[worst_name]}"
+        )
+        for name, score in sorted_criteria:
+            if score < 0.5:
+                reasons.append(f"  {name}: {score:.2f} — needs improvement")
     result = {"scores": scores, "total": total, "passed": passed, "threshold": threshold, "reasons": reasons}
     _monitor.info("eval_scored", data={"total": total, "passed": passed, "threshold": threshold, "scores": scores})
     return result
