@@ -576,8 +576,10 @@ class AgenticsWorkflow:
             attempt_counter_key="_gen_attempt",
         )
 
-        # Sync attempt counter to recovery_attempt for routing logic
-        state["recovery_attempt"] = gen_final_state.get("_gen_attempt", 0)
+        # NOTE: Do NOT sync _gen_attempt to recovery_attempt here.
+        # The inner loop counter (_gen_attempt) resets to 1 on each retry,
+        # which would reset recovery_attempt and cause infinite retries.
+        # The router manages recovery_attempt independently.
 
         # ---- Generate tests using verify-and-retry loop ----
         test_result = None  # Will be set by verify_and_retry if gen_code is truthy
