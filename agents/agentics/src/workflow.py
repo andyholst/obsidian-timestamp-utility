@@ -504,44 +504,53 @@ class AgenticsWorkflow:
         return code
 
     def _issue_to_pseudocode(self, task: str, reqs: list, full_ticket: str) -> list:
-        """Use LLM to convert issue text to simple pseudocode steps.
+        """Use LLM to convert issue text to TypeScript pseudocode.
 
-        Each step must be a SIMPLE operation that maps 1:1 to one line
-        of TypeScript. No complex expressions — just simple assignments
-        and function calls.
+        The output MUST be ONLY executable TypeScript statements.
+        NO comments, NO reasoning, NO explanation, NO markdown.
+        Each line must be a valid TypeScript statement.
         """
         reqs_text = "\n".join(f"- {r}" for r in reqs) if reqs else "- Implement the feature"
         prompt = (
-            f"Convert these requirements into SIMPLE pseudocode steps.\n"
-            f"Each step = ONE simple TypeScript statement.\n"
-            f"NO complex expressions, NO bit manipulation, NO multi-line operations.\n"
-            f"Use simple variable assignments and single function calls only.\n\n"
+            f"Convert these requirements into TypeScript code.\n"
+            f"Output ONLY valid TypeScript statements, one per line.\n"
+            f"NO comments, NO reasoning, NO explanation, NO markdown fences.\n"
+            f"Each line must compile as a standalone TypeScript statement.\n\n"
             f"TASK: {task}\n\n"
             f"REQUIREMENTS:\n{reqs_text}\n\n"
-            f"Output ONE step per line. Examples of GOOD steps:\n"
+            f"Output format (ONLY this, nothing else):\n"
             f"  const ts = Date.now()\n"
             f"  const bytes = new Uint8Array(16)\n"
             f"  crypto.getRandomValues(bytes)\n"
             f"  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')\n"
-            f"  return hex\n\n"
-            f"Examples of BAD steps (too complex):\n"
-            f"  const x = (a >> 24 & 255) | ((b << 8) >> 0)\n"
-            f"  const y = arr[6] &= ~15; arr[6] |= (z >> 4)\n"
+            f"  return hex\n"
         )
         try:
             resp = self.llm_reasoning.invoke(prompt)
             text = remove_thinking_tags(str(resp).strip())
-            steps = [l.strip() for l in text.split("\n") if l.strip() and not l.strip().startswith("```")]
-            # Filter out complex steps (multiple operators, nested parens)
-            simple_steps = []
-            for s in steps:
-                # Count operators — if more than 2, it's too complex
-                ops = sum(1 for c in s if c in "=<>!&|+-*/%^~?")
-                if ops <= 2 and s.count("(") <= 2:
-                    simple_steps.append(s)
-            return simple_steps if simple_steps else [f"return '{task}'"]
+            # Extract lines that look like TypeScript statements
+            steps = []
+            for line in text.split("\n"):
+                line = line.strip()
+                if not line or line.startswith("```") or line.startswith("//") or line.startswith("/*"):
+                    continue
+                # Must look like a TS statement (starts with const/let/var/return or is a function call)
+                if line.startswith("const ") or line.startswith("let ") or line.startswith("var "):
+                    # Take only the first statement (no inline comments)
+                    stmt = line.split("//")[0].rstrip()
+                    if stmt.endswith(";") or stmt.endswith(")"):
+                        steps.append(stmt)
+                elif line.startswith("return "):
+                    stmt = line.split("//")[0].rstrip()
+                    steps.append(stmt)
+                elif "(" in line and ")" in line:
+                    # Function call
+                    stmt = line.split("//")[0].rstrip()
+                    if stmt.endswith(";") or stmt.endswith(")"):
+                        steps.append(stmt)
+            return steps if steps else []
         except Exception:
-            return [f"return 'implemented'"]
+            return []
 
     def _lookup_apis_for_pseudocode(self, pseudocode: list) -> dict:
         """Map pseudocode steps to TypeScript syntax.
