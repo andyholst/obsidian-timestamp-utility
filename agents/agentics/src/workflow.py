@@ -423,17 +423,22 @@ class AgenticsWorkflow:
     def _build_module_prompt(self, title, full_ticket, reqs, export_name,
                              is_retry=False, error_ctx="", gen_code="") -> str:
         if not is_retry:
+            # Extract task description from issue body (ticket_content)
+            # Use the actual issue content to build the prompt dynamically
+            issue_lines = full_ticket.strip().split("\n") if full_ticket else []
+            # Take first 50 lines of actual issue content as task description
+            task_desc = "\n".join(issue_lines[:50]) if issue_lines else title
             return (
                 f"You are an Obsidian TS plugin developer.\n\n"
-                f"TASK: {title}\n\n"
-                f"Write a single exported TypeScript function called `{export_name}()` that returns a UUID v7 string.\n\n"
-                f"Requirements:\n"
-                f"- Return format: xxxxxxxx-xxxx-7xxx-[89ab]xxx-xxxxxxxxxxxx (36 chars with hyphens)\n"
-                f"- Use Date.now() for timestamp\n"
-                f"- Use crypto.getRandomValues(new Uint8Array(10)) for randomness\n"
-                f"- NO window prefix, NO Buffer, NO require, NO async/await\n"
-                f"- Keep it under 15 lines. One function only.\n\n"
-                f"Output ONLY the TypeScript code starting with 'export function'. No markdown fences.\n"
+                f"ISSUE:\n{task_desc}\n\n"
+                f"Write an exported TypeScript function called `{export_name}()` in src/generated/.\n\n"
+                f"Rules:\n"
+                f"- Valid TypeScript. No markdown fences. No import statements.\n"
+                f"- Use only browser-compatible APIs (Date, crypto, Math, Uint8Array).\n"
+                f"- NO Node.js APIs: no Buffer, no require, no process, no window prefix.\n"
+                f"- Start with 'export function', return a string.\n"
+                f"- Keep it concise (under 20 lines). Close all braces.\n\n"
+                f"Output ONLY the TypeScript code. No explanation.\n"
             )
         return (
             f"Fix this TypeScript module. It has syntax or compilation errors.\n\n"
