@@ -90,6 +90,8 @@ def _post_process_generated_code(code: str) -> str:
     code = re.sub(r'\bmodule\b', 'undefined', code)
     code = re.sub(r'\bexports\b', 'undefined', code)
     code = re.sub(r'\bglobal\b', 'window', code)
+    # Strip HTML tags that LLM sometimes appends
+    code = re.sub(r'</?\w+>', '', code)
     # Fix LLM-specific syntax errors
     code = re.sub(r'\bconst\s+let\b', 'let', code)  # "const let" → "let"
     code = re.sub(r'\blet\s+let\b', 'let', code)   # "let let" → "let"
