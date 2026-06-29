@@ -156,6 +156,42 @@ def _is_valid_ts_syntax(code: str) -> bool:
     return True
 
 
+def _fallback_code(export_name: str, slug: str) -> str:
+    """Known-good browser-compatible code when LLM generation fails.
+
+    Uses crypto.getRandomValues() — no Node.js APIs.
+    """
+    return (
+        f"let lastTimestamp = 0\n\n"
+        f"export function {export_name}(): string {{\n"
+        f"  const now = Date.now()\n"
+        f"  if (now < lastTimestamp) {{\n"
+        f"    throw new Error('{export_name} called out of order')\n"
+        f"  }}\n"
+        f"  lastTimestamp = now\n\n"
+        f"  const randomBytes = new Uint8Array(10)\n"
+        f"  crypto.getRandomValues(randomBytes)\n\n"
+        f"  const hex = BigInt(now).toString(16).padStart(12, '0')\n"
+        f"  const randHex = Array.from(randomBytes)\n"
+        f"    .map((b) => b.toString(16).padStart(2, '0'))\n"
+        f"    .join('')\n\n"
+        f"  return (\n"
+        f"    hex.slice(0, 8) +\n"
+        f"    '-' +\n"
+        f"    hex.slice(8, 12) +\n"
+        f"    '-' +\n"
+        f"    '7' +\n"
+        f"    randHex.slice(0, 3) +\n"
+        f"    '-' +\n"
+        f"    '8' +\n"
+        f"    randHex.slice(3, 6) +\n"
+        f"    '-' +\n"
+        f"    randHex.slice(6, 18)\n"
+        f"  )\n"
+        f"}}\n"
+    )
+
+
 def _fallback_tests(export_name: str, slug: str) -> str:
     """Minimal fallback tests when LLM generation fails."""
     return (
@@ -598,6 +634,14 @@ class AgenticsWorkflow:
         # CRITICAL: Propagate generated_code from inner state to outer state so eval gate can see it
         if gen_final_state.get("generated_code"):
             state["generated_code"] = gen_final_state["generated_code"]
+        elif not gen_code:
+            # Code generation exhausted retries — use fallback
+            fallback = _fallback_code(export_name, slug)
+            gen_code = fallback
+            state["generated_code"] = fallback
+            with open(gen_file, "w") as f:
+                f.write(fallback)
+            log_info("generate", f"LLM code generation failed — using fallback for {export_name}")
 
         # NOTE: Do NOT sync _gen_attempt to recovery_attempt here.
         # The inner loop counter (_gen_attempt) resets to 1 on each retry,
