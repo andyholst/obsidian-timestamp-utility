@@ -346,11 +346,10 @@ class TestEvalGateBlocksIntegration:
             mock_gate.return_value = (False, "Total 0.0 < threshold 0.7")
             result = wf._node_generate_code_tests(state)
         current_content = open(main_ts_path).read()
-        # Integration happens regardless of eval status (code is wired into main.ts)
-        # but integrated=False signals that eval failed and retry is needed
+        # Integration is blocked when eval fails — main.ts should NOT be modified
         assert result["integrated"] is False
-        assert result.get("_integrated_into_main") is True
-        assert "import { testFunc }" in current_content
+        assert result.get("_integrated_into_main") is False or result.get("_integrated_into_main") is None
+        assert "import { testFunc }" not in current_content
 
 
 class TestEvalGateAllowsIntegration:

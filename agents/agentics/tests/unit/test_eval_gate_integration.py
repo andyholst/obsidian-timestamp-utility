@@ -502,10 +502,10 @@ class TestEvalFailBlocksIntegration:
             result = wf._node_generate_code_tests(state)
 
         current_main = open(os.path.join(temp_project, "src", "main.ts")).read()
-        # Integration happens regardless of eval status
-        assert "blockedFunc" in current_main
-        assert "blocked-func" in current_main
-        # But integrated=False signals eval failed
+        # Integration is blocked when eval fails — main.ts should NOT contain the new function
+        assert "blockedFunc" not in current_main
+        assert "blocked-func" not in current_main
+        # integrated=False signals eval failed
         assert result["integrated"] is False
 
 
