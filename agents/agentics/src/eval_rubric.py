@@ -53,7 +53,7 @@ class QualityRubric:
                     tmp.write(code)
                     tmp_path = tmp.name
                 try:
-                    cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", tmp_path]
+                    cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", "--project", "tsconfig.json", tmp_path]
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
                                             cwd=project_root)
                     if result.returncode == 0:
