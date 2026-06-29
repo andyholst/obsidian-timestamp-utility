@@ -425,15 +425,15 @@ class AgenticsWorkflow:
         if not is_retry:
             return (
                 f"You are an Obsidian TS plugin developer.\n\n"
-                f"TASK: {title}\n\nISSUE:\n{full_ticket}\n\nREQUIREMENTS:\n{reqs}\n\n"
-                f"Generate an exported TypeScript function. First line: export function {export_name}(): string {{\n"
-                f"Saved as src/generated/<slug>.ts, imported by main.ts.\n\n"
-                f"=== RULES ===\n"
-                f"- Valid TS. No markdown fences. No import statements.\n"
-                f"- Use BROWSER-COMPATIBLE APIs: Date.now(), crypto.getRandomValues(), Math. NO Node.js APIs (no Buffer, no require, no fs, no path, no window).\n"
-                f"- Start with 'export function', return string. No 'export default'.\n"
-                f"- Use crypto.getRandomValues() for random bytes, NOT Buffer.from().\n"
-                f"- Write CONCISE code (under 20 lines). Close all braces.\n"
+                f"TASK: {title}\n\n"
+                f"Write a single exported TypeScript function called `{export_name}()` that returns a UUID v7 string.\n\n"
+                f"Requirements:\n"
+                f"- Return format: xxxxxxxx-xxxx-7xxx-[89ab]xxx-xxxxxxxxxxxx (36 chars with hyphens)\n"
+                f"- Use Date.now() for timestamp\n"
+                f"- Use crypto.getRandomValues(new Uint8Array(10)) for randomness\n"
+                f"- NO window prefix, NO Buffer, NO require, NO async/await\n"
+                f"- Keep it under 15 lines. One function only.\n\n"
+                f"Output ONLY the TypeScript code starting with 'export function'. No markdown fences.\n"
             )
         return (
             f"Fix this TypeScript module. It has syntax or compilation errors.\n\n"
