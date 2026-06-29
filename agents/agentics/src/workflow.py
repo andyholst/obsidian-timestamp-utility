@@ -504,31 +504,42 @@ class AgenticsWorkflow:
         return code
 
     def _issue_to_pseudocode(self, task: str, reqs: list, full_ticket: str) -> list:
-        """Use LLM to convert issue text to pseudocode steps.
+        """Use LLM to convert issue text to simple pseudocode steps.
 
-        The pseudocode should contain SPECIFIC values and API calls
-        extracted from the issue, not generic descriptions.
-        Each step maps 1:1 to a TypeScript statement.
+        Each step must be a SIMPLE operation that maps 1:1 to one line
+        of TypeScript. No complex expressions — just simple assignments
+        and function calls.
         """
         reqs_text = "\n".join(f"- {r}" for r in reqs) if reqs else "- Implement the feature"
         prompt = (
-            f"Convert these requirements into pseudocode steps.\n"
-            f"Each step maps to exactly ONE line of TypeScript.\n"
-            f"Include SPECIFIC values, function names, and API calls from the issue.\n"
-            f"Use TypeScript syntax but without type annotations.\n\n"
+            f"Convert these requirements into SIMPLE pseudocode steps.\n"
+            f"Each step = ONE simple TypeScript statement.\n"
+            f"NO complex expressions, NO bit manipulation, NO multi-line operations.\n"
+            f"Use simple variable assignments and single function calls only.\n\n"
             f"TASK: {task}\n\n"
             f"REQUIREMENTS:\n{reqs_text}\n\n"
-            f"Output ONE step per line. No numbers, no bullets, no explanation.\n"
-            f"Example:\n"
+            f"Output ONE step per line. Examples of GOOD steps:\n"
             f"  const ts = Date.now()\n"
-            f"  const bytes = crypto.getRandomValues(new Uint8Array(16))\n"
-            f"  return ts.toString(16)\n"
+            f"  const bytes = new Uint8Array(16)\n"
+            f"  crypto.getRandomValues(bytes)\n"
+            f"  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')\n"
+            f"  return hex\n\n"
+            f"Examples of BAD steps (too complex):\n"
+            f"  const x = (a >> 24 & 255) | ((b << 8) >> 0)\n"
+            f"  const y = arr[6] &= ~15; arr[6] |= (z >> 4)\n"
         )
         try:
             resp = self.llm_reasoning.invoke(prompt)
             text = remove_thinking_tags(str(resp).strip())
             steps = [l.strip() for l in text.split("\n") if l.strip() and not l.strip().startswith("```")]
-            return steps if steps else [f"return '{task}'"]
+            # Filter out complex steps (multiple operators, nested parens)
+            simple_steps = []
+            for s in steps:
+                # Count operators — if more than 2, it's too complex
+                ops = sum(1 for c in s if c in "=<>!&|+-*/%^~?")
+                if ops <= 2 and s.count("(") <= 2:
+                    simple_steps.append(s)
+            return simple_steps if simple_steps else [f"return '{task}'"]
         except Exception:
             return [f"return 'implemented'"]
 
