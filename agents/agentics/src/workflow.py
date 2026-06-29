@@ -794,7 +794,10 @@ class AgenticsWorkflow:
         log_info("generate", f"Baseline saved after integration")
 
         state["validation_score"] = 100 if (gen_code and gen_test_code) else 0
-        # Do NOT reset recovery_attempt here — routing logic manages it
+        # Increment recovery_attempt HERE (node state changes persist, routing function changes don't)
+        current_retry = state.get("recovery_attempt", 0)
+        state["recovery_attempt"] = current_retry + 1
+        print(f"[NODE] Incremented recovery_attempt to {state['recovery_attempt']}", flush=True)
         return state
 
     # -- test --
@@ -877,13 +880,10 @@ class AgenticsWorkflow:
             return "test"
         max_retries = AGENT_MAX_RETRIES
         current_attempt = state.get("recovery_attempt", 0)
-        log_info("routing", f"_route_after_generate called: recovery_attempt={current_attempt}, max_retries={max_retries}, eval_passed={state.get('eval_passed')}")
+        print(f"[ROUTING] recovery_attempt={current_attempt}, max_retries={max_retries}", flush=True)
         if current_attempt >= max_retries:
-            log_info("routing", f"Max retries exhausted ({max_retries}) — eval gate failed, stopping workflow")
-            return "output"  # Go to output with integrated=False, don't run tests on broken code
-        # Increment retry counter
-        state["recovery_attempt"] = current_attempt + 1
-        log_info("routing", f"Eval failed — retry attempt {state['recovery_attempt']}/{max_retries}")
+            print(f"[ROUTING] Max retries exhausted — STOPPING", flush=True)
+            return "output"
         return "generate_code_tests"
 
     async def process_issue(self, issue_url: str) -> Dict[str, Any]:
