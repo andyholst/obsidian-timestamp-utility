@@ -1,6 +1,5 @@
 import * as obsidian from 'obsidian';
 import { FolderSelectorModal } from './folderSelectorModal';
-import { generateUuidV7 } from './generated/insert-uuid-v7';
 
 // Parses a date string in YYYYMMDD format and validates it
 function parseDateString(dateStr: string): Date | null {
@@ -156,13 +155,6 @@ export default class TimestampPlugin extends obsidian.Plugin {
             callback: () => {
                 const modal = new FolderSelectorModal(this.app);
                 modal.open();
-            },
-        });
-        this.addCommand({
-            id: 'insert-uuid-v7',
-            name: 'Implement Timestamp-based UUID Generator in Obsidian',
-            editorCallback: (editor: obsidian.Editor, _ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
-                editor.replaceSelection(generateUuidV7());
             },
         });
     }
