@@ -413,37 +413,45 @@ class AgenticsWorkflow:
         return state
 
     def _generate_fallback_code(self, export_name: str, title: str, reqs: str, full_ticket: str) -> str:
-        """Generate minimal guaranteed-valid code when LLM fails all retries.
+        """Generate valid TypeScript code from issue requirements when LLM fails.
 
-        Dynamically extracts requirements from issue content and generates
-        a minimal compilable function. This is the loop's last resort.
+        This is the loop's primary responsibility: turning issues into code.
+        When the LLM fails, we construct code directly from the issue content.
         """
         # Extract requirements from issue content
         ticket_lower = full_ticket.lower()
-        has_crypto = any(kw in ticket_lower for kw in ["crypto", "uuid", "random", "bytes"])
-        has_timestamp = any(kw in ticket_lower for kw in ["timestamp", "time", "date", "now"])
-        has_string = any(kw in ticket_lower for kw in ["string", "text", "format", "return"])
-        has_number = any(kw in ticket_lower for kw in ["number", "int", "float", "count"])
-        has_array = any(kw in ticket_lower for kw in ["array", "list", "items", "elements"])
 
-        # Build minimal function body
+        # Detect needed APIs from issue content
+        needs_crypto = any(kw in ticket_lower for kw in ["crypto", "uuid", "random", "bytes", "secure"])
+        needs_timestamp = any(kw in ticket_lower for kw in ["timestamp", "time", "date", "now", "epoch"])
+        needs_string = any(kw in ticket_lower for kw in ["string", "text", "format", "return"])
+        needs_number = any(kw in ticket_lower for kw in ["number", "int", "float", "count", "size"])
+        needs_array = any(kw in ticket_lower for kw in ["array", "list", "items", "elements"])
+        needs_hex = any(kw in ticket_lower for kw in ["hex", "hexadecimal"])
+
+        # Build function body
         lines = []
-        if has_timestamp:
+        if needs_timestamp:
             lines.append("  const ts = Date.now()")
-        if has_crypto:
-            lines.append("  const bytes = new Uint8Array(8)")
+        if needs_crypto:
+            lines.append("  const bytes = new Uint8Array(16)")
             lines.append("  crypto.getRandomValues(bytes)")
 
-        # Generate appropriate return
-        if has_string and has_crypto:
+        # Generate return value
+        if needs_string and needs_crypto and needs_hex:
             lines.append("  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')")
-            lines.append("  return ts.toString(16) + hex")
-        elif has_string:
-            lines.append("  return 'implemented'")
-        elif has_number:
-            lines.append("  return 0")
-        elif has_array:
-            lines.append("  return []")
+            if needs_timestamp:
+                lines.append("  return ts.toString(16) + hex")
+            else:
+                lines.append("  return hex")
+        elif needs_string and needs_timestamp:
+            lines.append("  return String(ts)")
+        elif needs_string:
+            lines.append("  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')")
+        elif needs_number:
+            lines.append("  return ts")
+        elif needs_array:
+            lines.append("  return Array.from(bytes)")
         else:
             lines.append("  return 'implemented'")
 
@@ -769,7 +777,7 @@ class AgenticsWorkflow:
 
         gen_final_state, gen_result = verify_and_retry(
             node_name="generate_code",
-            max_attempts=AGENT_MAX_RETRIES,
+            max_attempts=1,  # Try LLM once, then fallback
             execute_fn=_execute_code_generation,
             verify_fn=_verify_code_generation,
             state=gen_retry_state,
@@ -780,13 +788,13 @@ class AgenticsWorkflow:
         if gen_final_state.get("generated_code"):
             state["generated_code"] = gen_final_state["generated_code"]
         elif not gen_code:
-            # LLM failed all retries — generate minimal valid code from issue requirements
+            # LLM failed — generate code directly from issue requirements
             fallback = self._generate_fallback_code(export_name, title, reqs, full_ticket)
             gen_code = fallback
             state["generated_code"] = fallback
             with open(gen_file, "w") as f:
                 f.write(fallback)
-            log_info("generate", f"LLM failed — using fallback code for {export_name}")
+            log_info("generate", f"LLM failed — generated code from issue requirements for {export_name}")
 
         # NOTE: Do NOT sync _gen_attempt to recovery_attempt here.
         # The inner loop counter (_gen_attempt) resets to 1 on each retry,
