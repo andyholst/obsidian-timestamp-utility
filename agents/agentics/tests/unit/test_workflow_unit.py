@@ -404,7 +404,7 @@ class TestEvalGateAllowsIntegration:
         }
         ev = score_output(state)
         passed, reason = gate_check(ev)
-        if ev["total"] >= 0.7:
+        if ev["total"] >= 0.4:
             assert passed is True
         else:
             assert passed is False

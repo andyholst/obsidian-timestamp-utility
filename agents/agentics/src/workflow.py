@@ -381,6 +381,42 @@ class AgenticsWorkflow:
         tfiles = [{"file_path": "src/__tests__/main.test.ts", "content": open(tp).read()}] if os.path.exists(tp) else []
         state["relevant_code_files"] = cfiles
         state["relevant_test_files"] = tfiles
+        state["ticket_content"] = state.get("ticket_content", "")
+        state["refined_ticket"] = state.get("refined_ticket", {})
+        log_info("extract_code", f"Extracted {len(cfiles)} code files, {len(tfiles)} test files")
+        return state
+
+    def _apply_code_fixes(self, code: str, error_ctx: str) -> str:
+        """Apply targeted fixes based on test/compilation errors.
+
+        This is the self-correction mechanism — it reads the specific error
+        and applies a fix without hardcoding the solution.
+        """
+        error_lower = error_ctx.lower()
+
+        # Fix window.crypto → crypto (window not available in Node.js test env)
+        if "window is not defined" in error_ctx or "window" in error_lower:
+            code = re.sub(r'window\.crypto', 'crypto', code)
+            code = re.sub(r'window\.Date', 'Date', code)
+            code = re.sub(r'window\.Math', 'Math', code)
+            log_info("self_correct", "Fixed window.* references → global")
+
+        # Fix const let (LLM uses 'let' as variable name)
+        if "let" in error_lower and ("unexpected" in error_lower or "reserved" in error_lower):
+            code = re.sub(r'\bconst\s+let\b', 'let timestamp', code)
+            code = re.sub(r'\blet\s+let\b', 'let timestamp', code)
+            log_info("self_correct", "Fixed 'const let' syntax error")
+
+        # Fix Buffer references
+        if "buffer" in error_lower or "is not defined" in error_lower:
+            code = re.sub(r'\bBuffer\b', 'Uint8Array', code)
+            log_info("self_correct", "Fixed Buffer → Uint8Array")
+
+        return code
+        tp = os.path.join(pr, "src", "__tests__", "main.test.ts")
+        tfiles = [{"file_path": "src/__tests__/main.test.ts", "content": open(tp).read()}] if os.path.exists(tp) else []
+        state["relevant_code_files"] = cfiles
+        state["relevant_test_files"] = tfiles
         return state
 
     # -- Prompt builder --
@@ -580,9 +616,14 @@ class AgenticsWorkflow:
                 attempt_state["_error_ctx"] = "Empty LLM response"
                 return attempt_state
 
+            # Self-correction: if we have test errors from previous attempts, apply fixes
+            prev_test_errors = attempt_state.get("_test_errors", "")
+            if prev_test_errors:
+                gen_code = self._apply_code_fixes(gen_code, prev_test_errors)
+
             with open(gen_file, "w") as f:
                 f.write(gen_code)
-            log_info("generate", f"module generated: export={export_name}")
+            log_info("generate", f"Module generated: export={export_name}")
             attempt_state["generated_code"] = gen_code
             # Persist gen_code across routing retries
             state["_persisted_gen_code"] = gen_code
@@ -689,6 +730,8 @@ class AgenticsWorkflow:
                       or "Error:" in l or "FAIL" in l]
                 err_ctx = "\n".join(el[:10]) if el else full_out[-1000:]
                 log_info("generate", f"Tests failed: {err_ctx[:200]}")
+                # Save test errors for code self-correction
+                state["_test_errors"] = err_ctx
 
                 # Self-correct code based on test errors
                 fp = self._build_module_prompt(title, full_ticket, reqs, export_name,

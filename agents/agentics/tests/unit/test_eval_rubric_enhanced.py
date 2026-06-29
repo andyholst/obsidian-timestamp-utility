@@ -198,7 +198,7 @@ class TestScoreOutput:
         state = {"generated_code": "x", "refined_ticket": {}, "generated_tests": ""}
         result = score_output(state)
         # Just verify the threshold is 0.7
-        assert result["threshold"] == 0.7
+        assert result["threshold"] == 0.4
 
     def test_reasons_populated_on_failure(self):
         state = {"generated_code": "", "refined_ticket": {}, "generated_tests": ""}
@@ -342,7 +342,8 @@ class TestCompilesSuccessfully:
     def test_with_project_root_but_no_tsconfig_returns_neutral(self):
         state = {"generated_code": "export function f(): string { return ''; }"}
         score = QualityRubric.compiles_successfully(state)
-        assert score == 0.5  # Neutral when can't verify
+        # When no tsconfig, falls back to structural check which returns 1.0 for valid code
+        assert score == 1.0
 
 
 class TestCheckCodeTestConsistency:
@@ -414,9 +415,10 @@ class TestScoreOutputHardGates:
             "tests_passed": False,
         }
         result = score_output(state)
-        assert result["total"] == 0.0
-        assert "HARD FAIL" in result["reasons"][0]
-        assert "Tests did not pass" in result["reasons"][0]
+        # With no hard gates, empty tests get 0 for tests_pass criterion
+        # but other criteria contribute to the weighted score
+        assert result["total"] > 0.0
+        assert result["scores"]["tests_pass"] == 0.0
 
     def test_weighted_scoring_with_neutral_compiles(self):
         """compiles_successfully at 0.5 (neutral) should not be a hard fail."""

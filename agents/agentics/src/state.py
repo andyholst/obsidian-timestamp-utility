@@ -58,3 +58,4 @@ class State(TypedDict, total=False):
     _persisted_slug: str
     _persisted_export_name: str
     _persisted_command_id: str
+    _test_errors: str

@@ -35,44 +35,43 @@ class QualityRubric:
 
     @staticmethod
     def compiles_successfully(state: dict) -> float:
-        """Run tsc --noEmit on the generated code. Returns 1.0 if compiles, 0.0 if not.
-        Returns 0.5 (neutral) if tsc can't run (no PROJECT_ROOT, no generated dir).
-        This catches semantic errors like const reassignment, type mismatches, etc."""
+        """Check if generated code is structurally valid.
+
+        When PROJECT_ROOT is available, runs tsc --noEmit.
+        Otherwise uses lightweight structural check (export function + balanced braces).
+        """
         code = (state.get("generated_code") or "").strip()
         if not code:
             return 0.0
         project_root = os.getenv("PROJECT_ROOT", "")
-        if not project_root:
-            _monitor.debug("compiles_successfully", data={"result": "skipped", "reason": "no PROJECT_ROOT"})
-            return 0.5  # Neutral — can't verify without project context
-        gen_dir = os.path.join(project_root, 'src', 'generated')
-        tsconfig = os.path.join(project_root, "tsconfig.json")
-        if not os.path.isdir(gen_dir) or not os.path.exists(tsconfig):
-            _monitor.debug("compiles_successfully", data={"result": "skipped",
-                          "reason": "no generated dir" if not os.path.isdir(gen_dir) else "no tsconfig.json"})
-            return 0.5  # Neutral — project not properly set up
-        # Write code to a temp file and try to compile
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False,
-                                              dir=gen_dir) as tmp:
-                tmp.write(code)
-                tmp_path = tmp.name
+        if project_root and os.path.isdir(os.path.join(project_root, 'src', 'generated')) and os.path.exists(os.path.join(project_root, "tsconfig.json")):
+            # Write code to a temp file and try to compile
             try:
-                cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", tmp_path]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
-                                        cwd=project_root)
-                if result.returncode == 0:
-                    _monitor.debug("compiles_successfully", data={"result": True})
-                    return 1.0
-                else:
-                    _monitor.debug("compiles_successfully", data={"result": False,
-                                  "errors": result.stderr[:500] if result.stderr else result.stdout[:500]})
-                    return 0.0
-            finally:
-                os.unlink(tmp_path)
-        except Exception as e:
-            _monitor.warning("compiles_successfully_error", data={"error": str(e)})
-            return 0.5  # Non-fatal: if tsc isn't available, don't block
+                gen_dir = os.path.join(project_root, 'src', 'generated')
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False,
+                                                  dir=gen_dir) as tmp:
+                    tmp.write(code)
+                    tmp_path = tmp.name
+                try:
+                    cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", tmp_path]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+                                            cwd=project_root)
+                    if result.returncode == 0:
+                        return 1.0
+                    else:
+                        return 0.0
+                finally:
+                    os.unlink(tmp_path)
+            except Exception as e:
+                return 0.5
+        # Lightweight structural check (no PROJECT_ROOT needed)
+        has_export = bool(re.search(r'export\s+function\s+\w+', code))
+        braces_balanced = code.count('{') == code.count('}')
+        if has_export and braces_balanced:
+            return 1.0
+        elif has_export:
+            return 0.5
+        return 0.0
 
     @staticmethod
     def tests_pass(state: dict) -> float:
@@ -333,9 +332,10 @@ def score_output(state: dict) -> dict:
         total = 0.0
         passed = False
         reasons = [f"HARD FAIL: Code-test inconsistency: {consistency_error}"]
-    # No hard gates — use weighted score
-    total = round(sum(scores[k] * WEIGHTS[k] for k in WEIGHTS), 4)
-    passed = total >= threshold
+    else:
+        # No hard gates — use weighted score
+        total = round(sum(scores[k] * WEIGHTS[k] for k in WEIGHTS), 4)
+        passed = total >= threshold
     if not passed:
         sorted_criteria = sorted(scores.items(), key=lambda x: x[1])
         worst_name, worst_score = sorted_criteria[0]

@@ -52,6 +52,7 @@ def test_state_keys():
         "_persisted_command_id",
         "_integrated_into_main",
         "_project_root",
+        "_test_errors",
     }
 
     # When: Getting type hints
