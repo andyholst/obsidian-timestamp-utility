@@ -620,6 +620,7 @@ class AgenticsWorkflow:
 
             raw = _post_process_generated_code(raw)
             gen_code = raw
+            print(f"DEBUG_POST_PROCESS: len={len(gen_code)}, first_80={gen_code[:80]!r}")
             if gen_code and f"function {export_name}" in gen_code and f"export function {export_name}" not in gen_code:
                 gen_code = gen_code.replace(f"function {export_name}", f"export function {export_name}")
                 log_info("generate", f"Post-added export prefix to {export_name}")
@@ -755,28 +756,6 @@ class AgenticsWorkflow:
                 log_info("generate", f"Tests failed: {err_ctx[:200]}")
                 # Save test errors for code self-correction
                 state["_test_errors"] = err_ctx
-
-                # Self-correct code based on test errors
-                fp = self._build_module_prompt(title, full_ticket, reqs, export_name,
-                                               is_retry=True, error_ctx=err_ctx, gen_code=gen_code)
-                try:
-                    fr = self.llm_code.invoke(fp)
-                    fr_raw = remove_thinking_tags(str(fr).strip())
-                    if fr_raw.startswith("```"):
-                        fl = fr_raw.split("\n")
-                        for fi in range(len(fl) - 1, 0, -1):
-                            if fl[fi].strip().startswith("```"):
-                                fr_raw = "\n".join(fl[1:fi]).strip()
-                                break
-                    if fr_raw and re.search(rf'export\s+function\s+{re.escape(export_name)}', fr_raw):
-                        gen_code = _post_process_generated_code(fr_raw)
-                        if f"function {export_name}" in gen_code and f"export function {export_name}" not in gen_code:
-                            gen_code = gen_code.replace(f"function {export_name}", f"export function {export_name}")
-                        with open(gen_file, "w") as f:
-                            f.write(gen_code)
-                        log_info("generate", "Code self-corrected from test errors")
-                except Exception:
-                    pass
 
                 gen_test_code = ""  # Clear so next attempt regenerates tests
                 attempt_state["tests_passed"] = False
