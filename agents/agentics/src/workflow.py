@@ -633,7 +633,7 @@ class AgenticsWorkflow:
                 # Run tests
                 tres = subprocess.run(
                     ["npx", "jest", "--no-cache", gen_test_file],
-                    cwd=pr, capture_output=True, text=True, timeout=120, env=jest_env)
+                    cwd=pr, capture_output=True, text=True, timeout=30, env=jest_env)
 
                 if tres.returncode == 0:
                     log_info("generate", "Tests pass")
@@ -821,7 +821,7 @@ class AgenticsWorkflow:
         log_info("test", "entry")
         try:
             r = subprocess.run(["npx","jest","--no-cache","--testPathPattern","src/__tests__/"],
-                              cwd=self.project_root,capture_output=True,text=True,timeout=120,
+                              cwd=self.project_root,capture_output=True,text=True,timeout=30,
                               env={**os.environ,"NODE_ENV":"development"})
             pm = re.search(r"Tests:\s*(\d+)\s*passed,\s*(\d+)\s*total", r.stdout+r.stderr)
             state["post_integration_tests_passed"] = int(pm.group(1)) if pm else 0
