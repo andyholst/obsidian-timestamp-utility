@@ -504,101 +504,74 @@ class AgenticsWorkflow:
         return code
 
     def _issue_to_pseudocode(self, task: str, reqs: list, full_ticket: str) -> list:
-        """Use LLM to convert issue text to pseudocode steps."""
+        """Use LLM to convert issue text to pseudocode steps.
+
+        The pseudocode should contain SPECIFIC values and API calls
+        extracted from the issue, not generic descriptions.
+        Each step maps 1:1 to a TypeScript statement.
+        """
         reqs_text = "\n".join(f"- {r}" for r in reqs) if reqs else "- Implement the feature"
         prompt = (
             f"Convert these requirements into pseudocode steps.\n"
-            f"Each step should be ONE line describing what to do.\n"
-            f"Use simple operations only: create, set, get, call, return.\n\n"
+            f"Each step maps to exactly ONE line of TypeScript.\n"
+            f"Include SPECIFIC values, function names, and API calls from the issue.\n"
+            f"Use TypeScript syntax but without type annotations.\n\n"
             f"TASK: {task}\n\n"
             f"REQUIREMENTS:\n{reqs_text}\n\n"
-            f"Output ONE pseudocode step per line. No numbers, no bullets."
+            f"Output ONE step per line. No numbers, no bullets, no explanation.\n"
+            f"Example:\n"
+            f"  const ts = Date.now()\n"
+            f"  const bytes = crypto.getRandomValues(new Uint8Array(16))\n"
+            f"  return ts.toString(16)\n"
         )
         try:
             resp = self.llm_reasoning.invoke(prompt)
             text = remove_thinking_tags(str(resp).strip())
             steps = [l.strip() for l in text.split("\n") if l.strip() and not l.strip().startswith("```")]
-            return steps if steps else [f"return {task}"]
+            return steps if steps else [f"return '{task}'"]
         except Exception:
-            return [f"return {task}"]
+            return [f"return 'implemented'"]
 
     def _lookup_apis_for_pseudocode(self, pseudocode: list) -> dict:
-        """Map pseudocode steps to available TypeScript/browser APIs.
+        """Map pseudocode steps to TypeScript syntax.
 
-        Uses keyword matching to find the right API for each step.
-        This is a deterministic lookup — no LLM involved.
+        Since the pseudocode already contains TypeScript-like statements,
+        this is a lightweight syntax cleanup, not a semantic mapping.
         """
         mapping = {}
         for step in pseudocode:
-            step_lower = step.lower()
-            # Random/crypto operations
-            if any(kw in step_lower for kw in ["random", "uuid", "unique", "crypto", "hash"]):
-                if "uuid" in step_lower or "unique" in step_lower or "id" in step_lower:
-                    mapping[step] = "Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('')"
+            # The pseudocode is already TypeScript-like, just needs minor cleanup
+            cleaned = step.strip()
+            if cleaned.startswith("const ") or cleaned.startswith("let ") or cleaned.startswith("var "):
+                mapping[step] = cleaned
+            elif cleaned.startswith("return "):
+                mapping[step] = cleaned
+            elif "(" in cleaned:
+                # It's a function call — wrap in const if it returns a value
+                if not cleaned.startswith("const ") and not cleaned.startswith("let "):
+                    mapping[step] = f"const result = {cleaned}"
                 else:
-                    mapping[step] = "crypto.getRandomValues(new Uint8Array(16))"
-            # Timestamp operations
-            elif any(kw in step_lower for kw in ["timestamp", "time", "date", "now", "epoch", "milliseconds"]):
-                mapping[step] = "Date.now()"
-            # String/format operations
-            elif any(kw in step_lower for kw in ["format", "string", "text", "convert", "encode"]):
-                if "hex" in step_lower:
-                    mapping[step] = "value.toString(16)"
-                else:
-                    mapping[step] = "String(value)"
-            # Insert/write operations
-            elif any(kw in step_lower for kw in ["insert", "add", "write", "append", "replace"]):
-                mapping[step] = "editor.replaceSelection(value)"
-            # Log/output operations
-            elif any(kw in step_lower for kw in ["log", "print", "output", "debug", "show"]):
-                mapping[step] = "console.log(value)"
-            # Return operations
-            elif step_lower.startswith("return"):
-                mapping[step] = "return value"
-            # Variable creation
-            elif any(kw in step_lower for kw in ["create", "generate", "make", "compute", "calculate"]):
-                mapping[step] = "value"
+                    mapping[step] = cleaned
             else:
-                mapping[step] = "value"
+                mapping[step] = cleaned
         return mapping
 
     def _construct_ts_from_pseudocode(self, export_name: str, pseudocode: list, api_mapping: dict) -> str:
-        """Construct valid TypeScript from pseudocode using strict 1:1 mapping."""
-        # Collect all needed APIs
-        needs = set()
-        for step in pseudocode:
-            step_lower = step.lower()
-            if any(kw in step_lower for kw in ["random", "uuid", "unique", "crypto", "hash", "bytes"]):
-                needs.add("crypto")
-            if any(kw in step_lower for kw in ["time", "timestamp", "date", "now", "epoch"]):
-                needs.add("time")
-            if any(kw in step_lower for kw in ["format", "string", "text", "convert", "encode", "hex"]):
-                needs.add("string")
-            if any(kw in step_lower for kw in ["insert", "add", "write", "append", "replace"]):
-                needs.add("insert")
+        """Construct TypeScript from pseudocode.
 
-        # Build a single coherent function
+        The pseudocode is already TypeScript-like, so this just
+        assembles the lines and ensures a return statement.
+        """
         lines = []
-        if "time" in needs:
-            lines.append("  const ts = Date.now()")
-        if "crypto" in needs:
-            lines.append("  const bytes = new Uint8Array(16)")
-            lines.append("  crypto.getRandomValues(bytes)")
+        has_return = False
 
-        # Generate return value
-        if "string" in needs and "crypto" in needs:
-            lines.append("  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')")
-            if "time" in needs:
-                lines.append("  return ts.toString(16) + hex")
-            else:
-                lines.append("  return hex")
-        elif "string" in needs and "time" in needs:
-            lines.append("  return String(ts)")
-        elif "string" in needs:
-            lines.append("  return 'implemented'")
-        elif "time" in needs:
-            lines.append("  return String(ts)")
-        else:
+        for step in pseudocode:
+            mapped = api_mapping.get(step, step.strip())
+            if mapped.startswith("return "):
+                has_return = True
+            lines.append(f"  {mapped}" if not mapped.startswith("  ") else mapped)
+
+        if not has_return:
             lines.append("  return 'implemented'")
 
         body = "\n".join(lines)
