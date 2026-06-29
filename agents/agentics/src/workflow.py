@@ -972,43 +972,23 @@ class AgenticsWorkflow:
 
                 # Generate tests (only on first attempt or if previous tests were cleared)
                 if not gen_test_code:
-                    tp = (
-                        f"Write Jest tests for the function `{export_name}()`.\n"
-                        f"IMPORTANT: Use EXACTLY this import: `import {{ {export_name} }} from '{module_path}'`\n"
-                        f"Output ONLY valid TypeScript test code. No markdown fences. Keep it simple (3 tests max):\n"
-                        f"1. should be a function\n"
-                        f"2. should return a string\n"
-                        f"3. should return a non-empty string\n"
+                    # Generate tests deterministically (no LLM hallucination risk)
+                    gen_test_code = (
+                        f"import {{ {export_name} }} from '../../generated/{slug}';\n\n"
+                        f"describe('{export_name}', () => {{\n"
+                        f"  it('should be a function', () => {{\n"
+                        f"    expect(typeof {export_name}).toBe('function');\n"
+                        f"  }});\n\n"
+                        f"  it('should return a string', () => {{\n"
+                        f"    const result = {export_name}();\n"
+                        f"    expect(typeof result).toBe('string');\n"
+                        f"  }});\n\n"
+                        f"  it('should return a non-empty string', () => {{\n"
+                        f"    const result = {export_name}();\n"
+                        f"    expect(result.length).toBeGreaterThan(0);\n"
+                        f"  }});\n"
+                        f"}});\n"
                     )
-                    try:
-                        tr = self.llm_code.invoke(tp)
-                        tr_raw = remove_thinking_tags(str(tr).strip())
-                        if tr_raw.startswith("```"):
-                            tl = tr_raw.split("\n")
-                            for ti in range(len(tl) - 1, 0, -1):
-                                if tl[ti].strip().startswith("```"):
-                                    tr_raw = "\n".join(tl[1:ti]).strip()
-                                    break
-                        # Ensure import statement is present and correct
-                        if tr_raw and "describe(" in tr_raw:
-                            import_line = f"import {{ {export_name} }} from '{module_path}';"
-                            # Check if first non-empty line is already a correct import
-                            first_line = next((l.strip() for l in tr_raw.split(chr(10)) if l.strip()), "")
-                            if first_line == import_line:
-                                gen_test_code = tr_raw  # Already correct
-                            else:
-                                # Prepend import (remove any malformed import first)
-                                lines = tr_raw.split(chr(10))
-                                while lines and lines[0].strip().startswith("import"):
-                                    lines.pop(0)
-                                gen_test_code = import_line + "\n\n" + chr(10).join(lines)
-                        else:
-                            gen_test_code = _fallback_tests(export_name, slug)
-                        if gen_test_code == _fallback_tests(export_name, slug):
-                            log_info("generate", f"using fallback tests for {export_name}")
-                    except Exception as e:
-                        log_info("generate", f"test generation failed: {e}")
-                        gen_test_code = _fallback_tests(export_name, slug)
                     with open(gen_test_file, "w") as f:
                         f.write(gen_test_code)
 
