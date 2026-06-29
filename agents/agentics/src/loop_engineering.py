@@ -159,10 +159,28 @@ def verify_generated_code(state: Dict) -> VerificationResult:
         errors.append({"type": "empty_code", "message": "No code was generated"})
     elif len(gen_code.strip()) < 20:
         errors.append({"type": "too_short", "message": "Generated code is too short to be valid"})
-    # Note: We do NOT check compilation here. Compilation is checked by the eval rubric
-    # (compiles_successfully criterion). If code doesn't compile, eval fails, and the loop
-    # retries with eval_failure_context. Checking here would cause unnecessary retries since
-    # the LLM may generate Node.js APIs (Buffer, require) that fail in browser context.
+    else:
+        # Check compilation with tsc
+        project_root = state.get("project_root", os.getenv("PROJECT_ROOT", ""))
+        if project_root:
+            gen_dir = os.path.join(project_root, "src", "generated")
+            os.makedirs(gen_dir, exist_ok=True)
+            gen_file = os.path.join(gen_dir, "__verify_check.ts")
+            try:
+                with open(gen_file, "w") as f:
+                    f.write(gen_code)
+                cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", "--noUnusedLocals", "--noUnusedParameters",
+                       "--project", "tsconfig.json"]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=60,
+                                        cwd=project_root)
+                if result.returncode != 0:
+                    # Extract first error
+                    err_lines = [l for l in (result.stderr + result.stdout).split("\n") if "error" in l.lower()]
+                    err_msg = err_lines[0][:200] if err_lines else "Compilation failed"
+                    errors.append({"type": "compilation_error", "message": err_msg})
+            finally:
+                if os.path.exists(gen_file):
+                    os.unlink(gen_file)
 
     score = max(0.0, 100.0 - (len(errors) * 30.0))
     passed = len(errors) == 0
