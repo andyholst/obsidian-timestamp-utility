@@ -868,6 +868,26 @@ class AgenticsWorkflow:
         gen_test_code = ""
         error_ctx = state.get("_error_ctx", "")
 
+        # Generate tests deterministically from the export_name
+        gen_test_code = (
+            f"import {{ {export_name} }} from '../../generated/{slug}';\n\n"
+            f"describe('{export_name}', () => {{\n"
+            f"  it('should be a function', () => {{\n"
+            f"    expect(typeof {export_name}).toBe('function');\n"
+            f"  }});\n\n"
+            f"  it('should return a string', () => {{\n"
+            f"    const result = {export_name}();\n"
+            f"    expect(typeof result).toBe('string');\n"
+            f"  }});\n\n"
+            f"  it('should return a non-empty string', () => {{\n"
+            f"    const result = {export_name}();\n"
+            f"    expect(result.length).toBeGreaterThan(0);\n"
+            f"  }});\n"
+            f"}});\n"
+        )
+        with open(gen_test_file, "w") as f:
+            f.write(gen_test_code)
+
         # ---- Generate tests using verify-and-retry loop ----
         def _execute_code_generation(attempt_state: dict) -> dict:
             """Single attempt: build prompt, call LLM, validate, write file."""
