@@ -549,16 +549,17 @@ class AgenticsWorkflow:
                 f"Output ONLY the TypeScript code. No explanation.\n"
             )
         return (
-            f"Fix this TypeScript module. It has syntax or compilation errors.\n\n"
-            f"TASK: {title}\nEXPORT: {export_name}\n\n"
-            f"ERRORS (fix these):\n{error_ctx}\n\n"
-            f"BROKEN CODE:\n{gen_code}\n\n"
-            f"=== FIX RULES ===\n"
-            f"- Use BROWSER-ONLY APIs: Date.now(), crypto.getRandomValues(), Math. NO Buffer, NO require, NO process.\n"
-            f"- Do NOT use 'let' or 'const' as variable names.\n"
-            f"- Write CONCISE code (under 20 lines). Close all braces.\n"
+            f"Your TypeScript code failed to compile. Write NEW code from scratch.\n\n"
+            f"EXPORT NAME: {export_name}\n\n"
+            f"COMPILATION ERRORS:\n{error_ctx}\n\n"
+            f"=== RULES ===\n"
             f"- Start with: export function {export_name}(): string {{\n"
-            f"- Output ONLY the fixed code. No markdown fences.\n"
+            f"- Use ONLY: Date.now(), crypto.getRandomValues(), Math, Uint8Array\n"
+            f"- NEVER use: Buffer, require, process, window, async/await\n"
+            f"- ALWAYS have a return statement\n"
+            f"- NO unused variables\n"
+            f"- Under 20 lines. Close all braces.\n\n"
+            f"Output ONLY the TypeScript code starting with 'export function'.\n"
         )
 
     def _build_eval_retry_prompt(self, title, full_ticket, reqs, export_name,

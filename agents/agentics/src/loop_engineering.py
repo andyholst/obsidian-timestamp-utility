@@ -174,10 +174,9 @@ def verify_generated_code(state: Dict) -> VerificationResult:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=60,
                                         cwd=project_root)
                 if result.returncode != 0:
-                    # Extract first error
-                    err_lines = [l for l in (result.stderr + result.stdout).split("\n") if "error" in l.lower()]
-                    err_msg = err_lines[0][:200] if err_lines else "Compilation failed"
-                    errors.append({"type": "compilation_error", "message": err_msg})
+                    # Pass full error output for self-correction
+                    full_err = (result.stderr + result.stdout).strip()
+                    errors.append({"type": "compilation_error", "message": full_err[:1000]})
             finally:
                 if os.path.exists(gen_file):
                     os.unlink(gen_file)
