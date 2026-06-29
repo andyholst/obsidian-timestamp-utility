@@ -534,7 +534,13 @@ class AgenticsWorkflow:
                 line = line.strip()
                 if not line or line.startswith("```") or line.startswith("//") or line.startswith("/*"):
                     continue
-                # Must look like a TS statement (starts with const/let/var/return or is a function call)
+                # Skip lines with arrow functions or complex expressions
+                if "=>" in line or line.count(";") > 1:
+                    continue
+                # Skip lines that are too complex (more than 3 parens groups)
+                if line.count("(") > 3:
+                    continue
+                # Must look like a TS statement (starts with const/let/var/return or is a simple function call)
                 if line.startswith("const ") or line.startswith("let ") or line.startswith("var "):
                     # Take only the first statement (no inline comments)
                     stmt = line.split("//")[0].rstrip()
@@ -544,7 +550,7 @@ class AgenticsWorkflow:
                     stmt = line.split("//")[0].rstrip()
                     steps.append(stmt)
                 elif "(" in line and ")" in line:
-                    # Function call
+                    # Simple function call
                     stmt = line.split("//")[0].rstrip()
                     if stmt.endswith(";") or stmt.endswith(")"):
                         steps.append(stmt)
