@@ -204,16 +204,24 @@ def verify_tests_passed(state: Dict) -> VerificationResult:
 
 
 def verify_eval_gate(state: Dict) -> VerificationResult:
-    """Verify that the eval quality gate passed."""
+    """Verify that the eval quality gate passed.
+
+    Uses the weighted validation_score from the eval rubric.
+    compiles_successfully is a soft gate (contributes 0.25 to score),
+    not a hard gate — code can be structurally valid but fail tsc
+    due to subtle syntax issues.
+    """
     errors = []
     eval_passed = state.get("eval_passed", False)
+    validation_score = state.get("validation_score", 0)
 
     if not eval_passed:
         failed = state.get("failed_criteria", [])
         for criterion in failed:
             errors.append({"type": "eval_failed", "message": f"Eval criterion failed: {criterion}"})
 
-    score = state.get("validation_score", 100 if eval_passed else 0)
+    # Use the actual validation_score (weighted) rather than binary 0/100
+    score = float(validation_score)
 
     passed = len(errors) == 0
     retry_prompt = ""

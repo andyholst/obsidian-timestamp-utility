@@ -333,11 +333,10 @@ def score_output(state: dict) -> dict:
         total = 0.0
         passed = False
         reasons = [f"HARD FAIL: Code-test inconsistency: {consistency_error}"]
-    # Hard gate 1: if tests don't pass, automatic fail
-    # Note: compiles_successfully is NOT a hard gate — it's a weighted criterion.
-    # tsc --noEmit can fail for env reasons (missing tsconfig, npm not installed)
-    # and _is_valid_ts_syntax in workflow.py already catches structural errors before eval.
-    elif scores.get("tests_pass", 0.0) == 0.0:
+    # Hard gate 1: if code compiles but tests don't pass, fail
+    # If code doesn't compile (compiles_successfully == 0), we can't test it,
+    # so use the weighted score without the tests_pass hard gate
+    elif scores.get("compiles_successfully", 0.0) > 0.0 and scores.get("tests_pass", 0.0) == 0.0:
         total = 0.0
         passed = False
         reasons = ["HARD FAIL: Tests did not pass. Fix the generated code and tests."]
