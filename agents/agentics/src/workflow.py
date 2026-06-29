@@ -876,11 +876,13 @@ class AgenticsWorkflow:
         if state.get("eval_passed", False):
             return "test"
         max_retries = AGENT_MAX_RETRIES
-        if state.get("recovery_attempt", 0) >= max_retries:
+        current_attempt = state.get("recovery_attempt", 0)
+        log_info("routing", f"_route_after_generate called: recovery_attempt={current_attempt}, max_retries={max_retries}, eval_passed={state.get('eval_passed')}")
+        if current_attempt >= max_retries:
             log_info("routing", f"Max retries exhausted ({max_retries}) — eval gate failed, stopping workflow")
             return "output"  # Go to output with integrated=False, don't run tests on broken code
         # Increment retry counter
-        state["recovery_attempt"] = state.get("recovery_attempt", 0) + 1
+        state["recovery_attempt"] = current_attempt + 1
         log_info("routing", f"Eval failed — retry attempt {state['recovery_attempt']}/{max_retries}")
         return "generate_code_tests"
 
