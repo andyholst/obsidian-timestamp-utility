@@ -623,7 +623,7 @@ class AgenticsWorkflow:
                                     break
                         # Ensure import statement is present
                         if tr_raw and "describe(" in tr_raw:
-                            import_line = f"import {{ export_name }} from '{module_path}';"
+                            import_line = f"import {{ {export_name} }} from '{module_path}';"
                             if import_line not in tr_raw:
                                 tr_raw = import_line + "\n\n" + tr_raw
                             gen_test_code = tr_raw
