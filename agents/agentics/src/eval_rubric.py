@@ -332,6 +332,11 @@ def score_output(state: dict) -> dict:
         total = 0.0
         passed = False
         reasons = [f"HARD FAIL: Code-test inconsistency: {consistency_error}"]
+    # Hard gate 1: if generated tests exist, they must pass
+    elif scores.get("tests_pass", 0.0) == 0.0 and state.get("generated_tests"):
+        total = 0.0
+        passed = False
+        reasons = [f"HARD FAIL: Generated tests did not pass. Fix the code and tests."]
     else:
         # No hard gates — use weighted score
         total = round(sum(scores[k] * WEIGHTS[k] for k in WEIGHTS), 4)
