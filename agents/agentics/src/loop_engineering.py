@@ -181,9 +181,7 @@ def verify_generated_code(state: Dict) -> VerificationResult:
 def verify_tests_passed(state: Dict) -> VerificationResult:
     """Verify that generated tests exist and pass.
 
-    Uses a soft check — if tests exist but fail (e.g., due to code syntax
-    errors), give partial credit rather than 0. The code might be structurally
-    valid but have subtle issues.
+    Returns 100 if tests pass, 0 if tests fail or don't exist.
     """
     errors = []
     tests_passed = state.get("tests_passed", False)
@@ -193,9 +191,9 @@ def verify_tests_passed(state: Dict) -> VerificationResult:
         errors.append({"type": "no_tests", "message": "No tests were generated/written"})
         score = 0.0
     elif not tests_passed:
-        # Tests exist but fail — partial credit (50%) for effort
+        # Tests exist but fail — hard fail (0)
         errors.append({"type": "tests_failed", "message": "Tests exist but do not pass"})
-        score = 50.0
+        score = 0.0
     else:
         score = 100.0
 
