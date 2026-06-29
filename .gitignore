@@ -52,3 +52,7 @@ backups
 agents/agentics/.venv_new
 agents/agentics/.venv312
 
+# Agentic pipeline output (ephemeral, never committed)
+src/generated/
+src/__tests__/generated/
+

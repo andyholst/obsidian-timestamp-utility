@@ -405,9 +405,8 @@ class AgenticsWorkflow:
         bak_dir = os.path.join(pr, "src", ".agentics_backups")
         for d in [gen_dir, gen_test_dir, bak_dir]:
             os.makedirs(d, exist_ok=True)
-        # NOTE: Cleanup of stale files happens in agentics.py main(), NOT here.
-        # This node can be retried multiple times by the graph router, and we
-        # don't want to delete generated files between retries.
+        # Cleanup of stale files from PREVIOUS runs happens in agentics.py main().
+        # Within a single run, we keep generated files across retries (same name due to _persisted_slug).
         with open(main_ts) as f:
             orig_main = f.read()
         with open(main_test) as f:
