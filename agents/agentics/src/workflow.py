@@ -824,7 +824,9 @@ class AgenticsWorkflow:
             log_info("generate", f"Tests written to src/__tests__/{slug}.test.ts")
 
         # ---- Update main.test.ts with integration tests for the new command ----
-        if gen_code and gen_test_code and integrated_main != orig_main:
+        # Always append integration tests when code was integrated, even if
+        # generated tests failed (integration tests use mocks, not real code)
+        if gen_code and integrated_main != orig_main:
             integration_tests = _build_integration_tests(export_name, command_id, title, slug)
             _append_integration_tests_to_main_test(main_test, integration_tests)
             log_info("generate", f"Integration tests appended to main.test.ts for {command_id}")
