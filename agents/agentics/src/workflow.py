@@ -568,8 +568,8 @@ class AgenticsWorkflow:
         Each pseudocode line maps to exactly one TypeScript statement.
         No LLM involved — this is pure text substitution.
         """
-        lines = []
-        has_return = False
+        var_lines = []
+        return_line = None
 
         for step in pseudocode:
             step_lower = step.lower().strip()
@@ -580,23 +580,40 @@ class AgenticsWorkflow:
                 continue
 
             # Handle return statements
-            if step_lower.startswith("return"):
-                lines.append(f"  {mapped}")
-                has_return = True
+            if step_lower.startswith("return") and mapped.startswith("return "):
+                return_line = f"  {mapped}"
             # Handle variable declarations (const x = ...)
             elif step_lower.startswith("const ") or step_lower.startswith("let "):
-                # Extract the value part and use the mapped API
-                lines.append(f"  const result = {mapped}")
-            # Handle function calls (call, get, set, create)
+                # Use the mapped API as the value
+                var_lines.append(f"  const result = {mapped}")
+            # Handle function calls (call, get, set, create, generate)
             elif any(kw in step_lower for kw in ["call", "get", "set", "create", "generate", "make", "compute"]):
-                lines.append(f"  const result = {mapped}")
+                var_lines.append(f"  const result = {mapped}")
             # Handle insert/write operations
             elif any(kw in step_lower for kw in ["insert", "add", "write", "append"]):
-                lines.append(f"  {mapped}")
+                var_lines.append(f"  {mapped}")
+            # Handle timestamp operations
+            elif any(kw in step_lower for kw in ["time", "timestamp", "date", "now"]):
+                var_lines.append(f"  const ts = {mapped}")
+            # Handle random/crypto operations
+            elif any(kw in step_lower for kw in ["random", "uuid", "unique", "crypto", "hash"]):
+                var_lines.append(f"  const bytes = {mapped}")
             else:
-                lines.append(f"  const result = {mapped}")
+                var_lines.append(f"  const result = {mapped}")
 
-        if not has_return:
+        # Deduplicate variable declarations
+        seen = set()
+        unique_lines = []
+        for line in var_lines:
+            if line not in seen:
+                seen.add(line)
+                unique_lines.append(line)
+
+        # Build final code
+        lines = unique_lines
+        if return_line:
+            lines.append(return_line)
+        else:
             lines.append("  return result")
 
         body = "\n".join(lines)
@@ -841,11 +858,12 @@ class AgenticsWorkflow:
         gen_file = os.path.join(gen_dir, f"{slug}.ts")
         gen_test_file = os.path.join(gen_test_dir, f"{slug}.test.ts")
 
-        gen_code = state.get("_persisted_gen_code", "")
+        # gen_code already set from text→pseudocode→code pipeline (line 772)
+        # Skip the old LLM-based code generation loop
         gen_test_code = ""
-        error_ctx = ""
+        error_ctx = state.get("_error_ctx", "")
 
-        # ---- Generate module code using verify-and-retry loop ----
+        # ---- Generate tests using verify-and-retry loop ----
         def _execute_code_generation(attempt_state: dict) -> dict:
             """Single attempt: build prompt, call LLM, validate, write file."""
             nonlocal gen_code, error_ctx
@@ -926,26 +944,11 @@ class AgenticsWorkflow:
         gen_retry_state["_error_ctx"] = ""
         gen_retry_state["_project_root"] = self.project_root
 
-        gen_final_state, gen_result = verify_and_retry(
-            node_name="generate_code",
-            max_attempts=1,  # Try LLM once, then fallback
-            execute_fn=_execute_code_generation,
-            verify_fn=_verify_code_generation,
-            state=gen_retry_state,
-            attempt_counter_key="_gen_attempt",
-        )
-
-        # CRITICAL: Propagate generated_code from inner state to outer state so eval gate can see it
-        if gen_final_state.get("generated_code"):
-            state["generated_code"] = gen_final_state["generated_code"]
-        elif not gen_code:
-            # LLM failed — generate code directly from issue requirements
-            fallback = self._generate_fallback_code(export_name, title, reqs, full_ticket)
-            gen_code = fallback
-            state["generated_code"] = fallback
-            with open(gen_file, "w") as f:
-                f.write(fallback)
-            log_info("generate", f"LLM failed — generated code from issue requirements for {export_name}")
+        # gen_code already set from text→pseudocode→code pipeline — skip old LLM loop
+        # Write the pipeline-generated code to file
+        with open(gen_file, "w") as f:
+            f.write(gen_code)
+        state["generated_code"] = gen_code
 
         # NOTE: Do NOT sync _gen_attempt to recovery_attempt here.
         # The inner loop counter (_gen_attempt) resets to 1 on each retry,
