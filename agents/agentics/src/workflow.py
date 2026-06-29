@@ -1025,38 +1025,11 @@ class AgenticsWorkflow:
                     "tests_passed": attempt_state.get("tests_passed", False),
                 })
 
-            test_retry_state = dict(state)
-            test_retry_state["tests_passed"] = False
-            test_retry_state["_error_ctx"] = ""
-
-            test_final_state, test_result = verify_and_retry(
-                node_name="generate_tests",
-                max_attempts=AGENT_MAX_RETRIES,
-                execute_fn=_execute_test_generation,
-                verify_fn=_verify_test_generation,
-                state=test_retry_state,
-                attempt_counter_key="_test_attempt",
-            )
-
-            # Propagate generated_tests to outer state
-            if test_final_state.get("generated_tests"):
-                gen_test_code = test_final_state["generated_tests"]
-                state["generated_tests"] = gen_test_code
-            elif not gen_test_code:
-                # LLM failed all test retries — generate fallback tests
-                gen_test_code = self._generate_fallback_tests(export_name, slug, full_ticket)
-                state["generated_tests"] = gen_test_code
-                with open(gen_test_file, "w") as f:
-                    f.write(gen_test_code)
-                log_info("generate", f"LLM test gen failed — using fallback tests for {export_name}")
-
-            if not test_result.passed:
-                log_info("generate", "Tests still failing after max attempts — will NOT integrate broken code")
-                gen_test_code = ""
+            # Tests already generated deterministically — skip LLM test loop
+            state["generated_tests"] = gen_test_code
 
         # ---- Eval gate BEFORE integration ----
-        # Use test result from verify-and-retry loop (or default if no code)
-        tests_passed = (test_result.passed if test_result is not None else False) if gen_code else False
+        tests_passed = False
         state["generated_code"] = gen_code
         state["generated_tests"] = gen_test_code
         state["method_name"] = export_name
