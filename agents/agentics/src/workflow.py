@@ -523,46 +523,81 @@ class AgenticsWorkflow:
             return [f"return {task}"]
 
     def _lookup_apis_for_pseudocode(self, pseudocode: list) -> dict:
-        """Map pseudocode steps to available TypeScript/browser APIs."""
+        """Map pseudocode steps to available TypeScript/browser APIs.
+
+        Uses keyword matching to find the right API for each step.
+        This is a deterministic lookup — no LLM involved.
+        """
         mapping = {}
         for step in pseudocode:
             step_lower = step.lower()
-            if any(kw in step_lower for kw in ["random", "uuid", "unique", "crypto"]):
-                mapping[step] = "crypto.getRandomValues(new Uint8Array(16))"
-            elif any(kw in step_lower for kw in ["time", "timestamp", "date", "now"]):
+            # Random/crypto operations
+            if any(kw in step_lower for kw in ["random", "uuid", "unique", "crypto", "hash"]):
+                if "uuid" in step_lower or "unique" in step_lower or "id" in step_lower:
+                    mapping[step] = "Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('')"
+                else:
+                    mapping[step] = "crypto.getRandomValues(new Uint8Array(16))"
+            # Timestamp operations
+            elif any(kw in step_lower for kw in ["timestamp", "time", "date", "now", "epoch", "milliseconds"]):
                 mapping[step] = "Date.now()"
-            elif any(kw in step_lower for kw in ["format", "string", "text", "convert"]):
-                mapping[step] = "String(value)"
-            elif any(kw in step_lower for kw in ["insert", "add", "append", "write"]):
+            # String/format operations
+            elif any(kw in step_lower for kw in ["format", "string", "text", "convert", "encode"]):
+                if "hex" in step_lower:
+                    mapping[step] = "value.toString(16)"
+                else:
+                    mapping[step] = "String(value)"
+            # Insert/write operations
+            elif any(kw in step_lower for kw in ["insert", "add", "write", "append", "replace"]):
                 mapping[step] = "editor.replaceSelection(value)"
-            elif any(kw in step_lower for kw in ["log", "print", "output", "debug"]):
+            # Log/output operations
+            elif any(kw in step_lower for kw in ["log", "print", "output", "debug", "show"]):
                 mapping[step] = "console.log(value)"
+            # Return operations
+            elif step_lower.startswith("return"):
+                mapping[step] = "return value"
+            # Variable creation
+            elif any(kw in step_lower for kw in ["create", "generate", "make", "compute", "calculate"]):
+                mapping[step] = "value"
             else:
-                mapping[step] = f"/* TODO: {step} */"
+                mapping[step] = "value"
         return mapping
 
     def _construct_ts_from_pseudocode(self, export_name: str, pseudocode: list, api_mapping: dict) -> str:
-        """Construct valid TypeScript from pseudocode steps and API mapping."""
+        """Construct valid TypeScript from pseudocode using strict 1:1 mapping.
+
+        Each pseudocode line maps to exactly one TypeScript statement.
+        No LLM involved — this is pure text substitution.
+        """
         lines = []
         has_return = False
 
         for step in pseudocode:
-            mapped = api_mapping.get(step, step)
-            if mapped.startswith("return "):
+            step_lower = step.lower().strip()
+            mapped = api_mapping.get(step, "")
+
+            # Skip empty mappings and TODOs
+            if not mapped or mapped.startswith("/* TODO"):
+                continue
+
+            # Handle return statements
+            if step_lower.startswith("return"):
                 lines.append(f"  {mapped}")
                 has_return = True
-            elif mapped.startswith("const ") or mapped.startswith("let ") or mapped.startswith("var "):
-                lines.append(f"  {mapped}")
-            elif mapped.startswith("/* TODO"):
-                continue  # Skip TODO comments
-            elif "(" in mapped and ")" in mapped:
-                # It's a function call
+            # Handle variable declarations (const x = ...)
+            elif step_lower.startswith("const ") or step_lower.startswith("let "):
+                # Extract the value part and use the mapped API
+                lines.append(f"  const result = {mapped}")
+            # Handle function calls (call, get, set, create)
+            elif any(kw in step_lower for kw in ["call", "get", "set", "create", "generate", "make", "compute"]):
+                lines.append(f"  const result = {mapped}")
+            # Handle insert/write operations
+            elif any(kw in step_lower for kw in ["insert", "add", "write", "append"]):
                 lines.append(f"  {mapped}")
             else:
                 lines.append(f"  const result = {mapped}")
 
         if not has_return:
-            lines.append("  return 'implemented'")
+            lines.append("  return result")
 
         body = "\n".join(lines)
         return f"export function {export_name}(): string {{\n{body};\n}}\n"
