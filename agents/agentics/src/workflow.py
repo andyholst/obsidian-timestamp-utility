@@ -124,10 +124,15 @@ def _post_process_generated_code(code: str) -> str:
     if re.search(r'export\s+function\s+\w+', code) and not re.search(r'\breturn\b', code):
         # Find the last closing brace and add a return before it
         lines = code.rstrip().split('\n')
-        last_brace_idx = max(i for i, l in enumerate(lines) if l.strip() == '}')
-        indent = '  '
-        lines.insert(last_brace_idx, f'{indent}return "implemented";')
-        code = '\n'.join(lines)
+        brace_indices = [i for i, l in enumerate(lines) if l.strip() == '}']
+        if brace_indices:
+            last_brace_idx = max(brace_indices)
+            indent = '  '
+            lines.insert(last_brace_idx, f'{indent}return "implemented";')
+            code = '\n'.join(lines)
+        else:
+            # No closing brace — append one with return
+            code = code.rstrip() + '\n  return "implemented";\n}'
         log_info("post_process", "Added missing return statement")
 
     # Balance braces if LLM generated incomplete code
