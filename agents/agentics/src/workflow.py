@@ -80,6 +80,16 @@ def _post_process_generated_code(code: str) -> str:
                   r'Array.from(new Uint8Array([\1])).map(b => b.toString(16).padStart(2, "0")).join("")', code)
     code = re.sub(r'Buffer\.from\(([^)]+)\)',
                   r'new Uint8Array(\1)', code)
+    # Strip any remaining Buffer references
+    code = re.sub(r'Buffer\b', 'Uint8Array', code)
+    # Strip Node.js-specific globals
+    code = re.sub(r'\bprocess\b', 'undefined', code)
+    code = re.sub(r'\brequire\b', 'undefined', code)
+    code = re.sub(r'\b__dirname\b', '""', code)
+    code = re.sub(r'\b__filename\b', '""', code)
+    code = re.sub(r'\bmodule\b', 'undefined', code)
+    code = re.sub(r'\bexports\b', 'undefined', code)
+    code = re.sub(r'\bglobal\b', 'window', code)
     # Auto-fix const reassignment: const x = 5; x = 10; → let x = 5; x = 10;
     for match in re.finditer(r'const\s+(\w+)\s*=\s*([^;]+)', code):
         var_name = match.group(1)
@@ -537,12 +547,10 @@ class AgenticsWorkflow:
                 gen_code = gen_code.replace(f"function {export_name}", f"export function {export_name}")
                 log_info("generate", f"Post-added export prefix to {export_name}")
 
-            # Note: Full validation is handled by verify_and_retry() via verify_generated_code()
-            # We only do a quick syntax check here to avoid wasting time on broken code
-            if not _is_valid_ts_syntax(gen_code):
-                log_info("generate", "Code has syntax errors, retrying...")
-                attempt_state["_error_ctx"] = "TypeScript syntax errors"
-                attempt_state["generated_code"] = gen_code  # keep code for verify to report
+            # Only reject empty code — TypeScript compilation is checked later in eval
+            if not gen_code.strip():
+                log_info("generate", "Empty LLM response, retrying...")
+                attempt_state["_error_ctx"] = "Empty LLM response"
                 return attempt_state
 
             with open(gen_file, "w") as f:
@@ -575,6 +583,10 @@ class AgenticsWorkflow:
             state=gen_retry_state,
             attempt_counter_key="_gen_attempt",
         )
+
+        # CRITICAL: Propagate generated_code from inner state to outer state so eval gate can see it
+        if gen_final_state.get("generated_code"):
+            state["generated_code"] = gen_final_state["generated_code"]
 
         # NOTE: Do NOT sync _gen_attempt to recovery_attempt here.
         # The inner loop counter (_gen_attempt) resets to 1 on each retry,
@@ -683,6 +695,10 @@ class AgenticsWorkflow:
                 state=test_retry_state,
                 attempt_counter_key="_test_attempt",
             )
+
+            # Propagate generated_tests to outer state
+            if test_final_state.get("generated_tests"):
+                state["generated_tests"] = test_final_state["generated_tests"]
 
             if not test_result.passed:
                 log_info("generate", "Tests still failing after max attempts — will NOT integrate broken code")

@@ -227,11 +227,12 @@ class TestRouteAfterGenerate:
         result = workflow._route_after_generate({"eval_passed": False, "recovery_attempt": 0})
         assert result == "generate_code_tests"
 
-    def test_route_retry_increments_counter(self, workflow):
-        """Retry should increment recovery_attempt."""
+    def test_route_retry_does_not_increment_counter(self, workflow):
+        """Router should NOT increment counter — node does that. Router only reads."""
         state: State = {"eval_passed": False, "recovery_attempt": 1}
-        workflow._route_after_generate(state)
-        assert state["recovery_attempt"] == 2
+        result = workflow._route_after_generate(state)
+        assert result == "generate_code_tests"
+        assert state["recovery_attempt"] == 1  # unchanged by router
 
     def test_route_output_after_max_retries(self, workflow):
         """When recovery_attempt >= 3 and eval failed, route to output (not test)."""

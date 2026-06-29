@@ -529,15 +529,16 @@ class TestRouteAfterGenerate:
         state = {"eval_passed": False, "recovery_attempt": 2}
         result = AgenticsWorkflow._route_after_generate(state)
         assert result == "generate_code_tests"
-        # Should increment recovery_attempt
-        assert state["recovery_attempt"] == 3
+        # Router does NOT increment — node does that
+        assert state["recovery_attempt"] == 2
 
     def test_recovery_zero_routes_to_retry(self):
         from src.workflow import AgenticsWorkflow
         state = {"eval_passed": False, "recovery_attempt": 0}
         result = AgenticsWorkflow._route_after_generate(state)
         assert result == "generate_code_tests"
-        assert state["recovery_attempt"] == 1
+        # Router does NOT increment — node does that
+        assert state["recovery_attempt"] == 0
 
     def test_eval_passed_true_ignores_recovery_count(self):
         """If eval_passed is True, route to test regardless of recovery_attempt."""
