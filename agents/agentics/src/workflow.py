@@ -98,6 +98,13 @@ def _post_process_generated_code(code: str) -> str:
     code = re.sub(r'\bconst\s+const\b', 'const', code)
     code = re.sub(r'\blet\s+const\b', 'const', code)
     code = re.sub(r'\bvar\s+let\b', 'let', code)
+    # Fix duplicate export keywords (LLM generates "export async export")
+    code = re.sub(r'export\s+async\s+export', 'export async', code)
+    code = re.sub(r'export\s+export', 'export', code)
+    # Fix duplicate function keywords
+    code = re.sub(r'function\s+function', 'function', code)
+    # Fix "Promise {" return type (should be "Promise<string>")
+    code = re.sub(r'\)\s*:\s*Promise\s*\{', '): Promise<string> {', code)
     # Fix missing semicolons after function calls (common LLM omission)
     code = re.sub(r'\n(\s+(?:const|let|var)\s+\w+\s*=\s*new Uint8Array.*\))\s*\n', r'\1;\n', code)
     # Auto-fix const reassignment: const x = 5; x = 10; → let x = 5; x = 10;
