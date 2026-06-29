@@ -844,12 +844,10 @@ class AgenticsWorkflow:
             state["eval_failure_context"] = ""
             log_info("generate", f"Eval gate PASSED")
 
-        # ---- Integrate: import + addCommand in main.ts (ALWAYS, even on eval failure) ----
-        # Integration happens regardless of eval status so the generated code is wired
-        # into main.ts for testing. The eval gate determines whether to retry.
-        # Only integrate ONCE — skip on retries to avoid duplicating the command.
+        # ---- Integrate: import + addCommand in main.ts ----
+        # Only integrate when eval passed AND code compiles
         integrated_main = orig_main  # default: no changes
-        if gen_code and not integrated_into_main:
+        if gen_code and state.get("eval_passed") and not integrated_into_main:
             backup(main_ts)
             import_line = f"import {{ {export_name} }} from './generated/{slug}';"
             if import_line not in orig_main:
