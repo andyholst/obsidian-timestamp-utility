@@ -45,25 +45,31 @@ class QualityRubric:
             return 0.0
         project_root = os.getenv("PROJECT_ROOT", "")
         if project_root and os.path.isdir(os.path.join(project_root, 'src', 'generated')) and os.path.exists(os.path.join(project_root, "tsconfig.json")):
-            # Write code to a temp file and try to compile
+            # Write code to a temp file inside the project's generated dir
+            # so tsc picks it up via tsconfig's "include": ["src/**/*"]
+            gen_dir = os.path.join(project_root, 'src', 'generated')
+            os.makedirs(gen_dir, exist_ok=True)
+            gen_file = os.path.join(gen_dir, "__eval_check.ts")
             try:
-                gen_dir = os.path.join(project_root, 'src', 'generated')
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.ts', delete=False,
-                                                  dir=gen_dir) as tmp:
-                    tmp.write(code)
-                    tmp_path = tmp.name
+                with open(gen_file, "w") as f:
+                    f.write(code)
                 try:
-                    cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", "--project", "tsconfig.json", tmp_path]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+                    cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", "--project", "tsconfig.json"]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60,
                                             cwd=project_root)
                     if result.returncode == 0:
+                        _monitor.debug("compiles_successfully", data={"result": True})
                         return 1.0
                     else:
+                        _monitor.debug("compiles_successfully", data={"result": False,
+                                      "errors": result.stderr[:500] if result.stderr else result.stdout[:500]})
                         return 0.0
                 finally:
-                    os.unlink(tmp_path)
+                    if os.path.exists(gen_file):
+                        os.unlink(gen_file)
             except Exception as e:
-                return 0.5
+                _monitor.warning("compiles_successfully_error", data={"error": str(e)})
+                return 0.5  # Non-fatal: if tsc isn't available, don't block
         # Lightweight structural check (no PROJECT_ROOT needed)
         has_export = bool(re.search(r'export\s+function\s+\w+', code))
         braces_balanced = code.count('{') == code.count('}')
