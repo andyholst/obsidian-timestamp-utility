@@ -394,7 +394,7 @@ class AgenticsWorkflow:
                 f"Saved as src/generated/<slug>.ts, imported by main.ts.\n\n"
                 f"=== RULES ===\n"
                 f"- Valid TS. No markdown fences. No import statements.\n"
-                f"- Use BROWSER-ONLY APIs (Date, crypto, Math). NO Node.js APIs (no Buffer, no require, no fs, no path).\n"
+                f"- Use BROWSER-COMPATIBLE APIs: Date.now(), crypto.getRandomValues(), Math. NO Node.js APIs (no Buffer, no require, no fs, no path, no window).\n"
                 f"- Start with 'export function', return string. No 'export default'.\n"
                 f"- Use crypto.getRandomValues() for random bytes, NOT Buffer.from().\n"
                 f"- Write CONCISE code (under 20 lines). Close all braces.\n"
