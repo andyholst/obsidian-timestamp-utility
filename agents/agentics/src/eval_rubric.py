@@ -54,7 +54,7 @@ class QualityRubric:
                 with open(gen_file, "w") as f:
                     f.write(code)
                 try:
-                    cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", "--project", "tsconfig.json"]
+                    cmd = ["npx", "tsc", "--noEmit", "--skipLibCheck", "--noUnusedLocals", "--noUnusedParameters", "--project", "tsconfig.json"]
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60,
                                             cwd=project_root)
                     if result.returncode == 0:
