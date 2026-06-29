@@ -285,7 +285,7 @@ class Pipeline:
     async def test_agents_unit(
         self,
         source: Directory,
-        ollama_model: str = "qwen2.5:14b",
+        ollama_model: str = "sorc/qwen3.5-claude-4.6-opus:9b",
         ollama_host: str = "",
         test_filter: str = "",
         host_uid: int = 0,
@@ -355,7 +355,7 @@ class Pipeline:
         source: Directory,
         github_token: str,
         docker_sock: Socket | None = None,
-        ollama_model: str = "qwen2.5:14b",
+        ollama_model: str = "sorc/qwen3.5-claude-4.6-opus:9b",
         test_filter: str = "",
         ollama_timeout: str = "300",
         ollama_host: str = "",
@@ -420,7 +420,7 @@ class Pipeline:
     async def test_agents_unit_verbose(
         self,
         source: Directory,
-        ollama_model: str = "qwen2.5:14b",
+        ollama_model: str = "sorc/qwen3.5-claude-4.6-opus:9b",
         test_filter: str = "",
         host_uid: int = 0,
         host_gid: int = 0,
@@ -458,7 +458,7 @@ class Pipeline:
         source: Directory,
         github_token: str,
         docker_sock: Socket | None = None,
-        ollama_model: str = "qwen2.5:14b",
+        ollama_model: str = "sorc/qwen3.5-claude-4.6-opus:9b",
         test_filter: str = "",
         ollama_timeout: str = "300",
         host_uid: int = 0,
@@ -500,7 +500,7 @@ class Pipeline:
 
     @function
     async def test_agents_unit_watch(
-        self, ollama_model: str = "qwen2.5:14b", test_filter: str = ""
+        self, ollama_model: str = "sorc/qwen3.5-claude-4.6-opus:9b", test_filter: str = ""
     ) -> str:
         return "Unit watch mode: Run locally with ptw or similar"
 
@@ -508,7 +508,7 @@ class Pipeline:
     async def test_agents_integration_watch(
         self,
         github_token: str,
-        ollama_model: str = "qwen2.5:14b",
+        ollama_model: str = "sorc/qwen3.5-claude-4.6-opus:9b",
         test_filter: str = "",
         ollama_timeout: str = "300",
     ) -> str:
@@ -568,7 +568,7 @@ class Pipeline:
         source: Directory,
         docker_sock: Socket,
         github_token: str,
-        ollama_model: str = "qwen2.5:14b",
+        ollama_model: str = "sorc/qwen3.5-claude-4.6-opus:9b",
     ) -> str:
         await self.check_github(github_token)
         await self.check_mcp(source, docker_sock)

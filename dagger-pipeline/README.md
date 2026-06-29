@@ -19,10 +19,10 @@ make -f Makefile.dagger release
 ## Direct Dagger Calls (CI / no-make)
 
 ```bash
-dagger call build_app --ollama-model=qwen2.5:14b
-dagger call test_agents_unit --ollama-model=qwen2.5:14b
-dagger do test_agents_unit_verbose --ollama-model=qwen2.5:14b  # interactive
-dagger call test_agents_integration --github-token=secret:github_token --ollama-model=qwen2.5:14b
+dagger call build_app --ollama-model=sorc/qwen3.5-claude-4.6-opus:9b
+dagger call test_agents_unit --ollama-model=sorc/qwen3.5-claude-4.6-opus:9b
+dagger do test_agents_unit_verbose --ollama-model=sorc/qwen3.5-claude-4.6-opus:9b  # interactive
+dagger call test_agents_integration --github-token=secret:github_token --ollama-model=sorc/qwen3.5-claude-4.6-opus:9b
 ```
 
 Secrets: `dagger secrets add github_token ghp_xxx`
