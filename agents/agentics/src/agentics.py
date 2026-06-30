@@ -246,6 +246,22 @@ if __name__ == "__main__":
                 for f in glob_mod.glob(os.path.join(project_root, pattern)):
                     os.remove(f)
                     print(f"Cleaned stale file: {f}")
+            # Restore main.ts and main.test.ts from backups if they exist
+            for target, bak_pattern in [
+                ("src/main.ts", "src/.agentics_backups/main.ts.*.bak"),
+                ("src/__tests__/main.test.ts", "src/.agentics_backups/main.test.ts.*.bak"),
+            ]:
+                target_path = os.path.join(project_root, target)
+                backup_files = sorted(glob_mod.glob(os.path.join(project_root, bak_pattern)))
+                if backup_files:
+                    # Use the earliest backup (the one before any pipeline modifications)
+                    import shutil
+                    shutil.copy2(backup_files[0], target_path)
+                    print(f"Restored {target} from backup {backup_files[0]}")
+                    # Remove all backups after restoring
+                    for bf in backup_files:
+                        os.remove(bf)
+                        print(f"Removed backup: {bf}")
 
         app = AgenticsApp()
         try:
