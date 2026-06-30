@@ -587,29 +587,43 @@ class AgenticsWorkflow:
 
         The pseudocode is already TypeScript-like, so this just
         assembles the lines, deduplicates, and ensures a return statement.
+        Only includes lines that are safe (use known APIs or defined vars).
         """
         lines = []
         has_return = False
         seen_vars = set()
+        known_apis = {"date", "crypto", "math", "array", "string", "uint8array", "console", "window", "json", "number", "boolean", "promise", "error", "regexp"}
 
         for step in pseudocode:
             mapped = api_mapping.get(step, step.strip())
             # Skip empty
             if not mapped or mapped.startswith("/* TODO"):
                 continue
-            # Handle return statements
+            # Handle return statements — only if the return value is a known variable
             if mapped.startswith("return "):
                 has_return = True
                 lines.append(f"  {mapped}")
                 continue
-            # Deduplicate variable declarations by variable name
-            if mapped.startswith("const ") or mapped.startswith("let "):
+            # Handle variable declarations
+            if mapped.startswith("const ") or mapped.startswith("let ") or mapped.startswith("var "):
                 # Extract variable name
                 var_name = mapped.split("=")[0].strip().split()[-1]
                 if var_name in seen_vars:
                     continue
-                seen_vars.add(var_name)
-            lines.append(f"  {mapped}" if not mapped.startswith("  ") else mapped)
+                # Check if the value only uses known APIs or defined vars
+                value = mapped.split("=", 1)[1].strip() if "=" in mapped else ""
+                # Extract identifiers used in value
+                import re
+                identifiers = set(re.findall(r'\b[a-zA-Z_]\w*\b', value))
+                # Remove known APIs and builtins
+                unknown = identifiers - known_apis - seen_vars
+                # Allow 'new Uint8Array' and similar
+                if not unknown or unknown <= {"new", "true", "false", "null", "undefined"}:
+                    seen_vars.add(var_name)
+                    lines.append(f"  {mapped}")
+                continue
+            # Skip other lines (function calls, etc.) as they may reference undefined vars
+            continue
 
         if not has_return:
             # Return the most appropriate variable (prefer hex/string over bytes/result)
