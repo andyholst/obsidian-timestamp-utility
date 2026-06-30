@@ -825,36 +825,7 @@ class AgenticsWorkflow:
                 if len(export_name) > 30:
                     export_name = export_name[:30]
                 command_id = slug
-        # Naming LLM only runs on first attempt (not on eval retry — keep same names)
-        if not is_eval_retry:
-            naming_prompt = (
-                f"Given this GitHub issue for an Obsidian TS plugin, propose:\n"
-                f"1. A short camelCase function name (e.g. 'generateUuidV7')\n"
-                f"2. A kebab-case command id (e.g. 'insert-uuid-v7')\n\n"
-                f"Issue title: {title}\nIssue content:\n{ticket[:1500]}\n\n"
-                f'Output JSON only: {{"export_name":"...","command_id":"..."}}'
-            )
-            try:
-                resp = self.llm_reasoning.invoke(naming_prompt)
-                cleaned = remove_thinking_tags(str(resp).strip())
-                if "```" in cleaned:
-                    px = cleaned.split("```")
-                    cleaned = px[1] if len(px) > 1 else px[0]
-                    if cleaned.startswith("json"):
-                        cleaned = cleaned[4:]
-                    cleaned = cleaned.strip()
-                s, e = cleaned.find("{"), cleaned.rfind("}") + 1
-                if s >= 0 and e > s:
-                    parsed = json.loads(cleaned[s:e])
-                    llm_ex = parsed.get("export_name", "")
-                    llm_cmd = parsed.get("command_id", "")
-                    if llm_ex and re.match(r'^[a-z][a-zA-Z0-9]+$', llm_ex):
-                        export_name = llm_ex
-                    if llm_cmd and re.match(r'^[a-z][a-z0-9-]+$', llm_cmd):
-                        command_id = llm_cmd
-                        slug = llm_cmd[:40]  # filename matches command name
-            except Exception as ex:
-                log_info("generate", f"naming LLM failed: {ex}")
+        # export_name already derived from title above — skip LLM naming
         log_info("generate", f"Derived: export={export_name}, command={command_id}, slug={slug}")
         # Persist names across retries
         state["_persisted_slug"] = slug
@@ -887,6 +858,7 @@ class AgenticsWorkflow:
         )
         with open(gen_test_file, "w") as f:
             f.write(gen_test_code)
+        print(f"DEBUG: Wrote tests with export_name={export_name}, first_line={gen_test_code.split(chr(10))[0]}")
 
         # ---- Generate tests using verify-and-retry loop ----
         def _execute_code_generation(attempt_state: dict) -> dict:
@@ -1136,6 +1108,7 @@ class AgenticsWorkflow:
             gen_test_file = os.path.join(gen_test_dir, f"{slug}.test.ts")
             with open(gen_test_file, "w") as f:
                 f.write(gen_test_code)
+            print(f"DEBUG INTEGRATE: Wrote tests with gen_test_code first line: {gen_test_code.split(chr(10))[0]}")
             log_info("generate", f"Tests written to src/__tests__/{slug}.test.ts")
 
         # ---- Update main.test.ts with integration tests for the new command ----
