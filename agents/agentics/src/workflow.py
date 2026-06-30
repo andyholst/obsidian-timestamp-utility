@@ -612,12 +612,15 @@ class AgenticsWorkflow:
             lines.append(f"  {mapped}" if not mapped.startswith("  ") else mapped)
 
         if not has_return:
-            # Use the last declared variable as return value, or join all hex parts
-            hex_vars = [v for v in seen_vars if "hex" in v or "uuid" in v or "id" in v or "result" in v]
+            # Return the most appropriate variable (prefer hex/string over bytes/result)
+            hex_vars = [v for v in seen_vars if "hex" in v or "uuid" in v or "id" in v or "str" in v or "string" in v]
+            ts_vars = [v for v in seen_vars if "ts" in v or "time" in v]
             if hex_vars:
                 lines.append(f"  return {hex_vars[-1]}")
-            elif "ts" in seen_vars:
-                lines.append("  return String(ts)")
+            elif ts_vars:
+                lines.append(f"  return String({ts_vars[-1]})")
+            elif "result" in seen_vars:
+                lines.append("  return String(result)")
             else:
                 lines.append("  return 'implemented'")
 
