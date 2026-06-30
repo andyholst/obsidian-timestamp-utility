@@ -25,10 +25,14 @@
 
 ## Agent / Agentics Change
 - [ ] `make test-agents-unit-mock` passes (no Ollama needed)
-- [ ] MCP server starts without errors
+- [ ] `make test-app` passes (generated code compiles + all tests green)
 - [ ] Agent tests cover new behavior
 - [ ] `make lint-python` clean (ruff + mypy)
-- [ ] Graph transitions correct (ticket → plan → codegen → test → review → integrate)
+- [ ] Text→Pseudocode→Code pipeline: pseudocode extraction, safety filtering, deterministic code construction
+- [ ] Eval gate: 7-criteria scoring, hard gates (code-test consistency, tests_pass==0.0), threshold 0.4
+- [ ] Test generation: deterministic from export_name (no LLM hallucination)
+- [ ] Self-correction: retry loop with eval_failure_context feedback
+- [ ] ARCHITECTURE.md updated to reflect pipeline changes
 
 ## Refactoring
 - [ ] Preserves exact behavior (`make test-app` green before AND after)

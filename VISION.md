@@ -18,7 +18,10 @@ An Obsidian plugin that inserts, renames, and manages timestamps in notes. Inclu
 - `__tests__/` — Jest test suite
 
 ## Agent Architecture
-- `agents/agentics/` — LangGraph multi-agent graph
+- `agents/agentics/` — LangGraph-based autonomous code generation pipeline
+- **Text→Pseudocode→Code pipeline**: LLM converts issue text to pseudocode, deterministic 1:1 mapping constructs TypeScript
+- **Deterministic test generation**: Tests generated from function name (no LLM hallucination)
+- Self-correction loop: 7-criteria eval gate with 3 retry attempts
 - MCP server on :3003 for tool access
 - Dagger pipeline for build/test orchestration
 
