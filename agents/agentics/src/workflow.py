@@ -504,26 +504,33 @@ class AgenticsWorkflow:
         return code
 
     def _issue_to_pseudocode(self, task: str, reqs: list, full_ticket: str) -> list:
-        """Use LLM to convert issue text to TypeScript pseudocode.
+        """Use LLM to convert issue text to TypeScript code statements.
 
-        The output MUST be ONLY executable TypeScript statements.
-        NO comments, NO reasoning, NO explanation, NO markdown.
-        Each line must be a valid TypeScript statement.
+        The LLM outputs actual TypeScript statements — const declarations,
+        method calls, return statements. We do NOT filter aggressively here
+        because tsc is the real validation gate.
         """
         reqs_text = "\n".join(f"- {r}" for r in reqs) if reqs else "- Implement the feature"
         prompt = (
-            f"Convert these requirements into TypeScript code.\n"
-            f"Output ONLY valid TypeScript statements, one per line.\n"
-            f"NO comments, NO reasoning, NO explanation, NO markdown fences.\n"
-            f"Each line must compile as a standalone TypeScript statement.\n\n"
+            f"Write the BODY of a TypeScript function. Output ONLY flat statements.\n"
+            f"RULES:\n"
+            f"- ONLY use: const/let declarations, method calls, return statements\n"
+            f"- NO: export, function, class, for/while, if/else, try/catch, async/await\n"
+            f"- NO: comments, markdown, explanation\n"
+            f"- Use ONLY browser APIs: Date, crypto, Math, Array, String, Uint8Array, DataView, BigInt\n"
+            f"- Each line is ONE statement\n\n"
             f"TASK: {task}\n\n"
             f"REQUIREMENTS:\n{reqs_text}\n\n"
-            f"Output format (ONLY this, nothing else):\n"
-            f"  const ts = Date.now()\n"
-            f"  const bytes = new Uint8Array(16)\n"
-            f"  crypto.getRandomValues(bytes)\n"
-            f"  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')\n"
-            f"  return hex\n"
+            f"Example output (UUID v7 body):\n"
+            f"const timestamp = Date.now()\n"
+            f"const bytes = new Uint8Array(16)\n"
+            f"crypto.getRandomValues(bytes)\n"
+            f"const view = new DataView(bytes.buffer)\n"
+            f"view.setBigUint64(0, BigInt(timestamp))\n"
+            f"bytes[6] = (bytes[6] & 0x0f) | 0x70\n"
+            f"bytes[8] = (bytes[8] & 0x3f) | 0x80\n"
+            f"const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')\n"
+            f"return hex\n"
         )
         try:
             resp = self.llm_reasoning.invoke(prompt)
@@ -532,28 +539,31 @@ class AgenticsWorkflow:
             steps = []
             for line in text.split("\n"):
                 line = line.strip()
+                # Skip empty, markdown, comments
                 if not line or line.startswith("```") or line.startswith("//") or line.startswith("/*"):
                     continue
-                # Skip lines with arrow functions or complex expressions
-                if "=>" in line or line.count(";") > 1:
+                # Skip lines that look like HTML or markdown
+                if line.startswith("<") or line.startswith("#") or line.startswith("- "):
                     continue
-                # Skip lines that are too complex (more than 3 parens groups)
-                if line.count("(") > 3:
+                # Skip forbidden keywords — we want FLAT statements only
+                if any(kw in line.split() for kw in ("export", "function", "class", "async", "for", "while", "if", "else", "try", "catch")):
                     continue
-                # Must look like a TS statement (starts with const/let/var/return or is a simple function call)
+                if line.startswith("export ") or line.startswith("function ") or line.startswith("class "):
+                    continue
+                # Skip lines that are just words (not code)
+                if not any(c in line for c in "=();{}[]"):
+                    continue
+                # Accept: const/let/var declarations, return statements, function calls
                 if line.startswith("const ") or line.startswith("let ") or line.startswith("var "):
-                    # Take only the first statement (no inline comments)
-                    stmt = line.split("//")[0].rstrip()
-                    if stmt.endswith(";") or stmt.endswith(")"):
-                        steps.append(stmt)
+                    stmt = line.split("//")[0].rstrip().rstrip(";")
+                    steps.append(stmt)
                 elif line.startswith("return "):
-                    stmt = line.split("//")[0].rstrip()
+                    stmt = line.split("//")[0].rstrip().rstrip(";")
                     steps.append(stmt)
                 elif "(" in line and ")" in line:
-                    # Simple function call
-                    stmt = line.split("//")[0].rstrip()
-                    if stmt.endswith(";") or stmt.endswith(")"):
-                        steps.append(stmt)
+                    # Function call or method call — likely valid
+                    stmt = line.split("//")[0].rstrip().rstrip(";")
+                    steps.append(stmt)
             return steps if steps else []
         except Exception:
             return []
@@ -561,21 +571,23 @@ class AgenticsWorkflow:
     def _lookup_apis_for_pseudocode(self, pseudocode: list) -> dict:
         """Map pseudocode steps to TypeScript syntax.
 
-        Since the pseudocode already contains TypeScript-like statements,
-        this is a lightweight syntax cleanup, not a semantic mapping.
+        Since the pseudocode is already TypeScript, this just ensures
+        each standalone function call is wrapped in a const declaration.
         """
         mapping = {}
         for step in pseudocode:
-            # The pseudocode is already TypeScript-like, just needs minor cleanup
             cleaned = step.strip()
             if cleaned.startswith("const ") or cleaned.startswith("let ") or cleaned.startswith("var "):
                 mapping[step] = cleaned
             elif cleaned.startswith("return "):
                 mapping[step] = cleaned
-            elif "(" in cleaned:
-                # It's a function call — wrap in const if it returns a value
-                if not cleaned.startswith("const ") and not cleaned.startswith("let "):
-                    mapping[step] = f"const result = {cleaned}"
+            elif "(" in cleaned and not cleaned.startswith("const ") and not cleaned.startswith("let "):
+                # Standalone function call
+                if "getRandomValues" in cleaned:
+                    # crypto.getRandomValues is a side-effect call, don't wrap in const
+                    mapping[step] = cleaned
+                elif "from(" in cleaned:
+                    mapping[step] = f"const result_{len(mapping)} = {cleaned}"
                 else:
                     mapping[step] = cleaned
             else:
@@ -585,56 +597,72 @@ class AgenticsWorkflow:
     def _construct_ts_from_pseudocode(self, export_name: str, pseudocode: list, api_mapping: dict) -> str:
         """Construct TypeScript from pseudocode.
 
-        The pseudocode is already TypeScript-like, so this just
-        assembles the lines, deduplicates, and ensures a return statement.
-        Only includes lines that are safe (use known APIs or defined vars).
+        Trust the LLM output — tsc is the real validation gate.
+        Only filter out obvious garbage (undefined top-level identifiers).
+        Track variable definitions so later lines can reference them.
         """
         lines = []
         has_return = False
         seen_vars = set()
-        known_apis = {"date", "crypto", "math", "array", "string", "uint8array", "console", "window", "json", "number", "boolean", "promise", "error", "regexp"}
+        # Top-level APIs that are always available in browser/Node
+        global_apis = {
+            "Date", "crypto", "Math", "Array", "String", "Uint8Array", "DataView",
+            "BigInt", "Number", "Boolean", "console", "JSON", "RegExp", "Error",
+            "Promise", "parseInt", "parseFloat", "isNaN", "Infinity", "NaN",
+            "undefined", "null", "true", "false", "new", "btoa", "atob",
+            "setTimeout", "setInterval", "TextEncoder", "TextDecoder",
+        }
+        # Skip these identifiers — they're always allowed
+        skip_ids = {"new", "true", "false", "null", "undefined", "this", "const", "let", "var", "return", "from", "of"}
 
         for step in pseudocode:
             mapped = api_mapping.get(step, step.strip())
             # Skip empty
             if not mapped or mapped.startswith("/* TODO"):
                 continue
-            # Handle return statements — only if the return value is a known variable
+
+            # Handle return statements
             if mapped.startswith("return "):
                 has_return = True
                 lines.append(f"  {mapped}")
                 continue
+
             # Handle variable declarations
             if mapped.startswith("const ") or mapped.startswith("let ") or mapped.startswith("var "):
                 # Extract variable name
                 var_name = mapped.split("=")[0].strip().split()[-1]
                 if var_name in seen_vars:
-                    continue
-                # Check if the value only uses known APIs or defined vars
-                value = mapped.split("=", 1)[1].strip() if "=" in mapped else ""
-                # Extract identifiers used in value
-                import re
-                identifiers = set(re.findall(r'\b[a-zA-Z_]\w*\b', value))
-                # Remove known APIs and builtins
-                unknown = identifiers - known_apis - seen_vars
-                # Allow 'new Uint8Array' and similar
-                if not unknown or unknown <= {"new", "true", "false", "null", "undefined"}:
-                    seen_vars.add(var_name)
-                    lines.append(f"  {mapped}")
+                    continue  # dedup
+                seen_vars.add(var_name)
+                lines.append(f"  {mapped}")
                 continue
-            # Skip other lines (function calls, etc.) as they may reference undefined vars
+
+            # Handle standalone function calls (side effects like crypto.getRandomValues(bytes))
+            if "(" in mapped:
+                import re
+                # Check: the root identifier (before any `.`) must be a known global or a defined var
+                first_id = re.match(r'\s*([a-zA-Z_]\w*)', mapped)
+                if first_id:
+                    root = first_id.group(1)
+                    if root in global_apis or root in seen_vars or root in skip_ids:
+                        lines.append(f"  {mapped}")
+                        continue
+                # Unknown root identifier — skip this line (tsc would reject it)
+                # e.g., view.setBigUint64() when 'view' was never declared
+                continue
+
+            # Any other line — skip if it references unknown identifiers
+            # (tsc would reject it, no point including it)
             continue
 
         if not has_return:
-            # Return the most appropriate variable (prefer hex/string over bytes/result)
-            hex_vars = [v for v in seen_vars if "hex" in v or "uuid" in v or "id" in v or "str" in v or "string" in v]
-            ts_vars = [v for v in seen_vars if "ts" in v or "time" in v]
-            if hex_vars:
-                lines.append(f"  return {hex_vars[-1]}")
-            elif ts_vars:
-                lines.append(f"  return String({ts_vars[-1]})")
-            elif "result" in seen_vars:
-                lines.append("  return String(result)")
+            # Use the last variable that looks like a result (hex, uuid, id, string, result)
+            result_vars = [v for v in seen_vars if any(kw in v.lower() for kw in ("hex", "uuid", "id", "str", "result", "output", "final"))]
+            if result_vars:
+                lines.append(f"  return {result_vars[-1]}")
+            elif seen_vars:
+                # Return the last defined variable as a string
+                lines.append(f"  return String({list(seen_vars)[-1]})")
             else:
                 lines.append("  return 'implemented'")
 

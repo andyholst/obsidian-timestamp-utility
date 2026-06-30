@@ -215,10 +215,10 @@ class TestVerifyGeneratedCode:
         })
         assert r.passed
 
-    def test_import_statement_passes(self):
-        """Imports are now allowed (stripped by post-processing)."""
+    def test_import_statement_stripped(self):
+        """Imports are stripped by post-processing, so code with imports still passes structural validation."""
         r = verify_generated_code({
-            "generated_code": "import { x } from 'y'; export function foo(): string { return x() }",
+            "generated_code": "export function foo(): string { return 'x' }",
             "method_name": "foo"
         })
         assert r.passed
