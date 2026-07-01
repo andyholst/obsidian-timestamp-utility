@@ -546,3 +546,108 @@ class TestRouteAfterGenerate:
         state = {"eval_passed": True, "recovery_attempt": 99}
         result = AgenticsWorkflow._route_after_generate(state)
         assert result == "test"
+
+
+class TestTextToCodePipeline:
+    """Tests for the text→pseudocode→code loop translation steps."""
+
+    def test_issue_to_pseudocode_filtering(self):
+        """Verify _issue_to_pseudocode correctly extracts and filters pseudocode lines."""
+        llm = MagicMock()
+        # Raw LLM response containing comments, markdown blocks, HTML, and unauthorized constructs
+        llm.invoke.return_value = (
+            "Here is the pseudocode:\n"
+            "```typescript\n"
+            "const date = Date.now()\n"
+            "// This is a comment we should filter\n"
+            "<!-- This is HTML code we should filter -->\n"
+            "const rand = Math.random()\n"
+            "for (let i = 0; i < 5; i++) { console.log(i) }  // forbidden keyword 'for'\n"
+            "return date.toString()\n"
+            "```"
+        )
+        wf = AgenticsWorkflow(llm, llm, MagicMock(), MagicMock())
+        result = wf._issue_to_pseudocode("Generate time-based seed", [], "Some ticket")
+
+        # It should filter markdown formatting, comments, HTML, and forbidden expressions (the 'for' loop)
+        assert "const date = Date.now()" in result
+        assert "const rand = Math.random()" in result
+        assert "return date.toString()" in result
+        assert not any("This is a comment" in line for line in result)
+        assert not any("HTML" in line for line in result)
+        assert not any("for " in line for line in result)
+
+    def test_lookup_apis_for_pseudocode_mapping(self):
+        """Verify _lookup_apis_for_pseudocode maps side effects and variable declarations properly."""
+        wf = AgenticsWorkflow(MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        steps = [
+            "const x = 42",
+            "crypto.getRandomValues(bytes)",
+            "Array.from(something)",
+            "return x"
+        ]
+        mapping = wf._lookup_apis_for_pseudocode(steps)
+        assert mapping["const x = 42"] == "const x = 42"
+        assert mapping["crypto.getRandomValues(bytes)"] == "crypto.getRandomValues(bytes)"
+        assert mapping["Array.from(something)"] == "const result_2 = Array.from(something)"
+        assert mapping["return x"] == "return x"
+
+    def test_construct_ts_from_pseudocode_dedup_and_undefined(self):
+        """Verify _construct_ts_from_pseudocode deduplicates variables and strips undefined words."""
+        wf = AgenticsWorkflow(MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        # Duplicate const declaration of "x", and a call using undefined "y"
+        pseudocode = [
+            "const x = 5",
+            "const x = 10",
+            "console.log(x)",
+            "y.doSomething()",  # "y" is undefined, should be skipped
+            "return x"
+        ]
+        api_mapping = {step: step for step in pseudocode}
+        code = wf._construct_ts_from_pseudocode("myFunc", pseudocode, api_mapping)
+
+        # Code structure assertions
+        assert "export function myFunc(): string" in code
+        assert "const x = 5" in code
+        assert "const x = 10" not in code  # Deduped
+        assert "console.log(x)" in code
+        assert "y.doSomething" not in code  # Omitted because "y" is undefined
+        assert "return x" in code
+
+    def test_construct_ts_from_pseudocode_omitted_return(self):
+        """Verify a return statement is auto-appended if absent in the pseudocode."""
+        wf = AgenticsWorkflow(MagicMock(), MagicMock(), MagicMock(), MagicMock())
+        pseudocode = [
+            "const importantHex = 'abc'",
+            "const count = 42"
+        ]
+        api_mapping = {step: step for step in pseudocode}
+        code = wf._construct_ts_from_pseudocode("myFunc", pseudocode, api_mapping)
+
+        # Should infer to return "importantHex" as it matches key patterns
+        assert "return importantHex" in code
+
+    def test_full_pipeline_success(self):
+        """Verify end-to-end translation of a simulated requirement using mock LLM."""
+        llm = MagicMock()
+        llm.invoke.return_value = (
+            "const timestamp = Date.now()\n"
+            "const bytes = new Uint8Array(16)\n"
+            "crypto.getRandomValues(bytes)\n"
+            "const hex = Array.from(bytes).map(b => b.toString(16)).join('')\n"
+            "return hex"
+        )
+        wf = AgenticsWorkflow(llm, llm, MagicMock(), MagicMock())
+        code = wf._text_to_code_pipeline(
+            "Generate unique id", 
+            ["generate unique seed"], 
+            "Add command to generate a unique string using Date.now() and crypto", 
+            "generateUniqueId"
+        )
+
+        assert "export function generateUniqueId(): string" in code
+        assert "const timestamp = Date.now()" in code
+        assert "crypto.getRandomValues(bytes)" in code
+        assert "return hex" in code
+        assert code.count("{") == code.count("}")
+

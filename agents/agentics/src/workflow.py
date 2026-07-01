@@ -551,7 +551,7 @@ class AgenticsWorkflow:
                 if line.startswith("export ") or line.startswith("function ") or line.startswith("class "):
                     continue
                 # Skip lines that are just words (not code)
-                if not any(c in line for c in "=();{}[]"):
+                if not line.startswith("return ") and not any(c in line for c in "=();{}[]"):
                     continue
                 # Accept: const/let/var declarations, return statements, function calls
                 if line.startswith("const ") or line.startswith("let ") or line.startswith("var "):
@@ -603,7 +603,7 @@ class AgenticsWorkflow:
         """
         lines = []
         has_return = False
-        seen_vars = set()
+        seen_vars = []
         # Top-level APIs that are always available in browser/Node
         global_apis = {
             "Date", "crypto", "Math", "Array", "String", "Uint8Array", "DataView",
@@ -633,7 +633,7 @@ class AgenticsWorkflow:
                 var_name = mapped.split("=")[0].strip().split()[-1]
                 if var_name in seen_vars:
                     continue  # dedup
-                seen_vars.add(var_name)
+                seen_vars.append(var_name)
                 lines.append(f"  {mapped}")
                 continue
 
@@ -662,7 +662,7 @@ class AgenticsWorkflow:
                 lines.append(f"  return {result_vars[-1]}")
             elif seen_vars:
                 # Return the last defined variable as a string
-                lines.append(f"  return String({list(seen_vars)[-1]})")
+                lines.append(f"  return String({seen_vars[-1]})")
             else:
                 lines.append("  return 'implemented'")
 
