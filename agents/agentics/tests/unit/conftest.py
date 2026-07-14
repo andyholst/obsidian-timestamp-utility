@@ -30,10 +30,6 @@ from ..fixtures.mock_llm_responses import (
 )
 from ..fixtures.mock_refactored_components import (
     create_mock_service_manager,
-    create_enhanced_mcp_client_mock,
-    create_mcp_error_scenarios,
-    create_mcp_with_rate_limiting,
-    create_mcp_streaming_responses,
     patch_environment_variables,
     patch_circuit_breakers,
     patch_health_monitor,
@@ -194,30 +190,6 @@ def mock_llm_with_limits():
 def mock_service_manager_comprehensive():
     """Provide a comprehensive service manager mock."""
     return create_mock_service_manager()
-
-
-@pytest.fixture(scope="function")
-def mock_enhanced_mcp_client():
-    """Provide an enhanced MCP client mock with comprehensive tools."""
-    return create_enhanced_mcp_client_mock()
-
-
-@pytest.fixture(scope="function")
-def mock_mcp_errors():
-    """Provide MCP error scenario mocks."""
-    return create_mcp_error_scenarios()
-
-
-@pytest.fixture(scope="function")
-def mock_mcp_rate_limited():
-    """Provide an MCP client mock with rate limiting."""
-    return create_mcp_with_rate_limiting()
-
-
-@pytest.fixture(scope="function")
-def mock_mcp_streaming():
-    """Provide an MCP client mock with streaming responses."""
-    return create_mcp_streaming_responses()
 
 
 @pytest.fixture(scope="function")

@@ -28,6 +28,13 @@ class State(TypedDict, total=False):
     error_type: str
     success: bool
     workflow_id: str
+    pre_test_failed: bool
+    pre_test_returncode: int
+    # Bounded self-correction (agentic-self-correct-loop §5.1): surfaced honestly by
+    # OutputResultAgent. self_correct_success=False + failing_gate set means the loop
+    # exhausted MAX_SELF_CORRECT_ATTEMPTS without greening the gate.
+    self_correct_success: bool
+    failing_gate: str
 
 
 @dataclass(frozen=True)

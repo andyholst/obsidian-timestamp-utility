@@ -557,7 +557,3 @@ def validate_llm_response(
     """Global function for LLM response validation"""
     return response_validator.validate_response(response, response_type, context)
 
-
-def get_response_validator() -> LLMResponseValidator:
-    """Get the global response validator instance"""
-    return response_validator

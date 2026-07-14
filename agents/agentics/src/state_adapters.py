@@ -141,49 +141,6 @@ class AgentAdapter(Runnable[CodeGenerationState, CodeGenerationState]):
         return self.from_legacy.invoke(processed_state)
 
 
-class InitialStateAdapter(Runnable[Dict[str, Any], CodeGenerationState]):
-    """Adapter to convert initial dict state to CodeGenerationState."""
-
-    def __init__(self):
-        self.monitor = structured_log("initial_state_adapter")
-
-    def invoke(self, input: Dict[str, Any], config=None) -> CodeGenerationState:
-        if isinstance(input, CodeGenerationState):
-            return input
-        if not isinstance(input, dict):
-            self.monitor.error(
-                "InitialStateAdapter received non-dict input",
-                {"input_type": type(input)},
-            )
-            raise TypeError(f"Expected dict, got {type(input)}")
-        return CodeGenerationState(
-            issue_url=input.get("url", ""),
-            ticket_content="",
-            title="",
-            description="",
-            requirements=[],
-            acceptance_criteria=[],
-            implementation_steps=[],
-            npm_packages=[],
-            manual_implementation_notes="",
-            code_spec=CodeSpec(
-                language="typescript", framework="obsidian", dependencies=[]
-            ),
-            test_spec=TestSpecification(
-                test_framework="jest", coverage_requirements=[]
-            ),
-            generated_code=None,
-            generated_tests=None,
-            validation_results=None,
-            result=None,
-            relevant_code_files=[],
-            relevant_test_files=[],
-            feedback=None,
-            method_name=None,
-            command_id=None,
-        )
-
-
 class FinalStateAdapter(Runnable[CodeGenerationState, Dict[str, Any]]):
     """Adapter to convert final CodeGenerationState back to dict for external interface."""
 

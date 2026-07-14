@@ -528,4 +528,61 @@ describe('TimestampPlugin', () => {
             expect(second).toBeLessThanOrEqual(59);
         });
     });
+
+    describe('insert-uuid-v7 command', () => {
+            let uuidPlugin: TimestampPlugin;
+            const uuidCommands: { [key: string]: obsidian.Command } = {};
+    
+            beforeEach(() => {
+                jest.clearAllMocks();
+                uuidPlugin = new TimestampPlugin(mockApp, mockManifest);
+                uuidPlugin.addCommand = (command: obsidian.Command): obsidian.Command => {
+                    if (command.editorCallback) {
+                        command.callback = async () => {
+                            const view = mockApp.workspace.getActiveViewOfType(obsidian.MarkdownView);
+                            if (view) {
+                                await command.editorCallback!(view.editor, view);
+                            }
+                        };
+                    }
+                    uuidCommands[command.id] = command;
+                    return command;
+                };
+            });
+    
+            test('adds insert-uuid-v7 command', async () => {
+                await uuidPlugin.onload();
+                const insertCmd = uuidCommands['insert-uuid-v7'];
+                expect(insertCmd).toBeDefined();
+                expect(insertCmd!.name).toBe('Insert UUID v7 (timestamp-based)');
+            });
+    
+            test('inserts uuid v7 at cursor', async () => {
+                await uuidPlugin.onload();
+                const command = uuidCommands['insert-uuid-v7'];
+                expect(command).toBeDefined();
+                if (command && typeof command.callback === 'function') {
+                    command.callback();
+                    expect(mockEditor.replaceSelection).toHaveBeenCalled();
+                    const selectionText = (mockEditor.replaceSelection as jest.Mock).mock.calls[0][0];
+                    expect(selectionText).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+                } else {
+                    throw new Error('insert-uuid-v7 command is not properly defined');
+                }
+            });
+    
+            test('shows Notice when no active editor', async () => {
+                mockApp.workspace.getActiveViewOfType = jest.fn(() => null);
+                await uuidPlugin.onload();
+                const command = uuidCommands['insert-uuid-v7'];
+                expect(command).toBeDefined();
+                if (command && typeof command.callback === 'function') {
+                    command.callback();
+                    expect(mockEditor.replaceSelection).not.toHaveBeenCalled();
+                } else {
+                    throw new Error('insert-uuid-v7 command is not properly defined');
+                }
+            });
+        });
+
 });

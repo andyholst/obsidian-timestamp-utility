@@ -206,9 +206,11 @@ Full Phase 1 integration.
 
 ## Prerequisites
 
-- **Env Vars**: `OLLAMA_HOST=http://host.docker.internal:11434` (optional, dummy
+- **Env Vars**: `OLLAMA_HOST=http://127.0.0.1:11434` (optional, dummy
   used); `PROJECT_ROOT=/tmp/test-*` (temp fixture); `GITHUB_TOKEN` (if GitHub
-  tools).
+  tools). Under rootless nerdctl `network_mode: host`, the container shares the
+  host loopback, so `127.0.0.1:11434` reaches the live Ollama; do NOT use
+  `host.docker.internal` (it does not resolve).
 - **Fixtures**: Extend
   [`conftest.py`](agents/agentics/tests/integration/conftest.py):
   `real_ollama_config` (skip if unhealthy), `temp_project_dir` (mkdtemp +

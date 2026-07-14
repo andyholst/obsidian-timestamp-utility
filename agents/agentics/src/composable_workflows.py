@@ -10,27 +10,24 @@ import shutil
 from datetime import datetime
 from typing import Dict, Any
 from langchain_core.runnables import Runnable, RunnableParallel, RunnableLambda
-from langchain_core.runnables import Runnable, RunnableParallel
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from .agent_composer import AgentComposer, WorkflowConfig
 from .state_adapters import (
     AgentAdapter,
-    InitialStateAdapter,
     FinalStateAdapter,
     StateToCodeGenerationStateAdapter,
     CodeGenerationStateToStateAdapter,
     IntegrationInputAdapter,
 )
 from .state import CodeGenerationState, State
-from .tool_integrated_code_generator_agent import ToolIntegratedCodeGeneratorAgent
 from .fetch_issue_agent import FetchIssueAgent
 from .ticket_clarity_agent import TicketClarityAgent
 from .implementation_planner_agent import ImplementationPlannerAgent
 from .dependency_analyzer_agent import DependencyAnalyzerAgent
 from .code_extractor_agent import CodeExtractorAgent
 from .code_integrator_agent import CodeIntegratorAgent
-from .post_test_runner_agent import PostTestRunnerAgent
+from .post_test_runner_agent import PostTestRunnerAgent, MAX_SELF_CORRECT_ATTEMPTS
 from .pre_test_runner_agent import PreTestRunnerAgent
 from .code_reviewer_agent import CodeReviewerAgent
 from .output_result_agent import OutputResultAgent
@@ -43,13 +40,10 @@ from .collaborative_generator import CollaborativeGenerator
 from .feedback_agent import FeedbackAgent
 from .process_llm_agent import ProcessLLMAgent
 from .test_generator_agent import GeneratorAgent
-from .tool_integrated_agent import ToolIntegratedAgent
-from .tools import execute_command_tool
 from .utils import log_info, remove_thinking_tags
 from .monitoring import structured_log, track_workflow_progress, get_monitoring_data
 import logging
 import asyncio
-import os
 import json
 import subprocess
 
@@ -434,12 +428,11 @@ class ComposableWorkflows:
     """Factory for creating the three-phase composable workflows."""
 
     def __init__(
-        self, llm_reasoning: Runnable, llm_code: Runnable, github_client, mcp_tools=None
+        self, llm_reasoning: Runnable, llm_code: Runnable, github_client
     ):
         self.llm_reasoning = llm_reasoning
         self.llm_code = llm_code
         self.github_client = github_client
-        self.mcp_tools = mcp_tools or []
         self.monitor = structured_log("composable_workflows")
         # Disable langsmith tracing by default to prevent hangs
         os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
@@ -452,9 +445,8 @@ class ComposableWorkflows:
         self.composer = AgentComposer()
         self.recovery_agent = ErrorRecoveryAgent(llm_reasoning=self.llm_reasoning)
 
-        # Register tools
-        for tool in self.mcp_tools:
-            self.composer.register_tool(tool.name, tool)
+        # Register tools (service-backed tools only; no MCP)
+        # (No external MCP tool registry — tool integration is via service clients.)
 
         # Register agents
         self._register_agents()
@@ -498,12 +490,6 @@ class ComposableWorkflows:
         dependency_agent = AgentAdapter(DependencyAnalyzerAgent(self.llm_reasoning))
         self.composer.register_agent("dependency_analyzer", dependency_agent)
 
-        # Tool integrated agent for executing commands
-        tool_integrated_agent = ToolIntegratedAgent(
-            self.llm_reasoning, [execute_command_tool] + self.mcp_tools
-        )
-        self.composer.register_agent("tool_integrated", tool_integrated_agent)
-
         # Code generation agents
         extractor_agent = AgentAdapter(CodeExtractorAgent(self.llm_reasoning))
         self.composer.register_agent("code_extractor", extractor_agent)
@@ -541,7 +527,7 @@ class ComposableWorkflows:
         """Create ISSUE PROCESSING workflow: fetch -> clarify -> plan."""
         config = WorkflowConfig(
             agent_names=["fetch_issue", "ticket_clarity", "implementation_planner"],
-            tool_names=[tool.name for tool in self.mcp_tools],
+            tool_names=[],
         )
         raw_workflow = self.composer.create_workflow("issue_processing", config)
         return (
@@ -554,7 +540,7 @@ class ComposableWorkflows:
         """Create CODE GENERATION workflow: extract -> collaborative generation."""
         config = WorkflowConfig(
             agent_names=["code_extractor", "collaborative_generator"],
-            tool_names=[tool.name for tool in self.mcp_tools],
+            tool_names=[],
         )
         return self.composer.create_workflow("code_generation", config)
 
@@ -593,16 +579,24 @@ class ComposableWorkflows:
         def recovery_router(state: CodeGenerationState) -> str:
             # Handle both dict and CodeGenerationState
             if isinstance(state, dict):
-                attempts = state.get("recovery_attempt", 0)
-                confidence = state.get("recovery_confidence", 0.0)
+                attempts = state.get("recovery_attempt", 0) or 0
+                confidence = state.get("recovery_confidence", 0.0) or 0.0
             else:
-                attempts = getattr(state, "recovery_attempt", 0)
-                confidence = getattr(state, "recovery_confidence", 0.0)
-            # Limit recovery attempts to prevent infinite loops with real LLM calls
-            return "error_recovery" if attempts < 1 and confidence > 50 else "hitl"
+                attempts = getattr(state, "recovery_attempt", 0) or 0
+                confidence = getattr(state, "recovery_confidence", 0.0) or 0.0
+            # §5.2 Bounded self-correction: allow up to MAX_SELF_CORRECT_ATTEMPTS re-runs of
+            # post_test_runner -> error_recovery -> code_integrator. After the bound, escalate
+            # to hitl (human) instead of looping forever on real LLM calls.
+            if int(attempts) < MAX_SELF_CORRECT_ATTEMPTS and float(confidence) > 50:
+                return "error_recovery"
+            return "hitl"
 
         graph = StateGraph(CodeGenerationState)
 
+        # --- INTEGRATION & TESTING loop (docs/openspec-engineering-loop-harness.md §6 loop
+        #     engineering; AGENTS.md Phase 6). Node order below IS the canonical flow the
+        #     python-agentic-slim-refactor change pins (tasks.md §3A) — do not reorder/drop. ---
+        # Harness B7/B10/B11: code_integrator (CodeIntegratorAgent) is the SOLE writer of TS.
         graph.add_node("code_integrator", code_integrator_node)
         graph.add_node("dependency_installer", dependency_installer_node)
         graph.add_node("pre_test_runner", pre_test_runner_node)
@@ -617,6 +611,8 @@ class ComposableWorkflows:
         graph.add_edge("code_integrator", "dependency_installer")
         graph.add_edge("dependency_installer", "pre_test_runner")
         graph.add_edge("pre_test_runner", "post_test_runner")
+        # Loop engineering (AGENTS.md B6 bounded self-correct): post_test_runner ->
+        # error_recovery -> back to code_integrator, else escalate to hitl. Bound in recovery_router.
         graph.add_conditional_edges(
             "post_test_runner",
             recovery_router,
@@ -637,6 +633,24 @@ class ComposableWorkflows:
         confidence = getattr(cg_state, "recovery_confidence", 0.0)
         # Limit recovery attempts to prevent infinite loops with real LLM calls
         return "error_recovery" if attempts < 1 and confidence > 50 else "hitl"
+
+    @staticmethod
+    def route_hitl(state: "State") -> str:
+        """Route after code_generation.
+
+        Fast mode (`TEST_FAST_MODE=1`, set by the integration-test conftest to skip the
+        *npm-test* phase) MUST still run the deterministic sole-writer floor: it routes to
+        `code_integrator` (which injects the spec contract) then -> `output_result`. This is a
+        B7/B10/B11 guarantee — the floor is the ONLY writer of main.ts and must run in every
+        mode. Slow mode runs the full integration_testing sub-graph (or `hitl` if the validation
+        score is low). See python-agentic-slim-refactor tasks.md #9.4/#10 and AGENTS.md B7.1.
+        """
+        if os.getenv("TEST_FAST_MODE") == "1":
+            return "code_integrator"
+        score = state.get("validation_score", 0) if isinstance(state, dict) else getattr(
+            state, "validation_score", 0
+        )
+        return "hitl" if score < 80 else "integration_testing"
 
     def _create_full_workflow(self):
         """Create the full three-phase workflow using StateGraph with checkpointer."""
@@ -673,240 +687,6 @@ class ComposableWorkflows:
             result_cg = self.code_generation_workflow.invoke(cg_state)
             result_state = CodeGenerationStateToStateAdapter().invoke(result_cg)
             new_keys = _get_new_keys(state, result_state)
-            # In ultra-fast mode, write generated code/tests to disk immediately
-            if os.getenv("TEST_ULTRA_FAST_MODE") == "1":
-                try:
-                    project_root = os.getenv("PROJECT_ROOT", "/tmp/obsidian-project")
-                    generated_code = result_state.get("generated_code", "")
-                    generated_tests = result_state.get("generated_tests", "")
-                    log_info("CodeGeneration", f"DEBUG: project_root={project_root}, has_code={bool(generated_code)}, has_tests={bool(generated_tests)}, code_len={len(generated_code)}, tests_len={len(generated_tests)}")
-                    # Write debug output
-                    debug_path = os.path.join(project_root, "debug_generated_code.txt")
-                    with open(debug_path, "w") as f:
-                        f.write(f"generated_code ({len(generated_code)} chars):\n{generated_code}\n\n")
-                        f.write(f"generated_tests ({len(generated_tests)} chars):\n{generated_tests}\n")
-                    if generated_code:
-                        main_ts_path = os.path.join(project_root, "src", "main.ts")
-                        import re as _re
-                        code_to_write = generated_code.strip()
-
-                        # Read the ORIGINAL clean code ONCE before any modifications
-                        # This is used as the base for all insertion attempts in the self-correction loop
-                        original_code = ""
-                        if os.path.exists(main_ts_path):
-                            with open(main_ts_path, "r") as f:
-                                original_code = f.read()
-
-                        # Strip JSON wrapper if present
-                        try:
-                            parsed_json = json.loads(code_to_write)
-                            code_to_write = parsed_json.get("code", code_to_write)
-                        except Exception:
-                            pass
-                        code_to_write = _re.sub(
-                            r'\{"code":\s*".*?",\s*"method_name":\s*".*?",\s*"command_id":\s*".*?"\}',
-                            '', code_to_write, flags=_re.DOTALL
-                        )
-                        if code_to_write.startswith("```"):
-                            lines = code_to_write.split("\n")
-                            lines = lines[1:]
-                            if lines and lines[-1].strip() == "```":
-                                lines = lines[:-1]
-                            code_to_write = "\n".join(lines)
-                        code_to_write = code_to_write.strip()
-
-                        # Self-correction loop: always start from a clean state
-                        # Remove any previously generated code before inserting new code
-                        max_attempts = 3
-                        build_errors = ["", ""]
-                        test_errors = ["", ""]
-                        for attempt in range(max_attempts):
-                            if attempt > 0:
-                                # On retry, ask LLM to fix the code based on errors
-                                log_info("CodeGeneration", "Correction attempt " + str(attempt) + "/" + str(max_attempts - 1))
-                                error_feedback = "\n".join(build_errors + test_errors)
-                                correction_prompt = (
-                                    "The TypeScript code you generated has compilation errors.\n\n"
-                                    "Errors:\n" + error_feedback + "\n\n"
-                                    "The original file content is:\n" + original_code + "\n\n"
-                                    "Generate ONLY these two things:\n"
-                                    "1. ONE public method called generateUUIDv7() that returns a UUID v7 string\n"
-                                    "2. ONE this.addCommand(...) call to register it\n\n"
-                                    "IMPORTANT RULES:\n"
-                                    "- Do NOT generate an onload() method — just the addCommand call\n"
-                                    "- Do NOT duplicate any existing methods\n"
-                                    "- Use _editor as the parameter name in editorCallback\n"
-                                    "- The method should be public, not private\n"
-                                    "- Format: public generateUUIDv7(): string { ... }\n"
-                                    "- Format: this.addCommand({ id: '...', name: '...', editorCallback: (_editor, _ctx) => { _editor.replaceSelection(this.generateUUIDv7()); } })\n\n"
-                                    "Output ONLY JSON: {\"code\": \"...\", \"method_name\": \"generateUUIDv7\", \"command_id\": \"generate-uuid-v7\"}"
-                                )
-                                correction_response = self.llm_code.invoke(correction_prompt)
-                                corrected = remove_thinking_tags(str(correction_response)).strip()
-                                try:
-                                    parsed = json.loads(corrected)
-                                    code_to_write = parsed.get("code", corrected)
-                                except Exception:
-                                    code_to_write = corrected
-                                if code_to_write.startswith("```"):
-                                    lines = code_to_write.split("\n")
-                                    lines = lines[1:]
-                                    if lines and lines[-1].strip() == "```":
-                                        lines = lines[:-1]
-                                    code_to_write = "\n".join(lines)
-                                code_to_write = code_to_write.strip()
-                                if not code_to_write:
-                                    break
-
-                            # Insert code into the ORIGINAL clean code (not the modified file)
-                            combined = _insert_code_into_class(original_code, code_to_write)
-
-                            # Validate that the method is inside the class (not outside)
-                            method_name = "generateUUIDv7"
-                            try:
-                                parsed = json.loads(code_to_write)
-                                method_name = parsed.get("method_name", method_name)
-                            except Exception:
-                                pass
-                            # Also try to extract method name from the generated code
-                            if method_name == "generateUUIDv7":
-                                import re as _re_match
-                                m = _re_match.search(r'public\s+(\w+)\s*\(', code_to_write)
-                                if m:
-                                    method_name = m.group(1)
-                            combined = _validate_method_inside_class(combined, method_name)
-
-                            with open(main_ts_path, "w") as f:
-                                f.write(combined)
-
-                            # Format with prettier to fix indentation
-                            subprocess.run(["make", "format-ts"], cwd=project_root, capture_output=True, timeout=60)
-
-                            # Re-validate after prettier formatting
-                            with open(main_ts_path, "r") as f:
-                                formatted_code = f.read()
-                            formatted_code = _validate_method_inside_class(formatted_code, method_name)
-                            with open(main_ts_path, "w") as f:
-                                f.write(formatted_code)
-
-                            # Run fast TypeScript validation (only check our generated file)
-                            build_result = subprocess.run(
-                                ["npx", "tsc", "--noEmit", "--ignoreDeprecations", "6.0", "--skipLibCheck",
-                                 "--pretty", "false", main_ts_path],
-                                cwd=project_root, capture_output=True, text=True, timeout=60
-                            )
-                            if build_result.returncode == 0:
-                                # Also run Jest tests to catch missing methods referenced by tests
-                                test_check = subprocess.run(
-                                    ["npx", "jest", "--no-cache", "--testPathPattern", "main.test.ts",
-                                     "--passWithNoTests", "--reporters=default"],
-                                    cwd=project_root, capture_output=True, text=True, timeout=120
-                                )
-                                if test_check.returncode == 0:
-                                    log_info("CodeGeneration", "Build and tests passed!")
-                                    break
-                                else:
-                                    # Tests failed — likely missing methods in plugin
-                                    test_err = test_check.stdout[-2000:] + test_check.stderr[-1000:]
-                                    build_errors = ["Jest tests failed (missing methods?): " + test_err, ""]
-                                    log_info("CodeGeneration", "Tests failed (attempt " + str(attempt + 1) + "): " + build_errors[0][:500])
-                            else:
-                                build_errors = [build_result.stderr[-2000:], build_result.stdout[-2000:]]
-                                log_info("CodeGeneration", "Build failed (attempt " + str(attempt + 1) + "): " + build_errors[0][:500])
-                                if attempt == max_attempts - 1:
-                                    log_info("CodeGeneration", "Max build attempts reached, writing code anyway")
-
-                    if generated_tests:
-                        test_path = os.path.join(project_root, "src", "__tests__", "main.test.ts")
-                        existing_tests = ""
-                        if os.path.exists(test_path):
-                            with open(test_path, "r") as f:
-                                existing_tests = f.read()
-                            # Save a backup of the original test file for recovery
-                            import shutil as _shutil
-                            orig_backup = test_path + ".orig"
-                            if not os.path.exists(orig_backup):
-                                _shutil.copy2(test_path, orig_backup)
-                        # Strip JSON wrapper from tests if present
-                        test_code = generated_tests.strip()
-                        try:
-                            parsed_t = json.loads(test_code)
-                            test_code = parsed_t.get("tests", test_code)
-                        except Exception:
-                            pass
-                        combined_tests = _insert_tests_into_file(existing_tests, test_code)
-
-                        # Filter out tests for methods that don't exist in the plugin
-                        current_main = ""
-                        if main_ts_path and os.path.exists(main_ts_path):
-                            with open(main_ts_path, "r") as mf:
-                                current_main = mf.read()
-                        combined_tests = _filter_tests_for_existing_methods(combined_tests, current_main)
-
-                        with open(test_path, "w") as f:
-                            f.write(combined_tests)
-                        # Format with prettier to fix indentation
-                        subprocess.run(["make", "format-ts"], cwd=project_root, capture_output=True, timeout=60)
-                        log_info("CodeGeneration", "Inserted " + str(len(test_code)) + " chars into " + test_path)
-
-                        # Verify the test file compiles — if not, reset to original
-                        test_tsc = subprocess.run(
-                            ["npx", "tsc", "--noEmit", "--ignoreDeprecations", "6.0", "--skipLibCheck",
-                             "--pretty", "false", test_path],
-                            cwd=project_root, capture_output=True, text=True, timeout=60
-                        )
-                        if test_tsc.returncode != 0:
-                            log_info("CodeGeneration", "Test file has TS errors after filtering, resetting to original")
-                            # Reset test file to original (pre-agentics) state
-                            original_test_path = os.path.join(project_root, "src", "__tests__", "main.test.ts.orig")
-                            if os.path.exists(original_test_path):
-                                shutil.copy2(original_test_path, test_path)
-                            else:
-                                # If no backup, just re-filter the tests
-                                with open(test_path, "r") as f:
-                                    current_content = f.read()
-                                combined_tests = _filter_tests_for_existing_methods(current_content, current_main)
-                                with open(test_path, "w") as f:
-                                    f.write(combined_tests)
-
-                        # Run fast test validation
-                        test_result = subprocess.run(
-                            ["make", "validate-tests"],
-                            cwd=project_root,
-                            capture_output=True, text=True, timeout=120
-                        )
-                        if test_result.returncode != 0:
-                            log_info("CodeGeneration", "Tests failed: " + test_result.stdout[-1000:])
-                            # Generate fixed tests using error_feedback
-                            test_errors = [test_result.stdout[-2000:], test_result.stderr[-1000:]]
-                            current_main = ""
-                            with open(main_ts_path, "r") as mf:
-                                current_main = mf.read()
-                            test_correction_prompt = (
-                                "The tests failed because they reference methods that don't exist in the plugin.\n\n"
-                                "Test Errors:\n" + test_errors[0] + "\n\n"
-                                "Existing plugin code:\n" + current_main + "\n\n"
-                                "Current tests:\n" + combined_tests + "\n\n"
-                                "IMPORTANT: Only test methods that EXIST in the plugin code above. "
-                                "Do NOT generate tests for methods that are not defined in the plugin. "
-                                "Remove any describe blocks for non-existent methods.\n\n"
-                                "Generate the COMPLETE fixed test file content. "
-                                "Output ONLY valid JSON: {\"tests\": \"...\"}"
-                            )
-                            test_response = self.llm_code.invoke(test_correction_prompt)
-                            fixed_tests = remove_thinking_tags(str(test_response)).strip()
-                            try:
-                                parsed = json.loads(fixed_tests)
-                                fixed_tests = parsed.get("tests", fixed_tests)
-                            except Exception:
-                                pass
-                            with open(test_path, "w") as f:
-                                f.write(fixed_tests.strip() + "\n")
-                            log_info("CodeGeneration", "Wrote corrected tests")
-
-                    _backup_project_files(project_root)
-                except Exception as e:
-                    log_info("CodeGeneration", f"ERROR writing files: {e}")
             return new_keys
 
         def integration_testing_node(state: State) -> State:
@@ -960,47 +740,45 @@ class ComposableWorkflows:
             return merged
 
         # Add nodes
+        # --- THREE-PHASE full workflow (AGENTS.md Phases 2-6). Canonical flow pinned by
+        #     python-agentic-slim-refactor tasks.md §3A — do not reorder/drop nodes. ---
+        # OpenSpec engineering (AGENTS.md B15): issue_processing -> FetchIssueAgent seeds a LOCAL
+        #   OpenSpec change via `openspec new change ticket<N>` (openspec_loader.create_change_from_issue).
         graph.add_node("issue_processing", issue_processing_node)
         graph.add_node("dependency_analysis", dependency_analysis_node)
+        # Generate (single path): CollaborativeGenerator -> CodeGeneratorAgent (LLM proposes only).
         graph.add_node("code_generation", code_generation_node)
         graph.add_node("hitl", hitl_node)
+        # Integration & testing sub-graph (harness B7 sole-writer + loop engineering self-correct).
         graph.add_node("integration_testing", integration_testing_node)
         graph.add_node("code_reviewer", code_reviewer_node)
         graph.add_node("output_result", output_result_node)
         graph.add_node("error_recovery", error_recovery_node)
+        # Fast-mode floor: the deterministic sole-writer (B7/B10/B11) MUST run even in fast mode.
+        # Fast mode's intent (conftest comment) is to skip the *npm test* phase, NOT the
+        # contract-injection floor. Previously fast mode routed straight to `output_result`,
+        # bypassing `code_integrator` entirely -> the OpenSpec spec contract was never injected
+        # (exposed by the greetings e2e: its modal is absent from the committed baseline, while
+        # uuid passed only because the baseline already ships the uuid modal). See python-agentic
+        # -slim-refactor tasks.md #9.4/#10.
+        graph.add_node("code_integrator", code_integrator_node)
 
-        # Define routing function for HITL
-        def route_hitl(state: State) -> str:
-            # Ultra-fast mode: skip everything after code generation, go straight to END
-            if os.getenv("TEST_ULTRA_FAST_MODE") == "1":
-                return "code_generation_end"
-            # Fast mode: go through output_result
-            if os.getenv("TEST_FAST_MODE") == "1":
-                return "output_result"
-            score = state.get("validation_score", 0)
-            return "hitl" if score < 80 else "integration_testing"
-
-        # Add edges - ultra-fast mode goes directly to END
-        if os.getenv("TEST_ULTRA_FAST_MODE") == "1":
-            graph.add_edge("issue_processing", "dependency_analysis")
-            graph.add_edge("dependency_analysis", "code_generation")
-            graph.add_edge("code_generation", END)
-        else:
-            graph.add_edge("issue_processing", "dependency_analysis")
-            graph.add_edge("dependency_analysis", "code_generation")
-            graph.add_conditional_edges(
-                "code_generation",
-                route_hitl,
-                {"hitl": "hitl", "integration_testing": "integration_testing", "output_result": "output_result"},
-            )
-            graph.add_edge("hitl", "integration_testing")
-            graph.add_edge("integration_testing", END)
-            graph.add_edge("output_result", END)
-
-        # Ultra-fast mode: skip dependency analysis entirely
-        if os.getenv("TEST_ULTRA_FAST_MODE") == "1":
-            graph.set_entry_point("issue_processing")
-            graph.add_edge("issue_processing", "code_generation")
+        # Add edges - canonical flow (harness B7 sole-writer + loop engineering self-correct).
+        # `integration_testing` contains the `code_integrator` node (CodeIntegratorAgent
+        # deterministic floor), the ONLY writer of src/main.ts / src/__tests__/main.test.ts.
+        # No TEST_ULTRA_FAST_MODE shortcut: the deterministic floor is always the writer.
+        graph.add_edge("issue_processing", "dependency_analysis")
+        graph.add_edge("dependency_analysis", "code_generation")
+        graph.add_conditional_edges(
+            "code_generation",
+            ComposableWorkflows.route_hitl,
+            {"hitl": "hitl", "integration_testing": "integration_testing", "code_integrator": "code_integrator"},
+        )
+        graph.add_edge("hitl", "integration_testing")
+        graph.add_edge("integration_testing", END)
+        # Fast-mode floor path: deterministically inject the spec contract, then finish.
+        graph.add_edge("code_integrator", "output_result")
+        graph.add_edge("output_result", END)
 
         # Set entry point
         graph.set_entry_point("issue_processing")

@@ -23,7 +23,6 @@ from src.monitoring import (
     WorkflowTracker,
     PerformanceMonitor,
 )
-from src.services import OllamaClient, GitHubClient, MCPClient, ServiceManager
 from src.circuit_breaker import CircuitBreaker, ServiceHealthMonitor as HealthMonitor
 
 
@@ -60,7 +59,6 @@ def patch_environment_variables():
         "OLLAMA_BASE_URL": "http://localhost:11434",
         "OLLAMA_MODEL": "llama3.2:3b",
         "GITHUB_TOKEN": "mock_github_token_12345",
-        "MCP_SERVER_URL": "http://localhost:3003",
     }
     return patch.dict("os.environ", env_vars)
 
@@ -98,39 +96,17 @@ def create_mock_github_client():
     return mock_client
 
 
-def create_mock_mcp_client():
-    """Create mock MCP client with realistic responses."""
-    mock_client = MagicMock(spec=MCPClient)
-    mock_client.name = "mcp"
-    mock_client.is_available.return_value = True
-    mock_client.get_context = AsyncMock(return_value="Mock MCP context response")
-    mock_client.store_memory = AsyncMock(return_value=None)
-    mock_client.retrieve_memory = AsyncMock(return_value="Mock retrieved memory")
-    mock_client.health_check = AsyncMock(return_value=True)
-    mock_client.initialize = AsyncMock(return_value=None)
-    mock_client.close = AsyncMock(return_value=None)
-
-    # Mock tools
-    mock_tool = MagicMock(spec=Tool)
-    mock_tool.name = "mcp_context_search"
-    mock_client.get_tools.return_value = [mock_tool]
-
-    return mock_client
-
-
 def create_mock_service_manager():
     """Create mock service manager with all clients."""
     mock_manager = MagicMock(spec=ServiceManager)
     mock_manager.ollama_reasoning = create_mock_ollama_client()
     mock_manager.ollama_code = create_mock_ollama_client()
     mock_manager.github = create_mock_github_client()
-    mock_manager.mcp = create_mock_mcp_client()
     mock_manager.check_services_health = AsyncMock(
         return_value={
             "ollama_reasoning": True,
             "ollama_code": True,
             "github": True,
-            "mcp": True,
         }
     )
     mock_manager.initialize_services = AsyncMock(return_value=None)
@@ -274,7 +250,6 @@ def create_mock_composable_workflows():
     mock_workflows.llm_reasoning = create_mock_ollama_client()
     mock_workflows.llm_code = create_mock_ollama_client()
     mock_workflows.github_client = create_mock_github_client()
-    mock_workflows.mcp_tools = []
 
     # Mock processing method
     def mock_process_issue(issue_url):
@@ -672,223 +647,3 @@ def assert_mock_called_with_expected(mock, expected_calls):
             return scenarios.get(scenario, scenarios["success"])
 
 
-def create_enhanced_mcp_client_mock():
-    """Create an enhanced MCP client mock with comprehensive tool support and error handling."""
-    mock_client = MagicMock(spec=MCPClient)
-    mock_client.name = "mcp"
-    mock_client.is_available.return_value = True
-    mock_client.initialize = AsyncMock(return_value=None)
-    mock_client.close = AsyncMock(return_value=None)
-    mock_client.health_check = AsyncMock(return_value=True)
-
-    # Enhanced context responses
-    context_responses = {
-        "code_review": "The code follows best practices with proper error handling and type safety.",
-        "architecture": "This appears to be a layered architecture with clear separation of concerns.",
-        "security": "No obvious security vulnerabilities detected in the provided code.",
-        "performance": "The code is optimized for the given use case with efficient algorithms.",
-    }
-
-    def mock_get_context(query, max_tokens=4096):
-        # Return context based on query keywords
-        for key, response in context_responses.items():
-            if key in query.lower():
-                return response
-        return "General context information retrieved from MCP server."
-
-    mock_client.get_context = AsyncMock(side_effect=mock_get_context)
-
-    # Enhanced memory operations
-    memory_store = {}
-
-    def mock_store_memory(key, value):
-        memory_store[key] = value
-
-    def mock_retrieve_memory(key):
-        return memory_store.get(key, f"No memory found for key: {key}")
-
-    mock_client.store_memory = AsyncMock(side_effect=mock_store_memory)
-    mock_client.retrieve_memory = AsyncMock(side_effect=mock_retrieve_memory)
-
-    # Comprehensive tool set
-    tools = [
-        MagicMock(
-            spec=Tool,
-            name="mcp_context_search",
-            description="Search for contextual information",
-        ),
-        MagicMock(
-            spec=Tool,
-            name="mcp_memory_store",
-            description="Store key-value pairs in memory",
-        ),
-        MagicMock(
-            spec=Tool,
-            name="mcp_memory_retrieve",
-            description="Retrieve stored values from memory",
-        ),
-        MagicMock(
-            spec=Tool,
-            name="mcp_code_analysis",
-            description="Analyze code for patterns and issues",
-        ),
-        MagicMock(
-            spec=Tool,
-            name="mcp_documentation_search",
-            description="Search documentation and references",
-        ),
-        MagicMock(
-            spec=Tool,
-            name="mcp_test_generation",
-            description="Generate test cases for code",
-        ),
-        MagicMock(
-            spec=Tool,
-            name="mcp_dependency_analysis",
-            description="Analyze code dependencies",
-        ),
-        MagicMock(
-            spec=Tool,
-            name="mcp_security_scan",
-            description="Scan code for security vulnerabilities",
-        ),
-    ]
-
-    # Set up tool functions
-    for tool in tools:
-        if tool.name == "mcp_code_analysis":
-            tool.func = lambda code: f"Analysis of: {code[:50]}..."
-        elif tool.name == "mcp_documentation_search":
-            tool.func = lambda query: f"Documentation for: {query}"
-        elif tool.name == "mcp_test_generation":
-            tool.func = lambda code: f"Generated tests for: {code[:30]}..."
-        elif tool.name == "mcp_dependency_analysis":
-            tool.func = lambda code: "Dependencies: React, TypeScript, Jest"
-        elif tool.name == "mcp_security_scan":
-            tool.func = lambda code: "Security scan: No vulnerabilities found"
-
-    mock_client.get_tools.return_value = tools
-
-    return mock_client
-
-
-def create_mcp_error_scenarios():
-    """Create MCP client mocks that simulate various error conditions."""
-
-    # Connection error
-    connection_error_mock = MagicMock(spec=MCPClient)
-    connection_error_mock.is_available.return_value = False
-    connection_error_mock.get_context = AsyncMock(
-        side_effect=ConnectionError("Cannot connect to MCP server")
-    )
-    connection_error_mock.store_memory = AsyncMock(
-        side_effect=ConnectionError("Cannot connect to MCP server")
-    )
-    connection_error_mock.retrieve_memory = AsyncMock(
-        side_effect=ConnectionError("Cannot connect to MCP server")
-    )
-    connection_error_mock.health_check = AsyncMock(return_value=False)
-
-    # Timeout error
-    timeout_error_mock = MagicMock(spec=MCPClient)
-    timeout_error_mock.is_available.return_value = True
-    timeout_error_mock.get_context = AsyncMock(
-        side_effect=TimeoutError("MCP request timed out")
-    )
-    timeout_error_mock.store_memory = AsyncMock(
-        side_effect=TimeoutError("MCP request timed out")
-    )
-    timeout_error_mock.retrieve_memory = AsyncMock(
-        side_effect=TimeoutError("MCP request timed out")
-    )
-    timeout_error_mock.health_check = AsyncMock(return_value=True)
-
-    # Authentication error
-    auth_error_mock = MagicMock(spec=MCPClient)
-    auth_error_mock.is_available.return_value = False
-    auth_error_mock.get_context = AsyncMock(
-        side_effect=Exception("MCP authentication failed")
-    )
-    auth_error_mock.store_memory = AsyncMock(
-        side_effect=Exception("MCP authentication failed")
-    )
-    auth_error_mock.retrieve_memory = AsyncMock(
-        side_effect=Exception("MCP authentication failed")
-    )
-    auth_error_mock.health_check = AsyncMock(return_value=False)
-
-    # Server error
-    server_error_mock = MagicMock(spec=MCPClient)
-    server_error_mock.is_available.return_value = True
-    server_error_mock.get_context = AsyncMock(
-        side_effect=Exception("MCP server internal error")
-    )
-    server_error_mock.store_memory = AsyncMock(
-        side_effect=Exception("MCP server internal error")
-    )
-    server_error_mock.retrieve_memory = AsyncMock(
-        side_effect=Exception("MCP server internal error")
-    )
-    server_error_mock.health_check = AsyncMock(return_value=False)
-
-    return {
-        "connection": connection_error_mock,
-        "timeout": timeout_error_mock,
-        "auth": auth_error_mock,
-        "server": server_error_mock,
-    }
-
-
-def create_mcp_with_rate_limiting():
-    """Create an MCP client mock that simulates rate limiting."""
-    mock_client = create_enhanced_mcp_client_mock()
-
-    call_count = 0
-    rate_limit_threshold = 10
-
-    def rate_limited_get_context(query, max_tokens=4096):
-        nonlocal call_count
-        call_count += 1
-        if call_count > rate_limit_threshold:
-            raise Exception("MCP rate limit exceeded. Please try again later.")
-        return "Context information retrieved successfully."
-
-    def rate_limited_store_memory(key, value):
-        nonlocal call_count
-        call_count += 1
-        if call_count > rate_limit_threshold:
-            raise Exception("MCP rate limit exceeded. Please try again later.")
-
-    def rate_limited_retrieve_memory(key):
-        nonlocal call_count
-        call_count += 1
-        if call_count > rate_limit_threshold:
-            raise Exception("MCP rate limit exceeded. Please try again later.")
-        return f"Retrieved: {key}"
-
-    mock_client.get_context = AsyncMock(side_effect=rate_limited_get_context)
-    mock_client.store_memory = AsyncMock(side_effect=rate_limited_store_memory)
-    mock_client.retrieve_memory = AsyncMock(side_effect=rate_limited_retrieve_memory)
-
-    return mock_client
-
-
-def create_mcp_streaming_responses():
-    """Create an MCP client mock that supports streaming responses."""
-    mock_client = create_enhanced_mcp_client_mock()
-
-    async def mock_stream_context(query, max_tokens=4096):
-        """Mock streaming context retrieval."""
-        chunks = [
-            "Starting context analysis...",
-            f"Processing query: {query[:30]}...",
-            "Gathering relevant information...",
-            "Compiling response...",
-            "Context retrieval complete.",
-        ]
-        for chunk in chunks:
-            yield chunk
-
-    mock_client.stream_context = mock_stream_context
-
-    return mock_client

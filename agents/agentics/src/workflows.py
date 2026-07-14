@@ -85,17 +85,11 @@ class IssueProcessingWorkflow(Workflow):
         github_client = (
             self.service_manager.github._client if self.service_manager.github else None
         )
-        mcp_tools = (
-            await self.service_manager.mcp.get_tools()
-            if self.service_manager.mcp
-            else []
-        )
 
         return ComposableWorkflows(
             llm_reasoning=self.service_manager.ollama_reasoning._client,
             llm_code=self.service_manager.ollama_code._client,
             github_client=github_client,
-            mcp_tools=mcp_tools,
         )
 
 

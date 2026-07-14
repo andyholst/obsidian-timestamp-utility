@@ -1,0 +1,4 @@
+# Git worktrees
+
+Hermes creates a worktree here before implementing each OpenSpec change,
+keeping the main working tree clean.

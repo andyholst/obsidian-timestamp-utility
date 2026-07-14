@@ -5,13 +5,12 @@ from src.services import (
     ServiceClient,
     OllamaClient,
     GitHubClient,
-    MCPClient,
     ServiceManager,
     get_service_manager,
     init_services,
     _service_manager,
 )
-from src.exceptions import OllamaError, GitHubError, MCPError, ServiceUnavailableError
+from src.exceptions import OllamaError, GitHubError, ServiceUnavailableError
 from src.config import LLMConfig
 from src.circuit_breaker import CircuitBreaker, ServiceHealthMonitor
 from tests.fixtures.mock_circuit_breaker import (
@@ -615,214 +614,6 @@ class TestGitHubClient:
             client.get_user()
 
 
-class TestMCPClient:
-    """Test MCPClient functionality."""
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    def test_mcp_client_initialization(
-        self,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test MCPClient initialization."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-
-        assert client.name == "mcp"
-        assert client._initialized is False
-        assert client._tools == []
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.init_mcp_client")
-    def test_mcp_client_initialize_failure(
-        self,
-        mock_init_mcp,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test MCPClient initialize failure."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        mock_init_mcp.side_effect = Exception("Init failed")
-
-        client = MCPClient()
-
-        asyncio.run(client.initialize())
-
-        assert client._initialized is False
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    def test_mcp_client_health_check_not_initialized(
-        self,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test MCPClient health check when not initialized."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-
-        result = asyncio.run(client.health_check())
-
-        assert result is False
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    def test_mcp_client_is_available_not_initialized(
-        self,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test MCPClient is_available when not initialized."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-
-        result = client.is_available()
-
-        assert result is False
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    def test_mcp_client_get_context_not_available(
-        self,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test MCPClient get_context when service not available."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-        mock_health_monitor.is_service_healthy.return_value = False
-
-        client = MCPClient()
-        client._initialized = True
-
-        with pytest.raises(MCPError, match="MCP service is not available"):
-            asyncio.run(client.get_context("test query"))
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.get_mcp_client")
-    @patch("src.services.Tool")
-    def test_mcp_client_get_tools(
-        self,
-        mock_tool_class,
-        mock_get_mcp,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-        mock_mcp_client,
-    ):
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-        mock_get_mcp.return_value = mock_mcp_client
-
-        mock_tool1 = MagicMock()
-        mock_tool2 = MagicMock()
-        mock_tool3 = MagicMock()
-        mock_tool_class.from_function.side_effect = [mock_tool1, mock_tool2, mock_tool3]
-
-        client = MCPClient()
-        client._client = mock_mcp_client
-        client._initialized = True
-
-        # Await the async call
-        tools = asyncio.run(client.get_tools())
-
-        assert len(tools) == 3
-        assert tools == [mock_tool1, mock_tool2, mock_tool3]
-        assert client._tools == [mock_tool1, mock_tool2, mock_tool3]
-
-        # Call again to test caching
-        tools2 = asyncio.run(client.get_tools())
-        assert tools2 == [mock_tool1, mock_tool2, mock_tool3]
-        # Should not create new tools
-        assert mock_tool_class.from_function.call_count == 3
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.init_mcp_client", side_effect=Exception("MCP not available"))
-    def test_mcp_client_get_tools_not_available(
-        self,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-
-        # Await the async call
-        tools = asyncio.run(client.get_tools())
-
-        assert tools == []
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    def test_mcp_client_close_success(
-        self,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test MCPClient close success."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        client = MCPClient()
-        asyncio.run(client.initialize())
-
-        asyncio.run(client.close())
-
-        assert client._initialized is False
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.close_mcp_client")
-    def test_mcp_client_close_failure(
-        self,
-        mock_close_mcp,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test MCPClient close failure."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        mock_close_mcp.side_effect = Exception("Close failed")
-
-        client = MCPClient()
-        client._initialized = True
-
-        asyncio.run(client.close())
-
-        assert client._initialized is False
-
-
 class TestServiceManager:
     """Test ServiceManager functionality."""
 
@@ -840,7 +631,6 @@ class TestServiceManager:
         assert manager.ollama_reasoning is None
         assert manager.ollama_code is None
         assert manager.github is None
-        assert manager.mcp is None
         assert manager.health_monitor == mock_health_monitor
 
     @patch("src.services.get_health_monitor")
@@ -862,7 +652,6 @@ class TestServiceManager:
         assert manager.ollama_reasoning is not None
         assert manager.ollama_code is not None
         assert manager.github is not None
-        assert manager.mcp is not None
 
         mock_health_monitor.register_service.assert_any_call(
             "ollama_reasoning", manager.ollama_reasoning.health_check
@@ -873,17 +662,12 @@ class TestServiceManager:
         mock_health_monitor.register_service.assert_any_call(
             "github", manager.github.health_check
         )
-        mock_health_monitor.register_service.assert_any_call(
-            "mcp", manager.mcp.health_check
-        )
 
     @patch("src.services.get_health_monitor")
     @patch("src.services.OllamaClient")
     @patch("src.services.GitHubClient")
-    @patch("src.services.MCPClient")
     def test_service_manager_initialize_services_no_github_token(
         self,
-        mock_mcp_class,
         mock_github_class,
         mock_ollama_class,
         mock_get_health_monitor,
@@ -900,10 +684,8 @@ class TestServiceManager:
 
         mock_ollama_reasoning = MagicMock()
         mock_ollama_code = MagicMock()
-        mock_mcp = MagicMock()
 
         mock_ollama_class.side_effect = [mock_ollama_reasoning, mock_ollama_code]
-        mock_mcp_class.return_value = mock_mcp
 
         manager = ServiceManager(config)
 
@@ -922,7 +704,6 @@ class TestServiceManager:
             "ollama_reasoning": True,
             "ollama_code": False,
             "github": True,
-            "mcp": True,
         }.get(name, False)
 
         config = MagicMock()
@@ -932,12 +713,10 @@ class TestServiceManager:
         mock_ollama_reasoning = MagicMock()
         mock_ollama_code = MagicMock()
         mock_github = MagicMock()
-        mock_mcp = MagicMock()
 
         manager.ollama_reasoning = mock_ollama_reasoning
         manager.ollama_code = mock_ollama_code
         manager.github = mock_github
-        manager.mcp = mock_mcp
 
         result = asyncio.run(manager.check_services_health())
 
@@ -945,7 +724,6 @@ class TestServiceManager:
             "ollama_reasoning": True,
             "ollama_code": False,
             "github": True,
-            "mcp": True,
         }
         assert result == expected
 
@@ -963,7 +741,6 @@ class TestServiceManager:
         manager.ollama_reasoning = None
         manager.ollama_code = None
         manager.github = None
-        manager.mcp = None
 
         result = asyncio.run(manager.check_services_health())
 
@@ -971,7 +748,6 @@ class TestServiceManager:
             "ollama_reasoning": False,
             "ollama_code": False,
             "github": False,
-            "mcp": False,
         }
         assert result == expected
 
@@ -985,13 +761,7 @@ class TestServiceManager:
         config = MagicMock()
         manager = ServiceManager(config)
 
-        mock_mcp = MagicMock()
-        mock_mcp.close = AsyncMock()
-        manager.mcp = mock_mcp
-
         asyncio.run(manager.close_services())
-
-        mock_mcp.close.assert_called_once()
 
 
 class TestGlobalServiceFunctions:

@@ -14,22 +14,4 @@ from .code_extractor_agent import CodeExtractorAgent
 from .code_integrator_agent import CodeIntegratorAgent
 from .code_reviewer_agent import CodeReviewerAgent
 from .state import State, CodeGenerationState
-from .tools import (
-    read_file_tool,
-    list_files_tool,
-    check_file_exists_tool,
-    npm_search_tool,
-    npm_install_tool,
-    npm_list_tool,
-)
 from .utils import validate_github_url
-
-# MCP tools list for agent integration
-mcp_tools = [
-    read_file_tool,
-    list_files_tool,
-    check_file_exists_tool,
-    npm_search_tool,
-    npm_install_tool,
-    npm_list_tool,
-]

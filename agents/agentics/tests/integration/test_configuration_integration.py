@@ -21,6 +21,14 @@ import asyncio
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
+# B17: live-service integration tests. Skip cleanly (not error) without OLLAMA_HOST.
+# GitHub public-repo reads are token-less, so GITHUB_TOKEN is NOT a skip condition.
+_REQUIRES_LIVE = not os.getenv("OLLAMA_HOST")
+pytestmark = pytest.mark.skipif(
+    _REQUIRES_LIVE,
+    reason="B17: live Ollama integration tests skipped without OLLAMA_HOST (GitHub public-read is token-less)",
+)
+
 from src.agentics import AgenticsApp
 from src.config import AgenticsConfig, init_config, get_config, ConfigValidationError
 from src.services import init_services, ServiceManager, get_service_manager

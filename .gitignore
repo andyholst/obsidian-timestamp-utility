@@ -47,4 +47,12 @@ agents/agentics/.cache/huggingface
 .env
 .env copy
 
-backups
+# timestamped backups of main.ts / main.test.ts before agentic generation
+backups/
+**/backups/
+
+# local error/log scratch files
+err.txt
+parse.err
+# Reversible holding area for quarantined (not deleted) Python modules
+.quarantine/

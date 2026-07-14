@@ -13,6 +13,36 @@ from .prompts import ModularPrompts
 from .circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
 
 
+def _derive_feature_name_from_change(change: str) -> str | None:
+    """§6.1 Derive a stable feature name from the OpenSpec change's spec title.
+
+    Reads ``openspec/changes/<change>/specs/<change>/spec.md`` (or ``tasks.md``) and returns
+    the first Markdown H1/H2 title, slugified (e.g. ``uuid-v7-modal``). Returns None when no
+    change spec is found, so the caller falls back to the command id. This keeps the generated
+    test's feature name derived from the spec, not a hardcoded string.
+    """
+    proj = os.getenv("PROJECT_ROOT", "/project")
+    candidates = [
+        os.path.join(proj, "openspec", "changes", change, "specs", change, "spec.md"),
+        os.path.join(proj, "openspec", "changes", change, "tasks.md"),
+    ]
+    text = ""
+    for p in candidates:
+        if os.path.isfile(p):
+            with open(p, "r", encoding="utf-8") as f:
+                text = f.read()
+            break
+    if not text:
+        return None
+    m = re.search(r"^#{1,2}\s+(.+)$", text, re.MULTILINE)
+    if not m:
+        return None
+    title = m.group(1).strip().lower()
+    # slugify: lowercase, spaces/dashes -> single dash, strip non-alphanumerics
+    slug = re.sub(r"[^a-z0-9]+", "-", title).strip("-")
+    return slug or None
+
+
 class GeneratorAgent(BaseAgent):
     """Agent responsible for generating tests collaboratively with code generation."""
 
@@ -40,6 +70,14 @@ class GeneratorAgent(BaseAgent):
             method_name = method_match.group(1) if method_match else "unknownMethod"
             cmd_match = re.search(r'id\s*:\s*["\']([^"\']+)["\']', generated_code)
             command_id = cmd_match.group(1) if cmd_match else "unknownCommand"
+            # §6.1 Derive the feature name from the OpenSpec capability (change spec title),
+            # not a hardcoded string. Falls back to the command id when no change is set.
+            change = os.getenv("CHANGE")
+            feature_name = command_id
+            if change:
+                spec_title = _derive_feature_name_from_change(change)
+                if spec_title:
+                    feature_name = spec_title
             original_ticket_content = inputs.get("original_ticket_content", "")
 
             # Read existing tests from disk
@@ -53,11 +91,15 @@ class GeneratorAgent(BaseAgent):
                 "You are an expert at writing Jest tests for Obsidian plugins.\n\n"
                 "GENERATED CODE TO TEST:\n" + generated_code + "\n\n"
                 "METHOD: " + method_name + "\n"
-                "COMMAND: " + command_id + "\n\n"
+                "COMMAND: " + command_id + "\n"
+                "FEATURE: " + feature_name + "\n\n"
                 "EXISTING TESTS:\n" + existing_test_content + "\n\n"
                 "Generate 2 describe blocks to ADD to the existing test file:\n"
                 "1. describe('" + method_name + " method', ...) - test the method directly\n"
-                "2. describe('" + command_id + " command', ...) - test the command callback\n\n"
+                "2. describe('" + feature_name + " command', ...) - test the command callback\n\n"
+                "The command test MUST assert: (a) the command is registered via "
+                "this.addCommand, (b) the generated text is inserted at the editor cursor, "
+                "and (c) a Notice is shown when no active editor is present.\n\n"
                 "Match the existing test style exactly.\n"
                 "Use new TimestampPlugin(mockApp, {} as any) and await plugin.onload().\n"
                 "Verify method return values and editor.replaceSelection calls.\n\n"

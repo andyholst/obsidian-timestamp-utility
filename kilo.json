@@ -1,5 +1,0 @@
-{
-  "$schema": "https://app.kilo.ai/config.json",
-  "instructions": ["AGENTS.md", ".kilocode/workflows/**/*.md"],
-  "default_agent": "code"
-}

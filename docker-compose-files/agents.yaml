@@ -1,66 +1,46 @@
 services:
-  mcp-bridge:
-    image: mcp-bridge
-    build:
-      context: ../docker-files/mcp
-      dockerfile: Dockerfile
-    volumes:
-      - ../.kilocode:/app/.kilocode:ro
-    environment:
-      - MCP_CONFIG_PATH=/app/.kilocode/mcp.json
-    ports:
-      - "3003:3003"
-    network_mode: host
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   agentics:
     image: agentics
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     build:
-      context: ../agents/agentics
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: containers/agents/Dockerfile
       args:
-        HOST_UID: ${HOST_UID}
-        HOST_GID: ${HOST_GID}
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     volumes:
-      - ../agents/agentics/src:/app/prod
       - ..:/project
+      - /home/asimov/repository/git/projects/obsidian-timestamp-utility/agents/agentics/src:/app/prod
+      - /home/asimov/repository/git/projects/obsidian-timestamp-utility/node_modules:/project/node_modules
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://localhost:11434
+      - OLLAMA_HOST=http://127.0.0.1:11434
       - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
+      - CHANGE=${CHANGE}
       - PYTHONDONTWRITEBYTECODE=1
+    # Rootless nerdctl: these services use `network_mode: host`, so the container shares the
+    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, so the container reaches it
+    # at http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
+    # does NOT resolve under rootless nerdctl and must NOT be used (it returns 000).
+    extra_hosts:
+      - host.docker.internal:host-gateway
     network_mode: host
-    command: python -m prod.agentics https://github.com/andyholst/obsidian-timestamp-utility/issues/20
-
-  validate-test-suite:
-    image: agentics
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    volumes:
-      - ../agents/agentics/src:/app/prod
-      - ..:/project
-    environment:
-      - PROJECT_ROOT=/project
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
-      - PYTHONDONTWRITEBYTECODE=1
-    network_mode: host
-    command: ["python", "/project/scripts/test_suite_validation.py"]
+    # Default: run the agentic pipeline against a LOCAL OpenSpec change (no GitHub, no MCP).
+    # Override with: docker compose -f docker-compose-files/agents.yaml run --rm agentics \
+    #   python -m prod.agentics openspec:<change-name>
+    command: python -m prod.agentics openspec:${CHANGE:-uuid-modal-agentic-generation}
 
   unit-test-agents:
     image: agentics
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    build:
+      context: ..
+      dockerfile: containers/agents/Dockerfile
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
@@ -68,22 +48,32 @@ services:
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
-      - OLLAMA_HOST=http://localhost:11434
+      - OLLAMA_HOST=http://127.0.0.1:11434
       - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3003
+    # Rootless nerdctl: this service uses `network_mode: host`, so the container shares the
+    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, reachable at
+    # http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
+    # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
+    extra_hosts:
+      - host.docker.internal:host-gateway
     command: ["bash", "-c", "cd /app && python -m pytest tests/unit/ -vv -s --tb=long $${TEST_FILTER}"]
     network_mode: host
 
   integration-test-agents:
     image: agentics
     user: root
+    build:
+      context: ..
+      dockerfile: containers/agents/Dockerfile
+      args:
+        HOST_UID: ${HOST_UID:-1000}
+        HOST_GID: ${HOST_GID:-1000}
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
@@ -93,7 +83,7 @@ services:
     environment:
       - PROJECT_ROOT=/app
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://localhost:11434
+      - OLLAMA_HOST=http://127.0.0.1:11434
       - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
@@ -103,137 +93,12 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3003
+    # Rootless nerdctl: this service uses `network_mode: host`, so the container shares the
+    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, reachable at
+    # http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
+    # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
+    extra_hosts:
+      - host.docker.internal:host-gateway
     command: ["bash", "-c", "cd /app && python -m pytest tests/integration/ -vv -s --tb=long $${TEST_FILTER}"]
     network_mode: host
 
-  unit-test-agents-verbose:
-    image: agentics
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    volumes:
-      - ../agents/agentics/src:/app/src
-      - ../agents/agentics/tests:/app/tests
-      - ..:/project
-      - ../logs:/app/logs
-      - ../agents/agentics/.cache/huggingface:/tmp/.cache/huggingface
-    environment:
-      - PROJECT_ROOT=/project
-      - GITHUB_TOKEN=dummy
-      - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
-      - PYTHONPATH=/app
-      - TEST_FILTER=${TEST_FILTER}
-      - HOST_UID=${HOST_UID:-1000}
-      - HOST_GID=${HOST_GID:-1000}
-      - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3003
-    command:
-      - bash
-      - -c
-      - |
-        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/unit/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Unit tests completed.'; exit $$failed
-    network_mode: host
-
-  unit-test-agents-watch:
-    image: agentics
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    volumes:
-      - ../agents/agentics/src:/app/src
-      - ../agents/agentics/tests:/app/tests
-      - ..:/project
-      - ../logs:/app/logs
-    environment:
-      - PROJECT_ROOT=/project
-      - GITHUB_TOKEN=dummy
-      - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - TEST_ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility
-      - PYTHONPATH=/app
-      - TEST_FILTER=${TEST_FILTER}
-      - HOST_UID=${HOST_UID:-1000}
-      - HOST_GID=${HOST_GID:-1000}
-      - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3003
-    command:
-      - watchmedo
-      - auto-restart
-      - --patterns=*.py
-      - --recursive
-      - /app/src
-      - /app/tests/unit
-      - --
-      - bash
-      - -c
-      - |
-        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/unit/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Unit tests completed.'; exit $failed
-    network_mode: host
-    restart: unless-stopped
-
-  integration-test-agents-verbose:
-    image: agentics
-    user: root
-    volumes:
-      - ../agents/agentics/src:/app/src
-      - ../agents/agentics/tests:/app/tests
-      - ..:/project
-      - ../logs:/app/logs
-      - ../agents/agentics/.cache/huggingface:/tmp/.cache/huggingface
-    environment:
-      - PROJECT_ROOT=/project
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
-      - PYTHONPATH=/app
-      - TEST_FILTER=${TEST_FILTER}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
-      - HOST_UID=${HOST_UID:-1000}
-      - HOST_GID=${HOST_GID:-1000}
-      - PYTHONDONTWRITEBYTECODE=1
-      - MCP_SERVER_URL=http://localhost:3003
-    command:
-      - bash
-      - -c
-      - |
-        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/integration/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Integration tests completed.'; exit $$failed
-    network_mode: host
-
-  integration-test-agents-watch:
-    image: agentics
-    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    volumes:
-      - ../agents/agentics/src:/app/src
-      - ../agents/agentics/tests:/app/tests
-      - ..:/project
-      - ../logs:/app/logs
-    environment:
-      - PROJECT_ROOT=/project
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://localhost:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
-      - PYTHONPATH=/app
-      - TEST_FILTER=${TEST_FILTER}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
-      - HOST_UID=${HOST_UID:-1000}
-      - HOST_GID=${HOST_GID:-1000}
-      - PYTHONDONTWRITEBYTECODE=1
-    command:
-      - watchmedo
-      - auto-restart
-      - --patterns=*.py
-      - --recursive
-      - /app/src
-      - /app/tests/integration
-      - --
-      - bash
-      - -c
-      - |
-        failed=0; total_collected=$$; echo "=== Collected $$total_collected tests before running all ===" ; for file in tests/integration/test_*.py; do base_file="$${file##*/}"; base_file="$${base_file%.py}"; tests="$$(python -m pytest --collect-only -q "$$file" | grep '::' | sed 's/.*:://')"; if [ -z "$$tests" ]; then echo "⚠️ No tests found in $$file"; python -m pytest --collect-only -q "$$file"; continue; fi; echo "🧪 Found tests: $$tests"; for test in $$tests; do echo "▶️ Running: $$test"; timestamp=$$(date -u +%Y-%m-%d_%H%M%S); logfile="/app/logs/$${timestamp}_$${base_file}_$${test}_output.txt"; python -m pytest -vv -s --tb=long "$$file" -k "$$test" $${TEST_FILTER} 2>&1 | tee "$$logfile"; exitcode=$${PIPESTATUS[0]}; if [ $$exitcode -ne 0 ]; then echo "❌ FAILED: $$test"; cat "$$logfile"; mv "$$logfile" "/app/logs/failed/"; failed=1; else echo "✅ PASSED: $$test"; mv "$$logfile" "/app/logs/success/"; fi; done; done; echo "=== Ran $$total_collected tests (all attempted individually) ===" ; echo '🏁 Integration tests completed.'; exit $$failed
-    network_mode: host
-    restart: unless-stopped

@@ -6,7 +6,6 @@ from typing import Dict, Any
 from .base_agent import BaseAgent
 from .state import State
 from .utils import safe_json_dumps, log_info
-from .mcp_client import get_mcp_client
 
 
 class FeedbackAgent(BaseAgent):
@@ -40,21 +39,6 @@ class FeedbackAgent(BaseAgent):
         if "feedback_history" not in state["memory"]:
             state["memory"]["feedback_history"] = []
         state["memory"]["feedback_history"].append(metrics)
-
-        # Store metrics in MCP memory for persistence
-        try:
-            mcp_client = get_mcp_client()
-            metrics_key = f"feedback_{metrics.get('ticket_title', 'unknown')}_{metrics.get('timestamp', 'now')}"
-            metrics_json = json.dumps(metrics)
-            success = asyncio.run(mcp_client.store_memory(metrics_key, metrics_json))
-            if success:
-                log_info(
-                    self.logger, f"Stored feedback metrics in MCP memory: {metrics_key}"
-                )
-            else:
-                log_info(self.logger, "Failed to store feedback metrics in MCP memory")
-        except Exception as e:
-            log_info(self.logger, f"MCP memory storage failed: {str(e)}")
 
         # Initialize conversation history if not present
         if "conversation_history" not in state:
@@ -135,14 +119,11 @@ class FeedbackAgent(BaseAgent):
         }
 
     def retrieve_historical_feedback(self, ticket_title: str) -> Dict[str, Any]:
-        """Retrieve historical feedback for a similar ticket from MCP memory."""
-        try:
-            mcp_client = get_mcp_client()
-            # Try to find similar feedback in memory
-            memory_key = f"feedback_{ticket_title}"
-            stored_metrics = asyncio.run(mcp_client.retrieve_memory(memory_key))
-            if stored_metrics:
-                return json.loads(stored_metrics)
-        except Exception as e:
-            log_info(self.logger, f"Failed to retrieve historical feedback: {str(e)}")
+        """Retrieve historical feedback for a similar ticket.
+
+        NOTE: MCP-backed memory was removed (project uses docker-compose only,
+        no MCP server). Historical feedback now lives in the in-process
+        ``state["memory"]["feedback_history"]`` only; this method returns {} when
+        no in-memory history is supplied.
+        """
         return {}

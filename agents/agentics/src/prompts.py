@@ -43,7 +43,7 @@ class ModularPrompts:
             " - Do not add new imports, modals, or external dependencies unless specified in the npm packages and available.\n"
             " - You may include single-line comments (//) above new methods to describe their purpose, but do not add any other comments or explanations.\n"
             " - Keep the code simple and focused on the task; do not add complex features unless specified.\n"
-            " - Before generating, proactively use validate_obsidian_api and validate_npm_package tools from api_validation_tools.py. If invalid, use alternatives like app.notice or manual DOM.\n"
+            " - Before generating, proactively validate Obsidian API and npm package usage; if invalid, use alternatives like app.notice or manual DOM.\\n"
             " - Ensure code satisfies all acceptance criteria exactly. If vague, default to basic command + method with app.workspace.currentFile notice.\n"
             " - If requirements or acceptance_criteria are empty or vague, derive 3-5 minimal actionable items from title and description (e.g., 'Implement as Obsidian command', 'Add public method with Notice placeholder', 'Handle basic errors', 'Add type annotations').\n"
         )
