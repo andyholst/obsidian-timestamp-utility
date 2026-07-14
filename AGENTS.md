@@ -64,9 +64,17 @@ each with its own `Dockerfile`, referenced by `docker-compose-files/*.yaml`.
 When a change is active in `openspec/changes/`, run these phases in order.
 
 ### Phase 2 — Propose (create the change with the CLI)
+Create the change directory with the **real `openspec` CLI** (never hand-write it — durable
+behaviour B15). The reproducible harness wraps exactly this CLI step and then seeds the
+conventional files (`proposal.md` / `tasks.md` / `specs/<capability>/spec.md`) from a template:
 ```bash
+make openspec-new NAME=<kebab-name> [CAPABILITY=<cap>] [DESC="..."] [GOAL="..."]
+# equivalent manual CLI step (what the harness runs under the hood):
 openspec new change <kebab-name>        # creates openspec/changes/<kebab-name>/
 ```
+`make openspec-new` invokes `openspec new change <name>`, seeds the delta-format files, and runs
+`openspec validate <name>` so the change is green before you implement. `NAME` is required;
+`CAPABILITY` defaults to `NAME`. It refuses to overwrite an existing change dir.
 Write `proposal.md` (Why / What Changes / Capabilities / Impact) and, for each new capability,
 `specs/<capability>/spec.md` in the **delta format** the CLI validates:
 ```markdown

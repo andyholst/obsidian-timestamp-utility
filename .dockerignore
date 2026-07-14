@@ -63,6 +63,5 @@ docker-files/
 
 # Python
 agents/agentics/.dockerignore
-agents/agentics/ARCHITECTURE_REFACTOR.md
-agents/agentics/LLM_CODE_VALIDATION.md
-agents/agentics/TEST_SUITE_README.md
+docs/architecture/LLM_CODE_VALIDATION.md
+docs/architecture/TEST_SUITE_README.md

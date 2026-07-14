@@ -1,7 +1,7 @@
 """
 Tests for LangChain best practices compliance.
 Validates LCEL usage, chain composition, tool integration, state management immutability,
-and error recovery patterns as specified in ARCHITECTURE_REFACTOR.md and LLM_CODE_VALIDATION.md.
+and error recovery patterns as specified in docs/AGENTIC_ARCHITECTURE.md and docs/architecture/LLM_CODE_VALIDATION.md.
 """
 
 import pytest

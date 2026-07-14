@@ -1,7 +1,7 @@
 """
 Integration tests for Phase 5: Workflow Orchestration.
 
-Tests composable workflows, parallel processing, and logging as outlined in ARCHITECTURE_REFACTOR.md Phase 5.
+Tests composable workflows, parallel processing, and logging as outlined in docs/AGENTIC_ARCHITECTURE.md.
 Validates real workflow execution with comprehensive asserts on workflow execution, state transitions, and output validation.
 """
 

@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-14
+goal: README is accurate to the real Makefile/agentic pipeline and keeps its
+  existing format

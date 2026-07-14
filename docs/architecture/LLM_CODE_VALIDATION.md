@@ -2,7 +2,7 @@
 
 This document provides a comprehensive guide for validating LLM-generated code
 within the Agentics system. It complements the
-[ARCHITECTURE_REFACTOR.md](ARCHITECTURE_REFACTOR.md) by focusing on systematic
+[AGENTIC_ARCHITECTURE.md](../AGENTIC_ARCHITECTURE.md) by focusing on systematic
 validation and testing of generated TypeScript code and Python agentics
 components.
 

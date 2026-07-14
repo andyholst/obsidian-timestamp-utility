@@ -30,6 +30,23 @@ Zettelkasten notes and effecient planning:
   `- [ ] HH:MM - HH:MM Task description` and grouped into daily files to be
   synced with ICAL services (like `2025-01-01.md`).
 
+## Documentation
+
+This repository is documentation-driven (OpenSpec workflow). The key references are:
+
+- **[`docs/AGENTIC_ARCHITECTURE.md`](docs/AGENTIC_ARCHITECTURE.md)** — the canonical architecture
+  of the Python agentic pipeline (module map, the three-phase workflow, and the deterministic
+  merge floor that writes `src/main.ts`).
+- **[`docs/architecture/`](docs/architecture/)** — agentic design docs:
+  [dependency management](docs/architecture/ARCHITECTURE_DEPENDENCY_MANAGEMENT.md),
+  [LLM code validation](docs/architecture/LLM_CODE_VALIDATION.md),
+  [test suite guide](docs/architecture/TEST_SUITE_README.md), and the
+  [integration test plan](docs/architecture/INTEGRATION_TEST_PLAN.md).
+- **[`docs/openspec-engineering-loop-harness.md`](docs/openspec-engineering-loop-harness.md)** —
+  the OpenSpec harness + loop engineering reference (durable behaviours B1–B21).
+- **[`AGENTS.md`](AGENTS.md)** — the agent execution manual for this OpenSpec-driven repo
+  (how changes are proposed, generated, verified, and archived).
+
 ## Installation
 
 You can install the plugin either by downloading a pre-built release or by
@@ -160,13 +177,11 @@ To process reminder files and convert them into organized time-blocked tasks:
 
 ## Running the Ticket Interpreter Agent
 
-The ticket interpreter agent is an AI-powered tool designed to process GitHub
-issues and extract structured information (e.g., title, description,
-requirements, and acceptance criteria) using LangChain and LangGraph. The output
-is provided in JSON format and logged to both the console and a file. The
-purpose is to use it for other agents to generate TypeScript code, tests and to
-create pull request and review the generated code tests and see it fulfills the
-acceptance criteria.
+The agentic pipeline is an AI-powered tool that turns an OpenSpec change (or a GitHub issue) into
+TypeScript code and tests for the plugin, using LangChain and LangGraph. It reads the change's
+proposal, tasks, and specs, generates the implementation and jest tests, then merges them into the
+plugin source via a deterministic floor and verifies the result with `make build-app` /
+`make test-app`.
 
 ### Prerequisites
 
@@ -182,43 +197,38 @@ Before running the ticket interpreter agent, ensure you have the following:
   - OLLAMA_HOST: The URL of your Ollama LLM service (default:
     http://localhost:11434).
   - OLLAMA_REASONING_MODEL: The LLM model for reasoning tasks (default:
-    qwen3.5:9b).
+    sorc/qwen3.5-claude-4.6-opus:9b).
   - OLLAMA_CODE_MODEL: The LLM model for code generation (default:
-    qwen3.5:4b).
+    sorc/qwen3.5-claude-4.6-opus:9b).
 
 Set these environment variables in your terminal: export
-GITHUB_TOKEN=your_token_here export OLLAMA_HOST=http://localhost:11434 export
-OLLAMA_REASONING_MODEL=qwen3.5:9b export OLLAMA_CODE_MODEL=qwen3.5:4b
+GITHUB_TOKEN=your_token_here
+export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_REASONING_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
+export OLLAMA_CODE_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
 
 ### Steps to Run the Agent
 
-1. Build the Docker Image:
-   - Build the necessary Docker image for the agent by running: make
-     build-image-agents
-   - This command uses the docker-compose-files/agents.yaml file to set up the
-     environment.
+1. Run the Agent:
+   - Execute the agentic pipeline against a LOCAL OpenSpec change (no GitHub fetch, no MCP)
+     using the following command: make run-agentics CHANGE=<openspec-change-name>
+   - Replace <openspec-change-name> with the name of an existing change under
+     openspec/changes/ (e.g. uuid-modal-agentic-generation). The pipeline reads the change's
+     proposal.md / tasks.md / specs locally and generates + verifies TypeScript and tests.
 
-2. Run the Agent:
-   - Execute the ticket interpreter agent with a specific GitHub issue URL using
-     the following command: make run-agentics
-     ISSUE_URL=https://github.com/owner/repo/issues/123
-   - Replace https://github.com/owner/repo/issues/123 with the URL of the GitHub
-     issue you want to process.
-
-3. View the Output:
-   - The agent processes the issue and outputs the result in JSON format.
+2. View the Output:
+   - The agent processes the change and writes the generated code/tests into the plugin
+     source (src/main.ts, src/__tests__/main.test.ts), merging via the deterministic floor.
    - Check the console for immediate feedback.
-   - Review the agentics.log file in the project directory for detailed logs,
-     including the final JSON output.
 
-Example: To process issue #20 from this repository, run: make run-agentics
-ISSUE_URL=https://github.com/andyholst/obsidian-timestamp-utility/issues/20
+Example: To run the pipeline on the local change `uuid-modal-agentic-generation`, run:
+make run-agentics CHANGE=uuid-modal-agentic-generation
 
 ## Running the Tests
 
-The ticket interpreter agent includes unit and integration tests to verify its
-functionality. These tests are defined in test_ticket_interpreter.py (unit
-tests) and test_ticket_interpreter_integration.py (integration tests).
+The agentic pipeline includes unit and integration tests to verify its
+functionality. These tests are defined under `agents/agentics/tests/unit/` (unit
+tests) and `agents/agentics/tests/integration/` (integration tests).
 
 ### Prerequisites
 
@@ -243,9 +253,6 @@ and LLM response processing, using mocked data.
 - Run the unit tests with: make test-agents-unit
 
 ### Running Integration Tests
-
-\nNote: Integration tests and agentics require persistent MCP server on
-localhost:3003. Run `make start-mcp-persist &` in another terminal first.
 
 Integration tests validate the full workflow with real GitHub API calls and LLM
 interactions, testing scenarios like well-structured tickets, sloppy tickets,

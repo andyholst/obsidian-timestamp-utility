@@ -3,17 +3,17 @@
 ## Overview of Phase 1 Components to Test
 
 Focus on key refactored components from
-[`agents/agentics/ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md#phase-1-core-infrastructure):
+[`AGENTIC_ARCHITECTURE.md`](../AGENTIC_ARCHITECTURE.md#architecture-refactor):
 
 - **AgentComposer**
   ([`agent_composer.py`](agents/agentics/src/agent_composer.py)): Modular
   agent/tool registration and LCEL workflow composition.
 - **Immutable State Management** ([`state.py`](agents/agentics/src/state.py)):
-  [`CodeGenerationState`](agents/agentics/src/state.py:27) frozen dataclass with
+  [`CodeGenerationState`](agents/agentics/src/state.py:41) frozen dataclass with
   `with_*` transformation methods.
 - **Tool Integration Framework** ([`tools.py`](agents/agentics/src/tools.py)):
-  [`ToolExecutor`](agents/agentics/src/tools.py:12), `@tool` functions (e.g.,
-  [`read_file_tool`](agents/agentics/src/tools.py:58)).
+  [`ToolExecutor`](agents/agentics/src/tools.py:13), `@tool` functions (e.g.,
+  [`read_file_tool`](agents/agentics/src/tools.py:60)).
 - **BaseAgent** ([`base_agent.py`](agents/agentics/src/base_agent.py)): Core
   agent with circuit breaker integration.
 - **ToolIntegratedAgent**
@@ -50,9 +50,9 @@ Verify composable workflows with real LCEL chaining.
     subclasses + tool; create workflow; invoke dummy state; assert sequential
     execution.
   - **Involved**:
-    [`AgentComposer`](agents/agentics/src/agent_composer.py:15).register_agent/tool,
+    [`AgentComposer`](agents/agentics/src/agent_composer.py:16).register_agent/tool,
     create_workflow (LCEL `|` chain),
-    [`WorkflowConfig`](agents/agentics/src/agent_composer.py:8).
+    [`WorkflowConfig`](agents/agentics/src/agent_composer.py:9).
   - **Data Flow**: `dummy_state={}` → agent1.process → agent2.process →
     `result_state={'history': ['agent1', 'agent2']}`.
   - **Assertions**: `len(result['history']) == 2`, order preserved; workflow
@@ -65,7 +65,7 @@ Verify composable workflows with real LCEL chaining.
   - **Description**: Register agent supporting `bind_tools`, tools;
     create/invoke workflow; assert tool context bound.
   - **Involved**:
-    [`agent_composer.py`](agents/agentics/src/agent_composer.py:49) bind_tools
+    [`agent_composer.py`](agents/agentics/src/agent_composer.py:65) bind_tools
     logic.
   - **Data Flow**: register_tool(['read_file_tool']) → bind → invoke → agent
     sees tools.
@@ -88,7 +88,7 @@ Verify frozen transformations.
 
 - [x] 4. **State Transformation Chain**
   - **Description**: Create
-    [`CodeGenerationState`](agents/agentics/src/state.py:27); chain
+    [`CodeGenerationState`](agents/agentics/src/state.py:41); chain
     `with_code/with_tests`; assert new instances.
   - **Involved**: [`state.py`](agents/agentics/src/state.py) `with_*` methods.
   - **Data Flow**: `base_state` → `with_code('dummy')` → `with_tests('test')` →
@@ -115,7 +115,7 @@ Real tool loops.
   - **Description**: Dummy LLM `tool_calls` → executor → followup LLM.
   - **Involved**:
     [`ToolIntegratedAgent`](agents/agentics/src/tool_integrated_agent.py:11).process_with_tools,
-    [`ToolExecutor`](agents/agentics/src/tools.py:12).
+    [`ToolExecutor`](agents/agentics/src/tools.py:13).
   - **Data Flow**: `state` → llm (read_file AIMessage) → exec → followup →
     `'tool_integrated_response'`.
   - **Assertions**: File read content processed; response in state.
@@ -124,7 +124,7 @@ Real tool loops.
 
 - [x] 7. **Multi-Tool Chain + File Mods**
   - **Description**: read → write → list; assert files changed.
-  - **Involved**: [`read_file_tool`](agents/agentics/src/tools.py:58), write,
+  - **Involved**: [`read_file_tool`](agents/agentics/src/tools.py:60), write,
     list.
   - **Data Flow**: tool_calls list → sequential exec → files created/updated.
   - **Assertions**: `os.path.exists('output.txt')`, content matches dummy.
@@ -266,4 +266,4 @@ All gaps addressed; full Phase 1-5 coverage.
 ## Summary
 
 Integration tests now fully cover refactored architecture per
-[`ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md).
+[`AGENTIC_ARCHITECTURE.md`](../AGENTIC_ARCHITECTURE.md).

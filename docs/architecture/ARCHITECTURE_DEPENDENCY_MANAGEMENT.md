@@ -11,14 +11,14 @@
 3. **Test Failures from Missing Deps**: Post-test errors like \"Cannot find
    module '@uuid/uuid'\" not handled by dependency recovery (e.g., Phase 3 error
    recovery in
-   [`ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md)).
+   [`AGENTIC_ARCHITECTURE.md`](../AGENTIC_ARCHITECTURE.md)).
 4. **Workflow Timing**: Analyzer runs too early (after issue processing); should
    run post-generation/integration.
 
 ## Proposed Architecture
 
 Aligns with Phase 4 (npm tools) of
-[`ARCHITECTURE_REFACTOR.md`](agents/agentics/ARCHITECTURE_REFACTOR.md): Extend
+[`AGENTIC_ARCHITECTURE.md`](../AGENTIC_ARCHITECTURE.md): Extend
 tool-integrated agents for dependency lifecycle.
 
 ### Core Principles

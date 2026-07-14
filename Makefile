@@ -52,7 +52,7 @@ DOCKER_SOCK := $(shell \
         lint-python test-validator format \
         test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast test-agents-e2e \
         test-agents test-agents-real verify-agentics-after-run \
-        run-agentics phase7-archive b9-perms record-work \
+        run-agentics phase7-archive b9-perms record-work squash-commits openspec-new \
         check-deps check-github check-issue-url check-ollama check-secrets \
         fix-perms create-logs \
         collect-tests collect-executed generate-requirements \
@@ -327,6 +327,19 @@ phase7-archive: ## Archive an OpenSpec change (spec only) + assert durable E2E p
 # Hermes CLI (`hermes -z`, same pattern as the `squash-commits` target) to draft the prose, then writes
 # agent-wiki/YYYY-MM-DD-<change>.md and updates agent-wiki/index.md. b9-perms is a prerequisite so
 # the container write targets are world-writable under rootless nerdctl. No git commit/push (B4/B14).
+# ---- OpenSpec change scaffolding harness (B15: change dir created via the real `openspec` CLI) ----
+#
+# Wraps scripts/scaffold-openspec-change.sh, which calls `openspec new change <NAME>` (the exact
+# CLI step a human runs — never hand-writes the directory) then seeds proposal.md / tasks.md /
+# specs/<CAPABILITY>/spec.md from a template and runs `openspec validate`. b9-perms is a prerequisite
+# so the write targets are world-writable under rootless nerdctl. No git commit/push (B4/B14).
+# Usage: make openspec-new NAME=<kebab-name> [DESC="..."] [GOAL="..."] [CAPABILITY=<cap>]
+openspec-new: b9-perms ## Scaffold an OpenSpec change via the openspec CLI + seeded template (NAME required)
+	@if [ -z "$(NAME)" ]; then echo "ERROR: NAME is required. Run: make openspec-new NAME=<kebab-name> [CAPABILITY=<cap>] [DESC=...] [GOAL=...]"; echo "--- script usage ---"; bash scripts/scaffold-openspec-change.sh --help; exit 1; fi
+	@echo "=== OPENSPEC-NEW: scaffolding change $(NAME) ==="
+	@bash scripts/scaffold-openspec-change.sh --name $(NAME) $(if $(DESC),--desc "$(DESC)",) $(if $(GOAL),--goal "$(GOAL)",) $(if $(CAPABILITY),--capability $(CAPABILITY),)
+	@echo "=== OPENSPEC-NEW complete: review openspec/changes/$(NAME)/ ==="
+
 record-work: b9-perms ## Phase 7 work-log: write agent-wiki/YYYY-MM-DD-<change>.md via scripts/record-work.py
 	@test -n "$(CHANGE)" || { echo "ERROR: set CHANGE=<openspec-change-name> (e.g. make record-work CHANGE=uuid-modal-agentic-generation)"; exit 1; }
 	@echo "=== RECORD-WORK: agent-wiki entry for $(CHANGE) ==="

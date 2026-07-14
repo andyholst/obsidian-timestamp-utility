@@ -66,10 +66,14 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
 
 ## Phase flow (from AGENTS.md)
 0. Structure already scaffolded (`openspec/`, `containers/`, `worktrees/`, `agent-wiki/`).
-1. **Propose:** `openspec new change <kebab>` → write `proposal.md` (Why / What /
-   Capabilities / Impact) and, per capability, `specs/<cap>/spec.md` in delta format:
-   `## ADDED Requirements` → `### Requirement: <name>` (MUST/SHALL) →
-   `#### Scenario:` with `- **WHEN**` / `- **THEN**`. Optionally `design.md`.
+1. **Propose:** create the change with the real `openspec` CLI (B15 — never hand-write the
+   directory). The reproducible harness wraps exactly this CLI step and seeds the conventional
+   files:
+   `make openspec-new NAME=<kebab> [CAPABILITY=<cap>] [DESC="..."] [GOAL="..."]` →
+   write `proposal.md` (Why / What / Capabilities / Impact) and, per capability,
+   `specs/<cap>/spec.md` in delta format: `## ADDED Requirements` →
+   `### Requirement: <name>` (MUST/SHALL) → `#### Scenario:` with `- **WHEN**` / `- **THEN**`.
+   Optionally `design.md`. (Manual equivalent: `openspec new change <kebab>`.)
    Get templates via `openspec instructions proposal --change <name>` /
    `openspec instructions tasks --change <name>`.
 2. **Tasks:** `tasks.md` as a checkbox plan (`- [ ] X.Y ...`). These are the executable
