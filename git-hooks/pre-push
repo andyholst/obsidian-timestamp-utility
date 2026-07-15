@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# pre-push hook: enforce the OpenSpec loop-harness hermetic gate (AGENTS.md B20/B8).
+# Blocks `git push` unless `make loop-collect` AND `make loop-unit` are green.
+# These are Ollama-free and fast (~30s) so they run on every push without external deps.
+#
+# Bypass (emergencies only): LOOP_GATE_SKIP=1 git push ...
+set -euo pipefail
+
+if [[ "${LOOP_GATE_SKIP:-}" == "1" ]]; then
+  echo "[pre-push] LOOP_GATE_SKIP=1 set — skipping hermetic loop gate." >&2
+  exit 0
+fi
+
+export NODE_ENV=development
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+echo "[pre-push] Running hermetic loop gate (loop-collect + loop-unit)..." >&2
+
+fail() {
+  echo "" >&2
+  echo "[pre-push] ❌ LOOP GATE FAILED: $1" >&2
+  echo "[pre-push] Push BLOCKED. Fix the gate, then re-run: make loop-harness" >&2
+  echo "[pre-push] (emergency bypass: LOOP_GATE_SKIP=1 git push ...)" >&2
+  exit 1
+}
+
+echo "[pre-push]   -> make loop-collect" >&2
+if ! timeout 320 make loop-collect >/tmp/prepush_loop-collect.log 2>&1; then
+  fail "loop-collect (see /tmp/prepush_loop-collect.log)"
+fi
+
+echo "[pre-push]   -> make loop-unit" >&2
+if ! timeout 620 make loop-unit >/tmp/prepush_loop-unit.log 2>&1; then
+  fail "loop-unit (see /tmp/prepush_loop-unit.log)"
+fi
+
+echo "[pre-push] ✅ hermetic loop gate green — allowing push." >&2
+exit 0

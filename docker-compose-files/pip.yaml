@@ -1,0 +1,11 @@
+services:
+  pip:
+    build:
+      context: ..
+      dockerfile: containers/pip/Dockerfile
+    stdin_open: false
+    tty: false
+    volumes:
+    - ../:/app
+    working_dir: /app
+    command: ["pip-compile", "docker-files/pip-requirements/requirements.in", "-o", "agents/agentics/requirements.txt"]

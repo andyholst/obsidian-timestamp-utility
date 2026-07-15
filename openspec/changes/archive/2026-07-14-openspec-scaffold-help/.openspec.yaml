@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-14
+goal: Script --help and make openspec-new (no NAME) print usage+examples;
+  verified through make

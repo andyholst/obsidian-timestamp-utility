@@ -1,7 +1,7 @@
 """
 Tests for LangChain best practices compliance.
 Validates LCEL usage, chain composition, tool integration, state management immutability,
-and error recovery patterns as specified in ARCHITECTURE_REFACTOR.md and LLM_CODE_VALIDATION.md.
+and error recovery patterns as specified in docs/AGENTIC_ARCHITECTURE.md and docs/architecture/LLM_CODE_VALIDATION.md.
 """
 
 import pytest
@@ -76,15 +76,17 @@ class TestLangChainBestPractices:
             assert isinstance(collab_gen, Runnable)
 
     def test_tool_integration_patterns(self):
-        """Test that tools are properly integrated into agent workflows."""
-        # Given: Agent with MCP tools available
-        from src.agentics import mcp_tools
+        """Test that tools/service clients are properly integrated into agent workflows."""
+        # Given: Agentics app wiring service clients, not MCP tools
+        from src.agentics import AgenticsApp
 
-        # When: Checking tool integration
-        # Then: Should have access to MCP tools
-        # This tests the overall architecture's tool integration
-        assert isinstance(mcp_tools, list)
-        # Tools are integrated at the workflow level
+        # When: Checking the app is constructible with service clients
+        # Then: The app integrates services at the workflow level (no MCP)
+        app = AgenticsApp()
+        assert hasattr(app, "service_manager")
+        # Tool integration is achieved via service clients (ollama/github),
+        # not a global mcp_tools list.
+        assert not hasattr(app, "mcp_tools")
 
     def test_state_management_immutability(self):
         """Test that state management follows immutability patterns."""

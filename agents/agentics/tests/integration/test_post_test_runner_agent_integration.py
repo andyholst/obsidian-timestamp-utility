@@ -3,11 +3,25 @@ import os
 from unittest.mock import Mock
 from src.post_test_runner_agent import PostTestRunnerAgent
 from src.state import State
+from _e2e_helpers import make_seeded_project_root, plugin_ts_tests_present
 
-# Path to the real project directory mounted in the test environment
-REAL_PROJECT_ROOT = os.getenv("PROJECT_ROOT", "/home/asimov/repository/git/obsidian-timestamp-utility")
+# Seed an ISOLATED temp PROJECT_ROOT with the real plugin files so the pipeline's
+# jest phase operates against a valid baseline (jest must find the existing
+# src/__tests__/main.test.ts). Using a seeded temp dir (not the raw env PROJECT_ROOT,
+# which may have been repointed to an empty temp dir by a sibling test module) keeps
+# this test hermetic and avoids "test count did not grow" (TestRecoveryNeeded).
+REAL_PROJECT_ROOT = make_seeded_project_root(prefix="post_test_project_")
+# The plugin's TypeScript jest scaffold is required here; in the integration container
+# it is shadowed by the Python source mount at /app/src and /project is not mounted, so
+# it is absent -> skip cleanly (B17: live tests skip cleanly).
+HAS_TS_TESTS = plugin_ts_tests_present(REAL_PROJECT_ROOT)
 
 
+@pytest.mark.skipif(
+    not HAS_TS_TESTS,
+    reason="plugin TypeScript test scaffold (src/__tests__/main.test.ts) not "
+    "mounted in integration container (shadowed by Python src mount)",
+)
 def test_post_test_runner_agent_success(dummy_llm):
     """
     Test that PostTestRunnerAgent successfully runs npm install and npm test

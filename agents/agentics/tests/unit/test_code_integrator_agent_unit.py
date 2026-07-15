@@ -57,9 +57,13 @@ class TestCodeIntegratorAgentInit:
         assert agent.code_ext == ".ts"
         assert agent.test_ext == ".test.ts"
         assert agent.llm == mock_llm_client
+        # B11 hardening: the LLM is deliberately NOT given write_file_tool. The
+        # deterministic harness (update_file/create_file -> integrate_test_contract) is the
+        # SOLE writer of generated TS, so the tool set is read_file_tool +
+        # check_file_exists_tool only.
         assert (
-            len(agent.tools) == 3
-        )  # read_file_tool, check_file_exists_tool, and write_file_tool
+            len(agent.tools) == 2
+        )  # read_file_tool, check_file_exists_tool
 
     @patch.dict(os.environ, {}, clear=True)
     def test_init_missing_project_root(self, mock_llm_client):
@@ -107,7 +111,7 @@ class TestCodeIntegratorAgentProcess:
         # Then: State is returned unchanged
         assert result == state
 
-    @patch.dict(os.environ, {"PROJECT_ROOT": "/test/root"})
+    @patch.dict(os.environ, {"PROJECT_ROOT": "/test/root", "CHANGE": ""})
     def test_process_no_files_with_content(
         self, mock_llm_client, sample_state, temp_project_root
     ):
@@ -118,11 +122,12 @@ class TestCodeIntegratorAgentProcess:
 
         agent = CodeIntegratorAgent(mock_llm_client)
 
-        # Mock generate_filename and create_file
-        with (
-            patch.object(agent, "generate_filename", return_value="testFeature"),
-            patch.object(agent, "create_file") as mock_create,
-        ):
+        # B11 hardening: the create-new path writes the canonical plugin files
+        # (src/main.ts, src/__tests__/main.test.ts) via generate_updated_code_file +
+        # create_file. generate_filename was removed (dead code); the canonical
+        # paths are fixed. The deterministic contract assembly is applied inside
+        # generate_updated_code_file, so create_file is called twice (code + test).
+        with patch.object(agent, "create_file") as mock_create:
             # When: Processing
             result = agent.process(state)
 
@@ -131,7 +136,7 @@ class TestCodeIntegratorAgentProcess:
         assert "relevant_test_files" in result
         assert len(result["relevant_code_files"]) == 1
         assert len(result["relevant_test_files"]) == 1
-        # Verify create_file was called twice
+        # Verify create_file was called for the canonical code + test files
         assert mock_create.call_count == 2
 
     @patch.dict(os.environ, {"PROJECT_ROOT": "/test/root"})
@@ -188,30 +193,10 @@ class TestCodeIntegratorAgentHelpers:
         # Then: Thinking tags are removed
         assert result == "final content"
 
-    @patch.dict(os.environ, {"PROJECT_ROOT": "/test/root"})
-    def test_generate_filename_success(self, mock_llm_client):
-        # Given: LLM returns valid filename
-        mock_llm_client.invoke.return_value = "testFeature"
-        agent = CodeIntegratorAgent(mock_llm_client)
-
-        # When: Generating filename
-        result = agent.generate_filename("Add test feature", "Test Feature")
-
-        # Then: Valid filename is returned
-        assert result == "testFeature"
-
-    @patch.dict(os.environ, {"PROJECT_ROOT": "/test/root"})
-    def test_generate_filename_fallback(self, mock_llm_client):
-        # Given: LLM fails, use fallback
-        mock_llm_client.invoke.side_effect = Exception("LLM error")
-        agent = CodeIntegratorAgent(mock_llm_client)
-
-        # When: Generating filename
-        result = agent.generate_filename("Add test feature", "Test Feature")
-
-        # Then: Fallback filename is used
-        assert result == "test"
-
+    # NOTE: generate_filename was removed as dead code (B11 hardening) — the
+    # create-new path now writes the fixed canonical plugin files
+    # (src/main.ts, src/__tests__/main.test.ts) directly, so no LLM filename
+    # generation is needed. The corresponding tests were deleted.
 
 class TestCodeIntegratorAgentFileOperations:
     """Test file operation methods"""

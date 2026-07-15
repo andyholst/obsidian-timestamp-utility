@@ -27,3 +27,8 @@ jobs:
         run: make test-app
         env:
           REPO_NAME: obsidian-timestamp-utility
+
+      - name: Agentic collection guard (fail fast on dangling imports)
+        run: make test-agents-collect
+        env:
+          REPO_NAME: obsidian-timestamp-utility

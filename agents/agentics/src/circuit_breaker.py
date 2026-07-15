@@ -284,57 +284,6 @@ def retry_with_backoff(
     return decorator
 
 
-def retry_with_backoff_async(
-    max_attempts: int = 3,
-    base_delay: float = 1.0,
-    max_delay: float = 60.0,
-    jitter: bool = True,
-    exceptions: tuple = (Exception,),
-):
-    """Decorator for retrying async functions with exponential backoff"""
-
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(*args, **kwargs):
-            last_exception = None
-
-            for attempt in range(max_attempts):
-                try:
-                    return await func(*args, **kwargs)
-                except exceptions as e:
-                    last_exception = e
-
-                    if attempt == max_attempts - 1:
-                        monitor.error(
-                            "retry_all_attempts_failed",
-                            data={
-                                "max_attempts": max_attempts,
-                                "func_name": func.__name__,
-                                "error": str(e),
-                            },
-                        )
-                        raise e
-
-                    delay = exponential_backoff(attempt, base_delay, max_delay, jitter)
-                    monitor.warning(
-                        "retry_attempt_failed",
-                        data={
-                            "attempt": attempt + 1,
-                            "func_name": func.__name__,
-                            "error": str(e),
-                            "retry_delay": delay,
-                        },
-                    )
-                    await asyncio.sleep(delay)
-
-            # This should never be reached, but just in case
-            raise last_exception
-
-        return wrapper
-
-    return decorator
-
-
 class ServiceHealthMonitor:
     """Monitor health of external services and provide graceful degradation"""
 

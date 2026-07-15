@@ -1,7 +1,7 @@
 """
 Integration tests for Phase 5: Workflow Orchestration.
 
-Tests composable workflows, parallel processing, and logging as outlined in ARCHITECTURE_REFACTOR.md Phase 5.
+Tests composable workflows, parallel processing, and logging as outlined in docs/AGENTIC_ARCHITECTURE.md.
 Validates real workflow execution with comprehensive asserts on workflow execution, state transitions, and output validation.
 """
 
@@ -9,6 +9,11 @@ import pytest
 import asyncio
 import os
 import time
+
+# Heavy full-pipeline tests (real multi-agent LLM runs via process_issue) — tagged
+# slow so the fast loop gate (loop-integration) excludes them. Run via
+# `make test-agents-integration` for deep verification.
+pytestmark = pytest.mark.slow
 
 # Set project root for tests that need file system access
 os.environ.setdefault("PROJECT_ROOT", "/tmp/obsidian-project")

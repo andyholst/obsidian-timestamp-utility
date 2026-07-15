@@ -1,0 +1,8 @@
+# Active changes live here.
+
+Create a new folder per change (e.g. `add-2fa-login/`) containing:
+- `proposal.md`   — what and why
+- `tasks.md`      — breakdown of work
+- `specs/`        — requirement + scenario deltas
+
+Hermes picks these up via the `process-openspec-change` skill.

@@ -37,6 +37,10 @@ def test_state_keys():
         "error_type",
         "success",
         "workflow_id",
+        "pre_test_failed",
+        "pre_test_returncode",
+        "self_correct_success",
+        "failing_gate",
     }
 
     # When: Getting type hints

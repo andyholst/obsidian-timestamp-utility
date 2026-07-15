@@ -104,7 +104,6 @@ class TestErrorRecoveryAgent:
             "ollama_reasoning",
             "ollama_code",
             "github",
-            "mcp",
             "typescript_compiler",
             "file_system",
         ]
@@ -825,14 +824,17 @@ class TestErrorRecoveryAgent:
     def test_agent_specific_substitute_strategies(
         self, error_recovery_agent, valid_failed_state
     ):
-        """Test agent-specific substitute strategy implementations"""
+        """Test agent-specific substitute strategy implementations (B10: inert markers, no TS bodies)."""
         # Test code generation substitute
         result = error_recovery_agent._code_generation_substitute(
             valid_failed_state, {}, ValueError("Test")
         )
         assert result["success"] == True
         assert result["substituted"] == True
-        assert "SubstituteImplementation" in valid_failed_state["generated_code"]
+        # B10: the substitute is an inert marker, NOT a hard-coded TS body.
+        assert valid_failed_state["generated_code"] == "// RECOVERY_SUBSTITUTE_CODE"
+        assert "SubstituteImplementation" not in valid_failed_state["generated_code"]
+        assert "class " not in valid_failed_state["generated_code"]
 
         # Test test generation substitute
         result = error_recovery_agent._test_generation_substitute(
@@ -840,7 +842,9 @@ class TestErrorRecoveryAgent:
         )
         assert result["success"] == True
         assert result["substituted"] == True
-        assert "SubstituteImplementation" in valid_failed_state["generated_tests"]
+        # B10: inert marker, no `describe`/`it` test body.
+        assert valid_failed_state["generated_tests"] == "// RECOVERY_SUBSTITUTE_TESTS"
+        assert "describe(" not in valid_failed_state["generated_tests"]
 
     def test_agent_specific_degradation_strategies(
         self, error_recovery_agent, valid_failed_state
@@ -879,16 +883,20 @@ class TestErrorRecoveryAgent:
             assert status["service_health"] == {"service1": {"healthy": True}}
 
     def test_helper_methods(self, error_recovery_agent, valid_failed_state):
-        """Test helper methods for generating stubs and parsing"""
+        """Test helper methods for generating stubs and parsing (B10: inert markers, no TS bodies)."""
         # Test minimal code stub generation
         code_stub = error_recovery_agent._generate_minimal_code_stub(valid_failed_state)
         assert isinstance(code_stub, str)
-        assert "Fallback code stub" in code_stub
+        # B10: inert marker, must NOT contain a hard-coded TS/JS body.
+        assert code_stub == "// FALLBACK_CODE_STUB"
+        assert "export default" not in code_stub
+        assert "function" not in code_stub
 
         # Test minimal test stub generation
         test_stub = error_recovery_agent._generate_minimal_test_stub(valid_failed_state)
         assert isinstance(test_stub, str)
-        assert "Fallback test stub" in test_stub
+        assert test_stub == "// FALLBACK_TEST_STUB"
+        assert "describe(" not in test_stub
 
         # Test basic ticket parsing
         basic_result = error_recovery_agent._parse_ticket_basic(valid_failed_state)
@@ -901,14 +909,16 @@ class TestErrorRecoveryAgent:
             valid_failed_state
         )
         assert isinstance(substitute_code, str)
-        assert "Substitute implementation" in substitute_code
+        assert substitute_code == "// SUBSTITUTE_CODE_STUB"
+        assert "class " not in substitute_code
 
         # Test substitute test generation
         substitute_test = error_recovery_agent._generate_substitute_test_stub(
             valid_failed_state
         )
         assert isinstance(substitute_test, str)
-        assert "Substitute test implementation" in substitute_test
+        assert substitute_test == "// SUBSTITUTE_TEST_STUB"
+        assert "describe(" not in substitute_test
 
         # Test substitute ticket parsing
         substitute_result = error_recovery_agent._parse_ticket_substitute(

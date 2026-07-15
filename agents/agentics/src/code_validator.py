@@ -1203,7 +1203,3 @@ def validate_generated_code(
     """Global function for code validation"""
     return code_validator.validate_typescript_code(code, tests, context)
 
-
-def get_code_validator() -> LLMCodeValidationPipeline:
-    """Get the global code validator instance"""
-    return code_validator

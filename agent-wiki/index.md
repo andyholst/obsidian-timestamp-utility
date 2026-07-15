@@ -1,0 +1,31 @@
+# Agent Wiki Index
+
+This wiki documents work done on OpenSpec changes for the **obsidian-timestamp-utility** project.
+
+## How this wiki is maintained
+
+- Hermes creates one entry per completed OpenSpec change using the `record-work` skill.
+- Entries follow the naming convention: `YYYY-MM-DD-<change-folder-name>.md`.
+- Weekly summaries live in `weekly-summaries/`.
+
+## Change Entries
+- [2026-07-15-record-work-script](2026-07-15-record-work-script.md) — Replaced the missing `record-work` skill with a scriptable tool (`scripts/record-work.py` + `make record-work`) that drafts the agent-wiki entry via the Hermes CLI.
+
+- [2026-07-13-uuid-modal-agentic-generation](2026-07-13-uuid-modal-agentic-generation.md) — deterministic floor green (`run-agentics`→`build-app`→`test-app` PASS); no hard-coded TS in Python (B10).
+- [2026-07-14-python-agentic-slim-refactor](2026-07-14-python-agentic-slim-refactor.md) — analysis-driven slim: removed dead/unused Python + the B10/B11-violating ultra-fast inline block; fixed fast-mode floor bypass (B7.1) + uuid-specific contract parser; 3 e2e (ticket20/22/greetings) GREEN; `make run-agentics` gates pass.
+- [2026-07-14-fix-fetch-issue-agent-tests](2026-07-14-fix-fetch-issue-agent-tests.md) — triaged 4 red tests; refactored valid ones hermetic (B15 bridge + mocked LLM); full unit suite 517/517 GREEN.
+- [2026-07-14-audit-mcp-slim-refactor-integrity](2026-07-14-audit-mcp-slim-refactor-integrity.md) — re-audit of the MCP slim-refactor: caught 3 orphaned breakages (conftest MCP imports, `test_tool_integration_patterns` → `src.agentics.mcp_tools`, `test_scenarios.py` MCP mocks); all resolved + verified **516 unit / 200 integration collect clean, e2e B5/B6 guards intact**.
+
+## Weekly Summaries
+
+- [Week 28, 2026](weekly-summaries/2026-W28.md) _(to be created)_
+
+## Structure
+
+```
+agent-wiki/
+├── index.md                     ← this file
+├── 2026-07-13-<change>.md      ← created by Hermes per change
+└── weekly-summaries/
+    └── 2026-W28.md
+```

@@ -34,24 +34,12 @@ class TestComposableWorkflowsArchitecture:
         return client
 
     @pytest.fixture
-    def mock_mcp_tools(self):
-        """Mock MCP tools."""
-
-        @tool
-        def test_tool(query: str) -> str:
-            """Test tool for MCP integration."""
-            return f"Tool result for: {query}"
-
-        return [test_tool]
-
-    @pytest.fixture
-    def workflows(self, mock_llm, mock_github_client, mock_mcp_tools):
+    def workflows(self, mock_llm, mock_github_client):
         """Create ComposableWorkflows instance for testing."""
         return ComposableWorkflows(
             llm_reasoning=mock_llm,
             llm_code=mock_llm,
             github_client=mock_github_client,
-            mcp_tools=mock_mcp_tools,
         )
 
     def test_workflow_initialization(self, workflows):
@@ -82,10 +70,10 @@ class TestComposableWorkflowsArchitecture:
         for agent_name in expected_agents:
             assert agent_name in workflows.composer.agents
 
-    def test_tool_registration(self, workflows, mock_mcp_tools):
-        """Test that MCP tools are registered."""
-        for tool in mock_mcp_tools:
-            assert tool.name in workflows.composer.tools
+    def test_no_mcp_tool_registration(self, workflows):
+        """Verify ComposableWorkflows registers no external MCP tools."""
+        # With MCP removed, the composer should NOT carry MCP-style tool names.
+        assert not any("mcp" in name.lower() for name in workflows.composer.tools)
 
     def test_workflow_creation(self, workflows):
         """Test that individual workflows are created correctly."""
@@ -240,19 +228,17 @@ class TestComposableWorkflowsArchitecture:
         # This is a structural test - the actual composition happens in AgentComposer
         assert hasattr(issue_workflow, "invoke")  # Should be a Runnable
 
-    def test_tool_integration_in_workflows(self, workflows, mock_mcp_tools):
-        """Test that tools are integrated into workflow creation."""
-        # Verify tools are passed to workflow configs
+    def test_no_mcp_tool_integration_in_workflows(self, workflows):
+        """Verify no external MCP tools are passed into workflow configs."""
         with patch.object(workflows.composer, "create_workflow") as mock_create:
             mock_create.return_value = Mock()
 
-            # Recreate workflows to test tool integration
             workflows._create_issue_processing_workflow()
 
-            # Verify create_workflow was called with tool names
             call_args = mock_create.call_args
             config = call_args[0][1]  # Second argument is config
-            assert "test_tool" in config.tool_names
+            assert "test_tool" not in config.tool_names
+            assert not any("mcp" in n.lower() for n in config.tool_names)
 
 
 class TestParallelProcessingEnhancement:

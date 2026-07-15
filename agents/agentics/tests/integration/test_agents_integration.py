@@ -6,6 +6,11 @@ import shutil
 import subprocess
 import logging
 
+# Heavy full-pipeline tests (real multi-agent LLM runs via process_issue) — tagged
+# slow so the fast loop gate (loop-integration) excludes them. Run via
+# `make test-agents-integration` for deep verification.
+pytestmark = pytest.mark.slow
+
 try:
     from sentence_transformers import SentenceTransformer, util
 except ImportError:

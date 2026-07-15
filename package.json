@@ -7,7 +7,7 @@
     "scripts": {
         "build": "rollup -c",
         "build-package": "npm run build",
-        "test": "jest"
+        "test": "jest --runInBand"
     },
     "devDependencies": {
         "@rollup/plugin-node-resolve": "^15.2.3",

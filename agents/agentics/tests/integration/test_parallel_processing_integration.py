@@ -15,6 +15,12 @@ from src.performance import get_batch_processor, get_task_manager
 import time
 
 
+# Heavy full-pipeline tests (real multi-agent LLM runs via process_issue) — tagged
+# slow so the fast loop gate (loop-integration) excludes them. Run via
+# `make test-agents-integration` for deep verification.
+pytestmark = pytest.mark.slow
+
+
 @pytest.fixture
 async def composable_workflow():
     """Fixture for real ComposableWorkflows instance."""

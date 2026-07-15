@@ -79,7 +79,7 @@ class ErrorRecoveryAgent(Runnable[CodeGenerationState, CodeGenerationState]):
         self.health_monitor = get_health_monitor()
 
         self.circuit_breakers = {}
-        for service in ["ollama_reasoning", "ollama_code", "github", "mcp", "typescript_compiler", "file_system"]:
+        for service in ["ollama_reasoning", "ollama_code", "github", "typescript_compiler", "file_system"]:
             self.circuit_breakers[service] = get_circuit_breaker(service)
 
         self.recovery_strategies = {}
@@ -343,12 +343,17 @@ Output ONLY valid JSON matching the schema.
 
     # Agent-specific substitute strategies
     def _code_generation_substitute(self, state: State, error_context: Dict, error: Exception) -> Dict[str, Any]:
-        substitute = "class SubstituteImplementation { execute() { return true; } }"
+        # B10: no hard-coded TS body here. The deterministic integrator derives the
+        # real contract from the OpenSpec spec; this is only a non-TS marker so the
+        # idempotency guards never match a baked-in body.
+        substitute = "// RECOVERY_SUBSTITUTE_CODE"
         state["generated_code"] = substitute
         return {"success": True, "substituted": True}
 
     def _test_generation_substitute(self, state: State, error_context: Dict, error: Exception) -> Dict[str, Any]:
-        substitute = "describe('SubstituteImplementation', () => { it('should work', () => { expect(true).toBe(true); }); });"
+        # B10: no hard-coded `describe`/`it` test body. The test generator (spec-driven)
+        # is the sole author of test bodies; this marker is inert.
+        substitute = "// RECOVERY_SUBSTITUTE_TESTS"
         state["generated_tests"] = substitute
         return {"success": True, "substituted": True}
 
@@ -399,19 +404,23 @@ Output ONLY valid JSON matching the schema.
         }
 
     def _generate_minimal_code_stub(self, state: State) -> str:
-        return "// Fallback code stub\nexport default function() { return true; }"
+        # B10: inert marker, no TS body. Real code comes from the spec-driven generator.
+        return "// FALLBACK_CODE_STUB"
 
     def _generate_minimal_test_stub(self, state: State) -> str:
-        return "// Fallback test stub\ndescribe('fallback', () => { it('works', () => { expect(true).toBe(true); }); });"
+        # B10: inert marker, no `describe`/`it` body. Real tests come from the spec.
+        return "// FALLBACK_TEST_STUB"
 
     def _parse_ticket_basic(self, state: State) -> Dict[str, str]:
         return {"title": "Basic Task", "description": state.get("ticket_content", "")}
 
     def _generate_substitute_code_stub(self, state: State) -> str:
-        return "// Substitute implementation\nclass Substitute { run() { return true; } }"
+        # B10: inert marker, no TS class body.
+        return "// SUBSTITUTE_CODE_STUB"
 
     def _generate_substitute_test_stub(self, state: State) -> str:
-        return "// Substitute test implementation\ndescribe('Substitute', () => { it('runs', () => { expect(true).toBe(true); }); });"
+        # B10: inert marker, no `describe`/`it` body.
+        return "// SUBSTITUTE_TEST_STUB"
 
     def _parse_ticket_substitute(self, state: State) -> Dict[str, str]:
         return {"title": "Substitute Task Analysis", "description": state.get("ticket_content", "")}

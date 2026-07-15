@@ -2,11 +2,30 @@ import pytest
 from unittest.mock import MagicMock
 from src.implementation_planner_agent import ImplementationPlannerAgent
 from src.state import State
-from src.clients import llm_reasoning as llm
+
+
+def _mock_llm_with_json(payload: dict) -> MagicMock:
+    """Build a mocked reasoning-LLM whose .invoke() returns a JSON planning response.
+
+    Keeps the test hermetic (no live Ollama call) while exercising the agent's real
+    plan_implementation / parse / merge logic.
+    """
+    import json
+
+    llm = MagicMock()
+    llm.invoke.return_value = json.dumps(payload)
+    return llm
 
 
 def test_implementation_planner_agent():
-    # Given: Mocked LLM and refined ticket
+    # Given: Mocked LLM returning a UUID-planning response + refined ticket
+    llm = _mock_llm_with_json(
+        {
+            "implementation_steps": ["Generate UUID v7 using uuidv7 package"],
+            "npm_packages": ["uuidv7 (UUIDv7 generation)"],
+            "manual_implementation_notes": "Install uuidv7 and call generateUuidV7()",
+        }
+    )
     agent = ImplementationPlannerAgent(llm)
     state = State(
         url="https://github.com/user/repo/issues/1",
@@ -59,21 +78,24 @@ def test_implementation_planner_agent():
         "Acceptance criteria should be preserved"
     )
     # Check that new fields are added
-    if enhanced["npm_packages"]:
-        if isinstance(enhanced["npm_packages"][0], dict):
-            npm_names = [pkg["name"] for pkg in enhanced["npm_packages"]]
-        else:
-            npm_names = enhanced["npm_packages"]
-        assert "uuid" in " ".join(npm_names).lower(), (
-            "NPM packages should include uuid-related package"
-        )
+    npm_names = enhanced["npm_packages"]
+    assert "uuid" in " ".join(npm_names).lower(), (
+        "NPM packages should include uuid-related package"
+    )
     assert any("uuid" in step.lower() for step in enhanced["implementation_steps"]), (
         "Implementation steps should mention UUID"
     )
 
 
 def test_implementation_planner_agent_no_npm_needed():
-    # Given: Ticket that might not need npm packages
+    # Given: Ticket that might not need npm packages; mock returns no npm packages
+    llm = _mock_llm_with_json(
+        {
+            "implementation_steps": ["Add a console.log statement"],
+            "npm_packages": [],
+            "manual_implementation_notes": "Use console.log directly",
+        }
+    )
     agent = ImplementationPlannerAgent(llm)
     state = State(
         url="https://github.com/user/repo/issues/1",
@@ -102,7 +124,18 @@ def test_implementation_planner_agent_no_npm_needed():
 
 
 def test_implementation_planner_agent_complex_ticket():
-    # Given: More complex ticket
+    # Given: More complex ticket; mock returns multiple suggested packages
+    llm = _mock_llm_with_json(
+        {
+            "implementation_steps": [
+                "Handle file selection via input element",
+                "Show upload progress with a progress bar",
+                "Handle errors with try/catch",
+            ],
+            "npm_packages": ["axios (HTTP client)", "react-dropzone (file picker)"],
+            "manual_implementation_notes": "Wire up an upload endpoint and stream progress",
+        }
+    )
     agent = ImplementationPlannerAgent(llm)
     state = State(
         url="https://github.com/user/repo/issues/1",

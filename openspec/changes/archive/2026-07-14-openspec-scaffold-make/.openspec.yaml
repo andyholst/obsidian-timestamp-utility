@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-14
+goal: Reproducible, documented make target that wraps openspec new change and
+  seeds proposal/tasks/spec in OpenSpec delta format

@@ -99,34 +99,69 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             else:
                 task_info = task_details_str
 
-            prompt = (
-                "You are an expert TypeScript developer for Obsidian plugins.\n\n"
-                "TASK:\n" + task_info + "\n\n"
-                "EXISTING CODE STRUCTURE:\n" + existing_code_content + "\n\n"
-                "The existing code has this structure:\n"
-                "- `class TimestampPlugin extends obsidian.Plugin {`\n"
-                "- `  async onload() { ... this.addCommand(...) ... }`\n"
-                "- `  generateTimestamp(): string { ... }`\n"
-                "- `}`  <-- final closing brace\n\n"
-                "YOU MUST:\n"
-                "1. Add your new public method BEFORE the final `}` of the class\n"
-                "2. Add your new `this.addCommand(...)` call INSIDE the onload() method\n"
-                "3. Do NOT add code after the final `}`\n"
-                "4. Use crypto.getRandomValues() for random bytes\n"
-                "5. Use obsidian.Notice for error messages\n"
-                "6. Use the exact parameter name from editorCallback (usually `_editor`)\n"
-                "7. Do NOT add import statements\n\n"
-                "IMPORTANT: The closing brace `}` at the end of the existing code closes the class.\n"
-                "Your new method must go BEFORE that brace, and your new command inside onload().\n\n"
-                "Example of correct placement:\n"
-                "  // Your new method goes here, BEFORE the final }\n"
-                "  public myMethod(): string { ... }\n"
-                "  // The onload() method should already have this.addCommand() calls\n"
-                "  // Add your new this.addCommand() inside onload()\n"
-                "}  // <-- this is the final closing brace\n\n"
-                "OUTPUT ONLY JSON: {\"code\": \"<typescript>\", \"method_name\": \"<name>\", \"command_id\": \"<id>\"}\n"
-                "The code field should contain ONLY the new method and the new this.addCommand() call."
-            )
+                # SPEC-DERIVED contract (parsed from the change's spec/tasks, NOT hardcoded):
+                # steer the LLM to honor the exact command id / Modal class the OpenSpec spec
+                # mandates. This is the prompt-side tightening driven by the spec file.
+                contract_bullet = ""
+                try:
+                    from .code_integrator_agent import CodeIntegratorAgent
+
+                    contract = CodeIntegratorAgent._expected_contract_for_change(
+                        os.getenv("CHANGE")
+                    )
+                    if contract:
+                        bits = []
+                        if contract.get("command_id"):
+                            bits.append(f"command id MUST be exactly '{contract['command_id']}'")
+                        if contract.get("command_name"):
+                            bits.append(f"command name MUST be exactly '{contract['command_name']}'")
+                        if contract.get("modal_class"):
+                            bits.append(
+                                f"the feature MUST be an `obsidian.Modal` subclass named '{contract['modal_class']}'"
+                            )
+                        if contract.get("generator_kind") == "uuidv7":
+                            bits.append(
+                                "the generator MUST produce a UUID v7 (48-bit ms timestamp, "
+                                "version nibble '7', variant nibble 8-9-a-b, formatted "
+                                "xxxxxxxx-xxxx-7xxx-xxxx-xxxxxxxxxxxx)"
+                            )
+                        if bits:
+                            contract_bullet = (
+                                "\nSPEC CONTRACT (honor EXACTLY — parsed from the OpenSpec spec, not optional):\n"
+                                + "\n".join(f"- {b}" for b in bits)
+                                + "\n"
+                            )
+                except Exception:
+                    pass
+
+                prompt = (
+                    "You are an expert TypeScript developer for Obsidian plugins.\n\n"
+                    "TASK:\n" + task_info + "\n\n"
+                    "EXISTING CODE STRUCTURE:\n" + existing_code_content + "\n\n"
+                    "The existing code has this structure:\n"
+                    "- `class TimestampPlugin extends obsidian.Plugin {`\n"
+                    "- `  async onload() { ... this.addCommand(...) ... }`\n"
+                    "- `  generateTimestamp(): string { ... }`\n"
+                    "- `}`  <-- final closing brace\n\n"
+                    "YOU MUST:\n"
+                    "1. Add your new public method BEFORE the final `}` of the class\n"
+                    "2. Add your new `this.addCommand(...)` call INSIDE the onload() method\n"
+                    "3. Do NOT add code after the final `}`\n"
+                    "4. Use crypto.getRandomValues() for random bytes\n"
+                    "5. Use obsidian.Notice for error messages\n"
+                    "6. Use the exact parameter name from editorCallback (usually `_editor`)\n"
+                    "7. Do NOT add import statements\n\n"
+                    + contract_bullet
+                    + "IMPORTANT: The closing brace `}` at the end of the existing code closes the class.\n"
+                    "Example of correct placement:\n"
+                    "  // Your new method goes here, BEFORE the final }\n"
+                    "  public myMethod(): string { ... }\n"
+                    "  // The onload() method should already have this.addCommand() calls\n"
+                    "  // Add your new this.addCommand() inside onload()\n"
+                    "}  // <-- this is the final closing brace\n\n"
+                    "OUTPUT ONLY JSON: {\"code\": \"<typescript>\", \"method_name\": \"<name>\", \"command_id\": \"<id>\"}\n"
+                    "The code field should contain ONLY the new method and the new this.addCommand() call."
+                )
             return prompt
 
         # Use RunnableLambda to build the prompt dynamically
@@ -433,14 +468,44 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             )
         return generated_code
 
+    def _extract_code_field(self, raw_output):
+        """Robustly extract the generated TypeScript `code` from any chain output.
+
+        The LCEL code-generation chain may return:
+          - a `CodeGenerationOutput` pydantic object (when the output parser ran
+            inside the LLM step),
+          - a JSON string (``{"code": "..."}``),
+          - or already-decoded raw TS text.
+        We always resolve to the `.code` string so a serialized object can never
+        leak into `main.ts` as a literal JSON blob.
+        """
+        if raw_output is None:
+            return ""
+        # Already a pydantic CodeGenerationOutput object
+        if hasattr(raw_output, "code"):
+            return str(getattr(raw_output, "code", "")).strip()
+        if not isinstance(raw_output, str):
+            raw_output = str(raw_output)
+        clean = remove_thinking_tags(raw_output).strip()
+        try:
+            parsed = json.loads(clean)
+            if isinstance(parsed, dict) and "code" in parsed:
+                return str(parsed["code"]).strip()
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return clean
+
     def _post_process_code(self, generated_code):
         """Post-process the generated code."""
         # Post-process generated code to fix common issues
         generated_code = generated_code.replace("CodeMirror.Editor", "obsidian.Editor")
         generated_code = generated_code.replace("TFile", "obsidian.TFile")
         generated_code = generated_code.replace(
-            "obsidian.Modal", "obsidian.MarkdownView"
+            "obsidian.TFile", "obsidian.TFile"
         )
+        # NOTE: do NOT rewrite `obsidian.Modal` -> `obsidian.MarkdownView`. The OpenSpec
+        # contract mandates `UuidV7Modal extends obsidian.Modal`; that rewrite silently
+        # broke the spec contract. Modal subclasses stay as authored by the spec/LLM.
         generated_code = generated_code.replace("private ", "public ")
         generated_code = generated_code.replace("protected ", "public ")
         generated_code = re.sub(
@@ -651,31 +716,34 @@ this.addCommand({{
             self._log_structured(
                 "info", "code_generation_start", {"chain": "code_generation"}
             )
+            # Convert CodeGenerationState to dict for LCEL chain
+            result_dict = {
+                "title": state.get("title", ""),
+                "description": state.get("description", ""),
+                "requirements": state.get("requirements", []),
+                "acceptance_criteria": state.get("acceptance_criteria", []),
+                "implementation_steps": state.get("implementation_steps", []),
+                "npm_packages": state.get("npm_packages", []),
+                "manual_implementation_notes": state.get(
+                    "manual_implementation_notes", ""
+                ),
+            }
+            state_dict = {
+                "issue_url": state.get("issue_url", ""),
+                "ticket_content": state.get("ticket_content", ""),
+                "relevant_code_files": state.get("relevant_code_files", []),
+                "relevant_test_files": state.get("relevant_test_files", []),
+                "feedback": state.get("feedback", {}),
+                "result": result_dict,
+            }
             try:
-                # Convert CodeGenerationState to dict for LCEL chain
-                # Create result dict from CodeGenerationState fields as per refactored architecture
-                result_dict = {
-                    "title": state.get("title", ""),
-                    "description": state.get("description", ""),
-                    "requirements": state.get("requirements", []),
-                    "acceptance_criteria": state.get("acceptance_criteria", []),
-                    "implementation_steps": state.get("implementation_steps", []),
-                    "npm_packages": state.get("npm_packages", []),
-                    "manual_implementation_notes": state.get(
-                        "manual_implementation_notes", ""
-                    ),
-                }
-                state_dict = {
-                    "issue_url": state.get("issue_url", ""),
-                    "ticket_content": state.get("ticket_content", ""),
-                    "relevant_code_files": state.get("relevant_code_files", []),
-                    "relevant_test_files": state.get("relevant_test_files", []),
-                    "feedback": state.get("feedback", {}),
-                    "result": result_dict,
-                }
-                generated_code = get_circuit_breaker("code_generation").call(
+                raw_code_output = get_circuit_breaker("code_generation").call(
                     lambda: self.code_generation_chain.invoke(state_dict)
                 )
+                # The chain may return a parsed CodeGenerationOutput object, a JSON
+                # string, or raw TS. Always extract the `.code` field robustly so a
+                # serialized object never leaks into main.ts as a literal blob.
+                generated_code = self._extract_code_field(raw_code_output)
             except CircuitBreakerOpenException as e:
                 self._log_structured(
                     "error",

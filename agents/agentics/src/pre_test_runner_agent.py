@@ -248,8 +248,15 @@ class PreTestRunnerAgent(BaseAgent):
                     self.monitor.warning(
                         f"npm test failed after {max_retries} attempts (rc={e.returncode}). Log saved to {log_file}. Using parsed metrics from output."
                     )
+                    # B11: signal that the pre-integration test run FAILED, so the
+                    # self-correct loop can restore the generated TS and regenerate.
+                    state["pre_test_failed"] = True
+                    state["pre_test_returncode"] = e.returncode
 
         log_info(self.name, "Parsing test output for metrics")
+        # B11: default to "not failed"; overridden to True only if npm test exited non-zero.
+        state.setdefault("pre_test_failed", False)
+        state.setdefault("pre_test_returncode", 0)
         tests_passed_match = re.search(
             r"Tests:.*?(\d+)\s*passed,\s*(\d+)\s*total", combined_output, re.DOTALL
         )

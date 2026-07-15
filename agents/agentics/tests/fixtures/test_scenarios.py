@@ -109,11 +109,9 @@ class ErrorHandlingScenario(TestScenario):
 
     def _create_service_failure_mocks(self):
         """Create mocks for service failure scenarios."""
-        from .mock_refactored_components import create_mcp_error_scenarios
         from .mock_llm_responses import create_llm_error_scenarios
 
         return {
-            "mcp_errors": create_mcp_error_scenarios(),
             "llm_errors": create_llm_error_scenarios(),
             "service_manager": create_mock_service_manager(),
         }
@@ -129,11 +127,9 @@ class ErrorHandlingScenario(TestScenario):
 
     def _create_rate_limiting_mocks(self):
         """Create mocks for rate limiting scenarios."""
-        from .mock_refactored_components import create_mcp_with_rate_limiting
         from .mock_github_responses import create_github_client_with_errors
 
         return {
-            "mcp_rate_limited": create_mcp_with_rate_limiting(),
             "github_rate_limited": create_github_client_with_errors(),
         }
 
@@ -173,11 +169,9 @@ class PerformanceScenario(TestScenario):
     def get_mocks(self):
         """Get mocks for performance testing."""
         from .mock_llm_responses import create_llm_batch_responses
-        from .mock_refactored_components import create_mcp_streaming_responses
 
         return {
             "batch_responses": create_llm_batch_responses(),
-            "streaming_responses": create_mcp_streaming_responses(),
             "service_manager": create_mock_service_manager(),
         }
 

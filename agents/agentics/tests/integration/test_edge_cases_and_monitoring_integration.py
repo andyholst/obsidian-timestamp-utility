@@ -14,6 +14,11 @@ os.environ["PROJECT_ROOT"] = _test_project
 
 import pytest
 
+# Heavy full-pipeline tests (real multi-agent LLM runs via process_issue) — tagged
+# slow so the fast loop gate (loop-integration) excludes them. Run via
+# `make test-agents-integration` for deep verification.
+pytestmark = pytest.mark.slow
+
 import time
 import asyncio
 from github import GithubException

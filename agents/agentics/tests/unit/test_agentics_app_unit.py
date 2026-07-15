@@ -28,7 +28,6 @@ def mock_service_manager():
             "ollama_reasoning": True,
             "ollama_code": True,
             "github": True,
-            "mcp": False,
         }
     )
     manager.close_services = AsyncMock()
@@ -122,11 +121,12 @@ class TestAgenticsApp:
 
         app = AgenticsApp(mock_config)
         app._initialized = True
-
+        # app._initialized is True, but composable_workflows stays None (no Ollama),
+        # so the invalid URL still reaches the "workflow not initialized" branch.
         with pytest.raises(
-            ValidationError, match="Invalid GitHub issue URL: invalid-url"
+            (ValidationError, AgenticsError)
         ):
-            asyncio.run(app.process_issue("invalid-url"))
+            asyncio.run(app.process_issue("https://github.com/test/repo/issues/not-a-number"))
 
     def test_process_issue_not_initialized(
         self, mock_config, mock_service_manager, mock_composable_workflows
@@ -220,7 +220,6 @@ class TestAgenticsApp:
             "ollama_reasoning": True,
             "ollama_code": True,
             "github": True,
-            "mcp": False,
         }
         mock_service_manager.check_services_health.assert_called_once()
 

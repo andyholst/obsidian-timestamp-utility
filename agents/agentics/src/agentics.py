@@ -15,6 +15,7 @@ from .services import init_services, get_service_manager
 from .workflows import init_workflows, get_workflow_manager
 from .exceptions import AgenticsError, ServiceUnavailableError, ValidationError
 from .utils import log_info, validate_github_url
+from .openspec_loader import is_local_change_ref
 from .monitoring import structured_log
 
 # Agent imports
@@ -45,8 +46,7 @@ from .performance import get_batch_processor
 from .circuit_breaker import get_circuit_breaker, CircuitBreaker, ServiceHealthMonitor
 from .monitoring import structured_log
 
-# MCP and tools
-from .mcp_client import get_mcp_client, init_mcp_client
+# Tools
 from .tools import (
     read_file_tool,
     list_files_tool,
@@ -55,16 +55,6 @@ from .tools import (
     npm_install_tool,
     npm_list_tool,
 )
-
-# MCP tools list for agent integration
-mcp_tools = [
-    read_file_tool,
-    list_files_tool,
-    check_file_exists_tool,
-    npm_search_tool,
-    npm_install_tool,
-    npm_list_tool,
-]
 
 # Prompts
 from .prompts import ModularPrompts
@@ -76,22 +66,16 @@ _service_manager = None
 _workflow_manager = None
 _monitor = structured_log(__name__)
 
-# MCP client
-_mcp_client = None
-
 
 async def _init_global_services():
     """Initialize global services and clients."""
-    global _service_manager, _mcp_client, _config
+    global _service_manager, _config
 
     if _config is None:
         _config = init_config()
 
     if _service_manager is None:
         _service_manager = await init_services(_config)
-
-    if _mcp_client is None:
-        _mcp_client = init_mcp_client()
 
 
 async def check_services() -> Dict[str, bool]:
@@ -108,7 +92,7 @@ async def check_services() -> Dict[str, bool]:
 
 
 async def create_composable_workflow(
-    github_client=None, llm_reasoning=None, llm_code=None, mcp_tools=None
+    github_client=None, llm_reasoning=None, llm_code=None
 ) -> ComposableWorkflows:
     """
     Create and return a ComposableWorkflows instance with all components initialized.
@@ -117,7 +101,6 @@ async def create_composable_workflow(
         github_client: Optional GitHub client override
         llm_reasoning: Optional reasoning LLM override
         llm_code: Optional code LLM override
-        mcp_tools: Optional MCP tools override
 
     Returns:
         Initialized ComposableWorkflows instance.
@@ -141,20 +124,10 @@ async def create_composable_workflow(
         else None
     )
 
-    # Get MCP tools if available and not overridden
-    if mcp_tools is None and _mcp_client:
-        try:
-            mcp_tools = await _mcp_client.get_tools()
-        except Exception:
-            mcp_tools = []
-    elif mcp_tools is None:
-        mcp_tools = []
-
     return ComposableWorkflows(
         llm_reasoning=ollama_reasoning,
         llm_code=ollama_code,
         github_client=github_client,
-        mcp_tools=mcp_tools,
     )
 
 
@@ -248,7 +221,6 @@ class AgenticsApp:
                         else None,
                         llm_reasoning=ollama_reasoning_client,
                         llm_code=ollama_code_client,
-                        mcp_tools=await self._get_mcp_tools(),
                     )
                 else:
                     self.monitor.info(
@@ -285,27 +257,6 @@ class AgenticsApp:
             error_msg = f"Critical services unavailable: {', '.join(failed_services)}"
             self.monitor.error(error_msg)
             raise ServiceUnavailableError(error_msg)
-
-        # Log MCP status (not critical)
-        if health_results.get("mcp", False):
-            log_info(__name__, "MCP service available")
-        else:
-            log_info(
-                __name__,
-                "MCP service not available, proceeding without MCP functionality",
-            )
-
-    async def _get_mcp_tools(self) -> List[Any]:
-        """Get MCP tools from the service manager."""
-        if (
-            self.service_manager
-            and hasattr(self.service_manager, "mcp")
-            and self.service_manager.mcp
-        ):
-            try:
-                return await self.service_manager.mcp.get_tools()
-            except Exception:
-                pass
 
     async def _process_batch_parallel(self, issue_urls: List[str]) -> Dict[str, Any]:
         """Process multiple issues in parallel using composable workflows."""
@@ -356,8 +307,8 @@ class AgenticsApp:
         if not self._initialized:
             await self.initialize()
 
-        if not validate_github_url(issue_url):
-            raise ValidationError(f"Invalid GitHub issue URL: {issue_url}")
+        if not validate_github_url(issue_url) and not is_local_change_ref(issue_url):
+            raise ValidationError(f"Invalid GitHub issue URL or OpenSpec change ref: {issue_url}")
 
         if self.composable_workflows is None:
             raise AgenticsError(
@@ -466,11 +417,25 @@ class AgenticsApp:
 # Main execution
 if __name__ == "__main__":
     async def main():
-        """Main async execution function."""
-        # Accept URL from env var or command-line arg
-        issue_url = os.getenv("URL") or (sys.argv[1] if len(sys.argv) > 1 else None)
+        """Main async execution function.
+
+        Accepts either a GitHub issue URL or a local OpenSpec change reference:
+          - `URL=https://github.com/.../issues/20` (env) or argv[1]
+          - `CHANGE=uuid-modal-agentic-generation` (env) -> becomes `openspec:<change>`
+          - `URL=openspec:<change>` (env) or argv[1]
+        """
+        issue_url = os.getenv("URL")
+        if not issue_url and len(sys.argv) > 1:
+            issue_url = sys.argv[1]
+        change = os.getenv("CHANGE")
+        if change and not issue_url:
+            issue_url = f"openspec:{change}"
         if not issue_url:
-            print("Usage: python -m src.agentics <issue_url> or set URL env var", file=sys.stderr)
+            print(
+                "Usage: python -m src.agentics <issue_url|openspec:change> "
+                "or set URL=/CHANGE= env var",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         log_info(__name__, f"Processing issue URL: {issue_url}")

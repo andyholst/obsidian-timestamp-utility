@@ -1,0 +1,5 @@
+# Source of truth specs live here.
+
+After a change is archived (`openspec archive`), its accepted specs are
+merged into this directory. Each spec is a markdown file describing
+requirements and scenarios for a capability.

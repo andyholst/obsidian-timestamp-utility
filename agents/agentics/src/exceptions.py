@@ -39,12 +39,6 @@ class OllamaError(AgenticsError):
     pass
 
 
-class MCPError(AgenticsError):
-    """Raised when MCP operations fail."""
-
-    pass
-
-
 class WorkflowError(AgenticsError):
     """Raised when workflow execution fails."""
 
@@ -79,5 +73,25 @@ class TestRecoveryNeeded(AgenticsError):
 
 class CompileError(AgenticsError):
     """Raised when TypeScript compilation fails."""
+
+    pass
+
+
+class LintError(AgenticsError):
+    """Raised when the lint gate fails (non-zero eslint/prettier exit).
+
+    Surfaces as a recovery signal so the loop re-enters error_recovery
+    (agentic-self-correct-loop, tasks.md §2.2).
+    """
+
+    pass
+
+
+class OmissionDetected(AgenticsError):
+    """Raised when generated TS/test shrank vs its timestamped backup.
+
+    A genuine omission (logic dropped) — the file is restored to the backup
+    and the loop re-enters error_recovery (agentic-self-correct-loop §4.3).
+    """
 
     pass

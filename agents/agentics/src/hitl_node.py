@@ -19,18 +19,36 @@ class HITLNode:
         if score >= 80:
             return state
 
-        # Check if HITL is disabled via environment
+        # Never block automated/CI/loop runs. HITL only engages when it is
+        # *explicitly* enabled AND the session is genuinely interactive (a real
+        # TTY on stdin). Any leaked HITL_ENABLED from a prior test, or a piped
+        # loop harness, must NOT trigger a blocking input() prompt.
         if os.environ.get("CI"):
             return state
 
-        if not os.environ.get("HITL_ENABLED"):
+        # HITL requires TWO explicit opt-ins so a leaked HITL_ENABLED (e.g. from a
+        # killed test that never reverted its monkeypatch) can never trigger a
+        # blocking input() prompt in an automated/loop/CI run. INTERACTIVE_HITL=1
+        # is only set deliberately, never by tests that merely flip HITL_ENABLED.
+        hitl_enabled = os.environ.get("HITL_ENABLED", "").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        interactive_hitl = os.environ.get("INTERACTIVE_HITL", "").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if not (hitl_enabled and interactive_hitl):
             return state
 
-        # Check if running in non-interactive mode
-        if not sys.stdout.isatty() and not os.environ.get("HITL_ENABLED"):
+        if not sys.stdin.isatty():
             return state
 
-        # Low score - ask for human review
+        # Low score + explicitly enabled + interactive - ask for human review
         try:
             print(f"HITL Review Needed!\nFull state dump:\n{state}")
             feedback = input("Human feedback (or Enter/EOF/Ctrl+C to proceed): ")

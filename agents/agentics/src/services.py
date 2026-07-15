@@ -13,10 +13,8 @@ from .exceptions import (
     ServiceUnavailableError,
     GitHubError,
     OllamaError,
-    MCPError,
     HealthCheckError,
 )
-from .mcp_client import get_mcp_client, init_mcp_client, close_mcp_client
 from .circuit_breaker import get_circuit_breaker, get_health_monitor
 from .utils import log_info
 
@@ -179,117 +177,6 @@ class GitHubClient(ServiceClient):
         return _get_repo()
 
 
-class MCPClient(ServiceClient):
-    """Client for MCP services."""
-
-    def __init__(self):
-        super().__init__("mcp")
-        self._initialized = False
-        self._client: Optional[Any] = None
-        self._tools: list = []
-
-    async def initialize(self) -> None:
-        """Initialize MCP client."""
-        try:
-            await init_mcp_client()
-            self._initialized = True
-            self._client = get_mcp_client()
-            log_info(__name__, "Initialized MCP client")
-        except Exception as e:
-            log_info(__name__, f"Failed to initialize MCP client: {str(e)}")
-            self._initialized = False
-            self._client = None
-
-    async def health_check(self) -> bool:
-        return self._initialized and self._client is not None
-
-    def is_available(self) -> bool:
-        """Check if MCP client is available."""
-        return self._initialized and self._client is not None
-
-    async def get_context(self, query: str, max_tokens: int = 4096) -> str:
-        """Get context from MCP."""
-        if not self.is_available():
-            raise MCPError("MCP service is not available")
-
-        try:
-            return await self._client.get_context(query, max_tokens)
-        except Exception:
-            return ""
-
-    async def store_memory(self, key: str, value: str) -> None:
-        """Store memory in MCP."""
-        if not self.is_available():
-            raise MCPError("MCP service is not available")
-
-        await self._client.store_memory(key, value)
-
-    async def retrieve_memory(self, key: str) -> str:
-        """Retrieve memory from MCP."""
-        if not self.is_available():
-            raise MCPError("MCP service is not available")
-
-        try:
-            return await self._client.retrieve_memory(key)
-        except Exception:
-            return ""
-
-    async def get_tools(self) -> list:
-        """Get MCP tools for LangChain integration."""
-        if not self._initialized:
-            await self.initialize()
-
-        if not self.is_available():
-            return []
-
-        if not self._tools:
-            try:
-
-                async def mcp_context_search(query):
-                    return await self.get_context(query, max_tokens=4096)
-
-                async def mcp_memory_store(key, value):
-                    await self.store_memory(key, value)
-                    return "Stored"
-
-                async def mcp_memory_retrieve(key):
-                    return await self.retrieve_memory(key)
-
-                self._tools = [
-                    Tool.from_function(
-                        func=mcp_context_search,
-                        name="mcp_context_search",
-                        description="Search for contextual information using MCP context server",
-                    ),
-                    Tool.from_function(
-                        func=mcp_memory_store,
-                        name="mcp_memory_store",
-                        description="Store key-value pairs in MCP memory server",
-                    ),
-                    Tool.from_function(
-                        func=mcp_memory_retrieve,
-                        name="mcp_memory_retrieve",
-                        description="Retrieve stored values from MCP memory server",
-                    ),
-                ]
-            except Exception as e:
-                log_info(__name__, f"Failed to create MCP tools: {str(e)}")
-                self._tools = []
-
-        return self._tools
-
-    async def close(self) -> None:
-        """Close MCP client."""
-        if self._initialized:
-            try:
-                await close_mcp_client()
-                self._initialized = False
-                self._client = None
-                log_info(__name__, "Closed MCP client")
-            except Exception as e:
-                self._initialized = False
-                log_info(__name__, f"Failed to close MCP client: {str(e)}")
-
 
 class ServiceManager:
     """Manager for all external service clients."""
@@ -299,7 +186,6 @@ class ServiceManager:
         self.ollama_reasoning: Optional[OllamaClient] = None
         self.ollama_code: Optional[OllamaClient] = None
         self.github: Optional[GitHubClient] = None
-        self.mcp: Optional[MCPClient] = None
         self.health_monitor = get_health_monitor()
 
     async def initialize_services(self) -> None:
@@ -317,9 +203,6 @@ class ServiceManager:
         if self.config.github_token:
             self.github = GitHubClient(self.config.github_token)
 
-        # Initialize MCP client
-        self.mcp = MCPClient()
-
         # Register health checks
         if self.ollama_reasoning:
             self.health_monitor.register_service(
@@ -331,8 +214,6 @@ class ServiceManager:
             )
         if self.github:
             self.health_monitor.register_service("github", self.github.health_check)
-        if self.mcp:
-            self.health_monitor.register_service("mcp", self.mcp.health_check)
 
         log_info(__name__, "Service clients initialized")
 
@@ -344,7 +225,6 @@ class ServiceManager:
             ("ollama_reasoning", self.ollama_reasoning),
             ("ollama_code", self.ollama_code),
             ("github", self.github),
-            ("mcp", self.mcp),
         ]
 
         for name, service in services_to_check:
@@ -358,9 +238,6 @@ class ServiceManager:
     async def close_services(self) -> None:
         """Close all service clients."""
         log_info(__name__, "Closing service clients")
-
-        if self.mcp:
-            await self.mcp.close()
 
         log_info(__name__, "Service clients closed")
 

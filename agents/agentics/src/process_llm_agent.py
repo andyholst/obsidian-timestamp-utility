@@ -9,7 +9,6 @@ from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from .base_agent import BaseAgent
 from .state import State
 from .utils import safe_json_dumps, remove_thinking_tags, log_info, parse_json_response
-from .mcp_client import get_mcp_client
 from .performance import get_response_cache, get_memory_manager
 from .llm_validator import validate_llm_response, MultiModelFallback
 from .circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
@@ -57,7 +56,7 @@ class ProcessLLMAgent(BaseAgent):
         )
 
     def _prepare_ticket_content(self, inputs):
-        """Prepare ticket content for the prompt with MCP context enhancement."""
+        """Prepare ticket content for the prompt."""
         state = inputs
         ticket_content = state.get("refined_ticket", state.get("ticket_content", ""))
         log_info(
@@ -68,35 +67,6 @@ class ProcessLLMAgent(BaseAgent):
         # If ticket_content is a dict, convert to string for the prompt
         if isinstance(ticket_content, dict):
             ticket_content = json.dumps(ticket_content)
-
-        # Try to enhance with MCP context
-        try:
-            mcp_client = get_mcp_client()
-            context_query = (
-                f"Context for software development task: {ticket_content[:200]}..."
-            )
-            log_info(self.name, f"Retrieving MCP context for: {context_query[:100]}...")
-
-            # Run async MCP call in sync context
-            context = asyncio.run(
-                mcp_client.get_context(context_query, max_tokens=8192)
-            )
-            if context and context.strip():
-                enhanced_content = f"CONTEXT FROM MCP:\n{context}\n\nORIGINAL TICKET:\n{ticket_content}"
-                log_info(
-                    self.name,
-                    f"Enhanced ticket content with MCP context (length: {len(enhanced_content)})",
-                )
-                ticket_content = enhanced_content
-            else:
-                log_info(
-                    self.name, "No MCP context available, using original ticket content"
-                )
-        except Exception as e:
-            log_info(
-                self.name,
-                f"MCP context retrieval failed: {str(e)}, using original ticket content",
-            )
 
         log_info(self.name, f"Final ticket content length: {len(ticket_content)}")
         log_info(self.name, f"Final ticket content: {ticket_content[:500]}...")
