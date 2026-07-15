@@ -346,6 +346,33 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
      loop on `input()`. (Captured in the `hitl-optin-loop-excluded` OpenSpec change + `hitl-optin` spec.)
      B8 sync: this behaviour is documented here, in `hermes/skills/openspec-loop-harness.md`, and in the
      `hitl-optin` spec — keep all three in agreement.
+  - **(B22) Release automation is a POST-GREEN loop-engineering stage, never part of the 7-stage
+     verification gate, and NO push.** The Makefile prepares a release LOCALLY; the actual GitHub
+     release is cut by CI (`.github/workflows/release.yml`, on merge to `main`). Local commands:
+       - **`make bump-local`** — LOCAL staging: `check-released` → `bump-version` (Obsidian way:
+         `package.json` + `manifest.json` + `versions.json`) → `tag-release` (LOCAL tag only). NO
+         squash-commits, NO changelog, NO release-notes, NO push. Use this to advance the version
+         locally (e.g. `make bump-local PART=patch`).
+       - **`make squash-commits`** — squash to one TYPED Conventional commit (see below).
+       - **`make changelog`** — regenerate sectioned `CHANGELOG.md`.
+       - **`make release-notes`** — refresh the README release-notes block.
+       - **`make release-prep`** — the local publish-prep wrapper: `check-released` → `bump-version`
+         → `squash-commits` → `changelog` → `release-notes` → `tag-release` (LOCAL tag only). The
+         GitHub release itself is done by CI on merge to main. NO push (B14).
+       - **`make loop-release`** — loop-facing variant: same steps, but NO-OP if no generated TS
+         changed vs HEAD, and runs `check-released` first.
+     `check-released` FAILS if the CURRENT `package.json` version is ALREADY released on GitHub
+     (remote tag `<version>` OR `v<version>`, tolerant of both forms) OR does NOT advance past the
+     latest released version (no semver gap) — so a bump only happens when not-yet-released AND
+     there is a real forward gap. It FAILS-CLOSED if `gh`/network is unavailable. The squashed
+     commit's Conventional `type(scope):` prefix is the SINGLE SOURCE OF TRUTH: `squash-commits`
+     FORCES a valid `type(scope):` first line and FAILS-CLOSED if untyped, driving BOTH the changelog
+     section (feat→✨, fix→🐞, docs→📝, refactor→🔧, chore→🛠️) AND the bump semantics. Pushing commit +
+     tag is a deliberate human action that triggers CI to publish. (NOTE: the pre-existing `release`
+     Makefile target is the CI build-zip step — left intact for `release.yml`; do NOT reuse it for
+     local prep.)
+     B8 sync: documented here, in `hermes/skills/openspec-loop-harness.md`, and in the
+     `release-automation` spec.
   - **(B7.1) The deterministic floor runs in EVERY mode (incl. fast).** `route_hitl` in
     `composable_workflows.py` previously returned `output_result` when `TEST_FAST_MODE=1` (set by
     `tests/integration/conftest.py` to skip the npm-test phase), which bypassed `integration_testing`

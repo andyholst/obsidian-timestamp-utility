@@ -410,6 +410,29 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       the **pass-through** (state unchanged, no `human_feedback`), never the interactive-only key (flaky in
       the loop). The two-flag gate stops a leaked `HITL_ENABLED` from ever blocking the loop on `input()`.
       (Captured in `hitl-optin-loop-excluded` change + `hitl-optin` spec. B8: mirror in AGENTS.md + skill + spec.)
+    - **(B22) Release automation is a POST-GREEN loop-engineering stage, never part of the 7-stage
+      verification gate, and NO push.** The Makefile prepares a release LOCALLY; the actual GitHub
+      release is cut by CI (`.github/workflows/release.yml`, on merge to `main`). Local commands:
+        - **`make bump-local`** — LOCAL staging: `check-released` → `bump-version` (Obsidian way:
+          `package.json`+`manifest.json`+`versions.json`) → `tag-release` (LOCAL tag only). NO
+          squash/changelog/release-notes/push. Advance the version locally (e.g. `make bump-local PART=patch`).
+        - **`make squash-commits`** — squash to one TYPED Conventional commit.
+        - **`make changelog`** — regenerate sectioned `CHANGELOG.md`.
+        - **`make release-notes`** — refresh README release-notes block.
+        - **`make release-prep`** — local publish-prep wrapper: `check-released` → `bump-version` →
+          `squash-commits` → `changelog` → `release-notes` → `tag-release` (LOCAL tag only). CI does
+          the real GitHub release on merge to main. NO push (B14).
+        - **`make loop-release`** — loop-facing variant: same steps, NO-OP if no generated TS changed
+          vs HEAD, runs `check-released` first.
+      `check-released` FAILS if the CURRENT `package.json` version is ALREADY released on GitHub
+      (remote tag `<version>` OR `v<version>`, tolerant) OR does NOT advance past the latest released
+      version (no semver gap) — bump only when not-yet-released AND a real forward gap exists. FAILS-CLOSED
+      if `gh`/network unavailable. The squashed commit's Conventional `type(scope):` prefix is the
+      SINGLE SOURCE OF TRUTH: `squash-commits` FORCES a valid `type(scope):` first line, FAILS-CLOSED if
+      untyped, driving BOTH the changelog section (feat→✨, fix→🐞, docs→📝, refactor→🔧, chore→🛠️) AND the
+      bump semantics. Pushing commit+tag is a deliberate human action that triggers CI to publish.
+      (NOTE: the pre-existing `release` Makefile target is the CI build-zip step — left intact for
+      `release.yml`; do NOT reuse it for local prep.) (Captured in `release-automation` spec. B8: mirror.)
     ## Plan-B merge refactor (integrator-merge-refactor)
 
 - **Imports:** inject new `import` lines at the top (after the last existing top-level import).

@@ -59,7 +59,8 @@ DOCKER_SOCK := $(shell \
         stop-containers \
         clean clean-cache clean-logs clean-oci \
         loop-harness loop-unit loop-integration loop-build-app loop-test-app loop-verify loop-tasks \
-        squash-commits
+        squash-commits \
+        bump-version release-notes tag-release loop-release check-released release bump-local release-prep
 
 .DEFAULT_GOAL := help
 
@@ -358,27 +359,143 @@ loop-tasks: ## Loop visibility: list open/done task counts for every active chan
 	done
 	@echo "=== run 'make phase7-archive CHANGE=<name>' only when open=0 ==="
 
-squash-commits: ## Squash ALL commits ahead of `main` into ONE thorough, file-grounded Angular commit (Hermes, project-manager). NO push (B14).
-		@# Diff base is `main` (the real branch origin), NOT the loose upstream.
-		@# Hermes receives the changed-file list + diff-stat vs `main` and must
-		@# write a THOROUGH body describing what the substantive files
-		@# ACTUALLY do (behaviour), not meta commentary about the commit tool.
-		@MAIN=$$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse --verify main 2>/dev/null || echo ""); \
-		if [ -z "$$MAIN" ]; then echo "COMMIT: no 'main' ref found -- aborting."; exit 1; fi; \
-		AHEAD=$$(git rev-list --count $$MAIN..HEAD 2>/dev/null || echo 0); \
-		if [ "$$AHEAD" = "0" ] && [ -z "$$(git diff HEAD --name-only)" ]; then echo "COMMIT: nothing ahead of main and tree clean -- nothing to squash/commit."; exit 0; fi; \
-		echo "COMMIT: $$AHEAD commit(s) ahead of main -- squashing into one."; \
-		git reset --soft $$MAIN; \
-		git add -A; \
-		FILES=$$(git diff --cached --name-only $$MAIN); \
-		STAT=$$(git diff --stat $$MAIN | tail -40); \
-		echo "COMMIT: $$AHEAD commits squashed. Changed files vs main:"; echo "$$FILES"; \
-		echo "COMMIT: asking Hermes (profile=project-manager) for a THOROUGH Angular message grounded in these files..."; \
-		hermes profile use project-manager >/dev/null 2>&1 || true; \
-		PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch that is being squashed into a single commit. The FIRST line is 'type(scope): subject' (type from: feat fix refactor test docs chore style perf build ci revert; scope is the area; subject is imperative, <=72 chars, no trailing period). Then a blank line, then a THOROUGH, human-readable body (wrapped ~72 cols) that describes WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover the substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B21 durable behaviours), the agentic pipeline changes, the Makefile / docker-compose / Containerfile changes, the OpenSpec specs merged, and any test/behaviour fixes. Be specific enough that another engineer can act on it. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
-		MSG=$$(hermes -z "$$PROMPT" 2>/dev/null); \
-		if [ -z "$$MSG" ]; then echo "COMMIT: Hermes returned no message -- aborting (no empty commit)."; git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; fi; \
-		git commit -m "$$MSG" && echo "COMMIT: created one squashed commit (not pushed -- B14). Review with 'git show'."
+squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed Conventional commit (Hermes, project-manager). The FIRST line MUST be `type(scope): subject` (type in feat|fix|docs|refactor|perf|test|chore|build|ci|style|revert) so the changelog sections and the version bump are tagged accordingly. NO push (B14).
+	@# Diff base is `main` (the real branch origin), NOT the loose upstream.
+	@# Hermes receives the changed-file list + diff-stat vs `main` and must
+	@# write a THOROUGH body describing what the substantive files
+	@# ACTUALLY do (behaviour), not meta commentary about the commit tool.
+	@# CRITICAL (release-automation): the FIRST line is the Conventional-Commits
+	@# tag (e.g. `feat(loop): ...`, `fix(agentics): ...`, `docs(readme): ...`).
+	@# The changelog sections (chglog/config.yml) and `bump-version` PART are
+	@# derived from this type, so it MUST start with `^(feat|fix|docs|refactor
+	@# |perf|test|chore|build|ci|style|revert)(\(.*\))?:\s`. Fail-closed otherwise.
+	@MAIN=$$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse --verify main 2>/dev/null || echo ""); \
+	if [ -z "$$MAIN" ]; then echo "COMMIT: no 'main' ref found -- aborting."; exit 1; fi; \
+	AHEAD=$$(git rev-list --count $$MAIN..HEAD 2>/dev/null || echo 0); \
+	if [ "$$AHEAD" = "0" ] && [ -z "$$(git diff HEAD --name-only)" ]; then echo "COMMIT: nothing ahead of main and tree clean -- nothing to squash/commit."; exit 0; fi; \
+	echo "COMMIT: $$AHEAD commit(s) ahead of main -- squashing into one."; \
+	git reset --soft $$MAIN; \
+	git add -A; \
+	FILES=$$(git diff --cached --name-only $$MAIN); \
+	STAT=$$(git diff --stat $$MAIN | tail -40); \
+	echo "COMMIT: $$AHEAD commits squashed. Changed files vs main:"; echo "$$FILES"; \
+	echo "COMMIT: asking Hermes (profile=project-manager) for a THOROUGH, TYPED Conventional message..."; \
+	hermes profile use project-manager >/dev/null 2>&1 || true; \
+	PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch being squashed into a single commit. RULE 1 (mandatory): the FIRST line is EXACTLY 'type(scope): subject' where type is ONE of: feat, fix, docs, refactor, perf, test, chore, build, ci, style, revert; scope is the area (e.g. loop, agentics, readme, release); subject is imperative, <=72 chars, no trailing period. RULE 2: then a blank line, then a THOROUGH human-readable body (wrapped ~72 cols) describing WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B21 durable behaviours), agentic pipeline changes, Makefile / docker-compose / Containerfile changes, OpenSpec specs merged, and any test/behaviour fixes. Be specific. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
+	MSG=$$(hermes -z "$$PROMPT" 2>/dev/null); \
+	if [ -z "$$MSG" ]; then echo "COMMIT: Hermes returned no message -- aborting (no empty commit)."; git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; fi; \
+	FIRST=$$(printf '%s' "$$MSG" | head -1); \
+	if ! printf '%s' "$$FIRST" | grep -qE '^(feat|fix|docs|refactor|perf|test|chore|build|ci|style|revert)(\([^)]*\))?:\s'; then \
+		echo "COMMIT: FAIL-CLOSED -- first line is not a typed Conventional commit: '$$FIRST'"; \
+		echo "COMMIT: refusing to create an untyped commit (changelog + bump need the type)."; \
+		git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; \
+	fi; \
+	git commit -m "$$MSG" && echo "COMMIT: created one TYPED Conventional commit (not pushed -- B14). Review with 'git show'."
+
+# ---- Release automation (post-green loop-engineering stage) ----
+#
+# SINGLE COMMAND for the user: `make release` bumps the Obsidian version, squashes a TYPED
+# Conventional commit, regenerates the sectioned CHANGELOG, refreshes the README release-notes
+# block, and creates a LOCAL tag. `loop-release` is the loop-facing variant (same steps, guarded
+# on generated-TS changes). Both are guarded by `check-released` so a version already published to
+# the GitHub project repo is NEVER bumped/tagged again.
+#
+# Order (single command `make release`):
+#   1. check-released -- abort if CURRENT version is already tagged on GitHub (tolerant X / vX)
+#   2. bump-version  -- Obsidian way: package.json + manifest.json + versions.json
+#   3. squash-commits-- one TYPED Conventional commit (type drives changelog + bump)
+#   4. changelog     -- regenerate CHANGELOG.md (git_chglog, SECTIONED by commit type)
+#   5. release-notes -- refresh the README "Release / Changelog" block (mirrors sections)
+#   6. tag-release   -- local `git tag v<version>` (NO push, B14)
+# The squashed commit's Conventional type is the single source of truth for BOTH the changelog
+# sections and the version-bump PART, so the commit is "tagged accordingly" before it is ever written.
+PART ?= patch
+
+check-released: ## Guard: FAIL if the CURRENT package.json version is already released on GitHub (remote tag <ver> or v<ver>), OR if it does NOT advance past the latest released version (no semver gap). FAIL-CLOSED if gh/network unavailable.
+	@command -v node >/dev/null 2>&1 || { echo "CHECK-RELEASED: node required -- aborting."; exit 1; }
+	@VER=$$(node -p "require('./package.json').version"); \
+	echo "CHECK-RELEASED: current version = $$VER"; \
+	if ! command -v gh >/dev/null 2>&1; then echo "CHECK-RELEASED: gh CLI not found -- REFUSING (cannot verify release state)."; exit 1; fi; \
+	echo "CHECK-RELEASED: querying origin for released tags..."; \
+	REMOTE=$$(git ls-remote --tags --refs origin 2>/dev/null | awk '{print $$2}' | sed 's#refs/tags/##' | sed 's/^v//' || true); \
+	if echo "$$REMOTE" | grep -qx "$$VER"; then echo "CHECK-RELEASED: version $$VER is ALREADY RELEASED on GitHub -- bump BLOCKED. Release it (git push) or fix package.json before bumping."; exit 1; fi; \
+	LATEST=$$(echo "$$REMOTE" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$$' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1); \
+	echo "CHECK-RELEASED: latest released version on GitHub = $${LATEST:-<none>}"; \
+	if [ -n "$$LATEST" ]; then \
+		ADV=$$(awk -F. -v c="$$VER" -v l="$$LATEST" 'BEGIN{split(c,a,".");split(l,b,".");for(i=1;i<=3;i++){if(a[i]>b[i]){print 0;exit};if(a[i]<b[i]){print 1;exit}}print 1}'); \
+		if [ "$$ADV" != "0" ]; then echo "CHECK-RELEASED: $$VER does NOT advance past latest released $$LATEST (no semver gap) -- bump BLOCKED."; exit 1; fi; \
+	fi; \
+	echo "CHECK-RELEASED: $$VER is NOT released and advances past $${LATEST:-<none>} -- OK to bump."
+
+bump-version: ## Bump the Obsidian plugin version (Obsidian way): package.json + manifest.json + append versions.json. PART=patch|minor|major (default patch). ONLY when new plugin TS exists in src/main.ts vs origin/main.
+	@command -v node >/dev/null 2>&1 || { echo "BUMP: node required -- aborting."; exit 1; }
+	@command -v jq  >/dev/null 2>&1 || { echo "BUMP: jq required -- aborting."; exit 1; }
+	@# Guard: only bump when new generated plugin TS actually exists in src/main.ts vs origin/main
+	@# (the committed baseline the branch forked from). Fall back to HEAD if origin/main is absent.
+	@if [ ! -f src/main.ts ]; then echo "BUMP: src/main.ts missing -- refusing to bump (no plugin code)."; exit 1; fi; \
+	BASE=$$(git rev-parse --verify origin/main 2>/dev/null || echo "HEAD"); \
+	if git diff --quiet $$BASE -- src/main.ts && [ -z "$$(git ls-files --others --exclude-standard src/main.ts)" ]; then \
+		echo "BUMP: no new plugin TS code in src/main.ts vs $$BASE -- refusing to bump (nothing to release)."; exit 1; \
+	fi; \
+	echo "BUMP: new plugin TS detected in src/main.ts vs $$BASE -- proceeding with version bump."; \
+	OLD=$$(node -p "require('./package.json').version"); \
+
+	if [ "$$PART" != "patch" ] && [ "$$PART" != "minor" ] && [ "$$PART" != "major" ]; then echo "BUMP: PART must be patch|minor|major (got '$$PART')"; exit 1; fi; \
+	IFS='.' read -r MAJ MIN PAT <<< "$$OLD"; \
+	if [ "$$PART" = "major" ]; then MAJ=$$((MAJ+1)); MIN=0;  PAT=0; \
+	elif [ "$$PART" = "minor" ]; then MIN=$$((MIN+1)); PAT=0; \
+	else PAT=$$((PAT+1)); fi; \
+	NEW="$$MAJ.$$MIN.$$PAT"; \
+	echo "BUMP: $$OLD -> $$NEW (PART=$$PART)"; \
+	node -e "const f='package.json';const j=require('./'+f);j.version='$$NEW';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n');"; \
+	node -e "const f='manifest.json';const j=require('./'+f);j.version='$$NEW';require('fs').writeFileSync(f,JSON.stringify(j,null,2)+'\n');"; \
+	TMP=$$(mktemp); \
+	jq --arg v "$$NEW" --arg m "$$(node -p "require('./manifest.json').minAppVersion")" '. + {$$v:$$m}' versions.json > "$$TMP" && mv "$$TMP" versions.json; \
+	echo "BUMP: versions.json now has entry \"$$NEW\"."; \
+	echo "BUMP: done. Review package.json / manifest.json / versions.json, then commit via 'make squash-commits'."
+
+release-notes: ## Refresh the README "Release / Changelog" block to the current version, categorized by commit type (mirrors the changelog sections).
+	@command -v node >/dev/null 2>&1 || { echo "RELNOTES: node required -- aborting."; exit 1; }
+	@python3 scripts/update-release-notes.py README.md
+
+tag-release: ## Create a LOCAL git tag v<version> (NO push -- B14). Run AFTER squash-commits.
+	@command -v node >/dev/null 2>&1 || { echo "TAG: node required -- aborting."; exit 1; }
+	@VER=$$(node -p "require('./package.json').version"); \
+	TAG="v$$VER"; \
+	if git rev-parse "$$TAG" >/dev/null 2>&1; then echo "TAG: $$TAG already exists -- skipping."; exit 0; fi; \
+	git tag -a "$$TAG" -m "Release $$VER"; \
+	echo "TAG: created local tag $$TAG (NOT pushed -- B14). Push deliberately with 'git push origin $$TAG'."; \
+	echo "TAG: verify with 'git show $$TAG'."
+
+release-prep: check-released ## LOCAL release prep (publish happens in CI): bump (Obsidian way) -> typed squash -> sectioned changelog -> README release-notes -> local tag. Refuses if current version already released on GitHub. NO push (B14) -- the actual GitHub release is done by .github/workflows/release.yml on merge to main.
+	@echo "=== RELEASE-PREP: local release prep (guarded) ==="; \
+	$(MAKE) bump-version PART=$(PART); \
+	$(MAKE) squash-commits; \
+	$(MAKE) changelog; \
+	$(MAKE) release-notes; \
+	$(MAKE) tag-release; \
+	echo "=== RELEASE-PREP COMPLETE: bump + squashed typed commit + changelog + release-notes + local tag. The GITHUB RELEASE is cut by CI (.github/workflows/release.yml) when you merge to main / push the tag. NO push here (B14). ==="
+
+loop-release: ## Post-green release stage: guard (generated TS changed + not already released) -> bump -> squash -> changelog -> release-notes -> local tag. NO push.
+	@echo "=== LOOP-RELEASE: post-green release stage ==="; \
+	CHANGED=0; for f in src/main.ts src/__tests__/main.test.ts; do \
+		if [ -f "$$f" ] && ! git diff --quiet HEAD -- "$$f"; then CHANGED=1; echo "LOOP-RELEASE: $$f changed vs HEAD"; fi; \
+	done; \
+	if [ "$$CHANGED" = "0" ]; then echo "LOOP-RELEASE: no generated TS changed vs HEAD -- NO-OP (no version bump, no tag)."; exit 0; fi; \
+	echo "LOOP-RELEASE: generated TS changed -> running guarded release."; \
+	$(MAKE) check-released; \
+	$(MAKE) bump-version PART=patch; \
+	$(MAKE) squash-commits; \
+	$(MAKE) changelog; \
+	$(MAKE) release-notes; \
+	$(MAKE) tag-release; \
+	echo "=== LOOP-RELEASE COMPLETE: bump + squashed typed commit + changelog + release-notes + local tag. NO push (B14). ==="
+
+bump-local: check-released ## LOCAL-ONLY: bump the Obsidian version + create a LOCAL tag, WITHOUT the full release flow (no squash-commits, no changelog, no release-notes, no push). For advancing the version locally.
+	@echo "=== BUMP-LOCAL: bump version + local tag only (no squash/changelog/publish) ==="; \
+	$(MAKE) bump-version PART=$(PART); \
+	$(MAKE) tag-release; \
+	echo "=== BUMP-LOCAL COMPLETE: version bumped (Obsidian way) + local tag. NO commit squash, NO changelog, NO push (B14). ==="
 
 # ---- Checks ----
 

@@ -286,3 +286,21 @@ For those interested in contributing:
      described above.
 4. Contribute:
    - Follow standard Git workflows to submit pull requests with your changes.
+
+<!-- RELEASE_NOTES -->
+## Release / Changelog
+
+Current plugin version: **0.4.10** (tag `v0.4.10`).
+
+The changelog is SECTIONED by commit type (git_chglog, `chglog/config.yml`):
+- 🚀 **New Features** (`feat`)
+- 🐞 **Bug Fixes** (`fix`)
+- ⚡ **Improvements** (`perf`)
+- 🔧 **Improvements** (`refactor`)
+- 📝 **Documentation** (`docs`)
+- 🛠️ **Maintenance** (`chore`)
+
+The full, per-version, categorized history lives in [CHANGELOG.md](CHANGELOG.md). The squashed
+release commit is written with a Conventional `type(scope):` prefix so it lands in the correct
+section and decides the version bump (feat/fix/perf -> minor, refactor/docs/chore -> patch).
+<!-- RELEASE_NOTES -->

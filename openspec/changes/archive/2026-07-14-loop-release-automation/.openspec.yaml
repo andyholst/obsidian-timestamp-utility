@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-14
+goal: Release automation (version bump + tag + changelog + README) is a
+  first-class loop-engineering stage triggered when the loop is green

@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-14
+goal: One easy command to release, guarded so it never bumps a version already
+  published to the GitHub project repo
