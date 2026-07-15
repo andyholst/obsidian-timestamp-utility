@@ -2,10 +2,16 @@
 #
 # run-loop-harness.sh — mandatory loop-gate trigger (AGENTS.md behaviour B20).
 #
-# Thin, honest wrapper over `make loop-harness`. Runs the seven loop stages IN FULL,
-# in order (loop-collect -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration
-# -> loop-build-app -> loop-test-app), and prints a per-stage PASS/FAIL/TIMEOUT summary,
+# Thin, honest wrapper over `make loop-harness`. Runs the eight loop stages IN FULL, then a
+# FINAL B8 doc-sync gate,
+# in order (loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration
+# -> loop-build-app -> loop-test-app -> check-docs-sync), and prints a per-stage PASS/FAIL/TIMEOUT summary,
 # exiting non-zero if any stage is red.
+#
+# B8 durable-behaviour range: B1-B25 (the loop's "laws of physics"; see AGENTS.md). The
+# final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
+# Canonical stage order (B8 source of truth):
+#   loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> check-docs-sync
 #
 # Ollama is expected to be running on the host (bound to 127.0.0.1:11434) and is
 # reachable from the containers via network_mode: host (see docker-compose-files/agents.yaml).
@@ -15,7 +21,7 @@
 # (each stage is wrapped in `timeout`).
 #
 # Usage:
-#   bash scripts/run-loop-harness.sh            # full loop-harness (all seven stages)
+#   bash scripts/run-loop-harness.sh            # full loop-harness (all eight stages)
 #   bash scripts/run-loop-harness.sh --hermetic # only loop-collect + loop-unit (fast pre-flight)
 #
 set -u
@@ -38,16 +44,18 @@ make b9-perms >/dev/null 2>&1 || true
 # Per-stage wall-clock caps (seconds). Generous, but a hung stage must not block forever.
 declare -A STAGE_TIMEOUT=(
   [loop-collect]=300
+  [loop-ts-floor]=300
   [loop-unit]=600
   [loop-unit-real]=900
   [loop-e2e]=1200
   [loop-integration]=1500
   [loop-build-app]=900
   [loop-test-app]=900
+  [check-docs-sync]=120
 )
 
-STAGES=(loop-collect loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app)
-HERMETIC=(loop-collect loop-unit)
+STAGES=(loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app check-docs-sync)
+HERMETIC=(loop-collect loop-ts-floor loop-unit)
 
 summary=()
 overall=0
@@ -68,12 +76,14 @@ stage_service() {
 stage_desc() {
   case "$1" in
     loop-collect)     echo "pytest --collect-only (unit + integration) via agents.yaml -> fail fast on dangling imports" ;;
+    loop-ts-floor)    echo "scripts/ts_test_floor.sh -> FAIL if describe/leaf/jest-collected/addCommand counts drop below origin/main (silent feature/test removal guard)" ;;
     loop-unit)        echo "pytest tests/unit (mocked / hermetic) via agents.yaml -> unit-test-agents" ;;
     loop-unit-real)   echo "pytest tests/unit on LIVE Ollama (no mocks) via agents.yaml -> unit-test-agents" ;;
     loop-e2e)         echo "3 standing e2e gates (ticket20 / ticket22 / greetings) via agents.yaml -> integration-test-agents" ;;
-    loop-integration) echo "pytest -m 'integration and not e2e and not slow' via agents.yaml -> integration-test-agents" ;;
     loop-build-app)   echo "docker compose tools.yaml run app: npm run build (rollup)" ;;
     loop-test-app)    echo "docker compose tools.yaml run app: npm test (jest)" ;;
+    check-docs-sync)  echo "scripts/check-docs-sync.py -> FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B25) — FINAL gate" ;;
+
     *)                echo "make $1" ;;
   esac
 }
@@ -153,6 +163,26 @@ run_stage() {
   summary+=("$stage PASS")
   return 0
 }
+
+# ---------------------------------------------------------------------------
+# PRE-FLIGHT 0: verify the B8 doc/loop-sync gate itself BEHAVES (unit tests) and that
+# the current tree is actually in sync (live gate). Runs FIRST so a broken gate or a
+# drifted doc fails the whole loop before any heavy stage spins up.
+# ---------------------------------------------------------------------------
+echo "=== PRE-FLIGHT 0: check-docs-sync unit tests + live gate ==="
+if ! make test-check-docs-sync; then
+  echo "  -> PRE-FLIGHT 0 FAIL: check-docs-sync unit tests failed (gate logic broken)"
+  overall=1
+fi
+if ! make check-docs-sync; then
+  echo "  -> PRE-FLIGHT 0 FAIL: B8 doc/loop sync drift detected (run from repo root)"
+  overall=1
+fi
+if [[ "${overall:-0}" != "0" ]]; then
+  echo "RESULT: FAILURE — pre-flight B8 doc-sync gate is red. Fix before running stages."
+  exit 1
+fi
+echo "  -> PRE-FLIGHT 0 PASS"
 
 for stage in "${STAGES[@]}"; do
   is_hermetic=0

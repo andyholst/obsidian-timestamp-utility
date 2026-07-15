@@ -2,6 +2,66 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.11
+
+### ✨ New Features
+
+- **feat(loop): add commitlint-gated squash-commits and release automation**
+  - Implement the OpenSpec loop-harness engineering discipline end-to-end and
+  - harden the release automation that the branch is built around.
+  - Deterministic generation floor
+  - code_integrator_agent.py now runs as the SOLE writer of src/main.ts in
+  - every mode (incl. fast/TEST_FAST_MODE), so the spec contract is always
+  - injected even when the npm test phase is skipped (B7.1). The integrator
+  - strips non-contract addCommand calls and stale Modals, then injects the
+  - authoritative contract command body verbatim; no generated TS bodies live
+  - in Python (B10). On failure the loop fixes the spec, restores the backup,
+  - and re-runs — never hand-editing TS (B11).
+  - openspec_loader.py resolves the repo root by probing for a dir that
+  - contains openspec/changes (never a fixed depth), handles archived
+  - date-prefixed change dirs (archive/\*-<name>), and scaffolds GitHub-issue
+  - changes via `openspec new change ticket<N>` (B15).
+  - Eight-stage loop gate
+  - Makefile defines loop-harness = loop-collect -> loop-ts-floor ->
+  - loop-unit -> loop-unit-real -> loop-e2e -> loop-integration ->
+  - loop-build-app -> loop-test-app, plus phase7-archive with an open-task
+  - guard (B16) and the standing B1 e2e guard.
+  - ts_test_floor.sh (new) fails the current branch if its describe/leaf
+  - it/test/addCommand counts drop below origin/main (silent feature/test
+  - removal guard, ts-test-floor spec).
+  - run-loop-harness.sh streams each stage live and prints a PASS/FAIL/
+  - timeout summary.
+  - Release automation (release-automation spec, +366 lines)
+  - squash-commits now FORCES a typed `type(scope):` first line and passes
+  - it through commitlint (lint-commits gate); on failure it restores the
+  - pre-squash state (git reset --quit <main>) and creates no commit.
+  - changelog sections are derived from the squashed commit's Conventional
+  - type (feat->..., fix->..., docs->..., refactor->..., chore->...) via
+  - gen_changelog.sh; merge_changelog.py merges idempotently, deduping
+  - against committed git HEAD rather than appending duplicate sections.
+  - bump_from_changelog.py computes a STABLE next version (max of released
+  - remote tags + committed pkg/versions at HEAD, ignoring local working
+  - tags) so re-runs overwrite in place instead of runaway 0.4.11->0.4.12.
+  - loop-finish, release-guard, release-finalisation-commands,
+  - changelog-commit-alignment and loop-green-auto-squash-changelog provide
+  - the green-gated one-command finalisation (squash -> changelog -> bump ->
+  - format), NO push (B4/B14/B22).
+  - git-hooks/commit-msg wires commitlint into every manual commit.
+  - Generated feature + tests
+  - src/main.ts / src/**tests**/main.test.ts gain the base64-tool command,
+  - Modal and generator (base64-tool spec) and the stricter test-floor wiring.
+  - New test_base64_e2e_integration.py covers the base64 tool;
+  - test_change_driven_ts_generation_e2e.py root-resolution fix removes a
+  - false `src/main.ts` skip (B19) so the contract e2e actually runs.
+  - Durable behaviours & docs
+  - AGENTS.md, hermes/skills/openspec-loop-harness.md and
+  - docs/openspec-engineering-loop-harness.md are re-synced (B8) across the
+  - full B1-B25 set: per-change worktrees (B24), no parent reset (B24),
+  - no agent squash without approval (B25), false-skip audit (B17),
+  - live Ollama tests run rather than skip (B18/B19).
+  - manifests bumped: manifest.json, package.json, versions.json.
+  - agent-wiki captures the strict-ts-test-floor entry; CHANGELOG.md updated.
+
 ## 0.4.9
 
 ### ✨ New Features

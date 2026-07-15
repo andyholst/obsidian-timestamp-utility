@@ -4,7 +4,7 @@ import * as obsidian from 'obsidian';
 const mockManifest: obsidian.PluginManifest = {
     id: 'obsidian-timestamp-utility',
     name: 'Timestamp Utility',
-    version: '0.4.10',
+    version: '0.4.11',
     minAppVersion: '0.15.0',
     description: 'Insert timestamps and rename files with timestamp prefixes.',
     author: 'Your Name',
@@ -583,6 +583,47 @@ describe('TimestampPlugin', () => {
                     throw new Error('insert-uuid-v7 command is not properly defined');
                 }
             });
+            describe('base64 commands', () => {
+        let base64Plugin: TimestampPlugin;
+        const base64Commands: { [key: string]: obsidian.Command } = {};
+
+        beforeEach(() => {
+            jest.clearAllMocks();
+            base64Plugin = new TimestampPlugin(mockApp, mockManifest);
+            base64Plugin.addCommand = (command: obsidian.Command): obsidian.Command => {
+                base64Commands[command.id] = command;
+                return command;
+            };
         });
+
+        test('adds encode-base64-message command', async () => {
+            await base64Plugin.onload();
+            const cmd = base64Commands['encode-base64-message'];
+            expect(cmd).toBeDefined();
+            expect(cmd!.name).toBe('Encode Base64 Message');
+        });
+
+        test('adds decode-base64-message command', async () => {
+            await base64Plugin.onload();
+            const cmd = base64Commands['decode-base64-message'];
+            expect(cmd).toBeDefined();
+            expect(cmd!.name).toBe('Decode Base64 Message');
+        });
+
+        test('encode produces base64 of the input', () => {
+            const plugin = new TimestampPlugin(mockApp, mockManifest);
+            const encoded = (plugin as any).encodeBase64('hello world');
+            expect(encoded).toBe('aGVsbG8gd29ybGQ=');
+        });
+
+        test('decode reverses encode', () => {
+            const plugin = new TimestampPlugin(mockApp, mockManifest);
+            const encoded = (plugin as any).encodeBase64('hello world');
+            const decoded = (plugin as any).decodeBase64(encoded);
+            expect(decoded).toBe('hello world');
+        });
+    });
+
+});
 
 });

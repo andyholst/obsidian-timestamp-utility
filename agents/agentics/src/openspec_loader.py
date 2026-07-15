@@ -255,8 +255,16 @@ def create_change_from_issue(
 
     # 1) Scaffold the change directory structure via the OpenSpec CLI (the same flow a human
     #    runs: `openspec new change <kebab>`). This creates openspec/changes/<name>/ + .openspec.yaml.
+    # Resolve the `openspec` binary explicitly: prefer the project-local install
+    # (node_modules/.bin/openspec, present after `npm install` since @fission-ai/openspec is a
+    # devDependency) so the call works inside the docker e2e/agentics containers where the bare
+    # `openspec` is NOT on PATH; fall back to bare `openspec` for globally-installed setups.
+    _openspec_bin = "openspec"
+    _local_bin = root / "node_modules" / ".bin" / "openspec"
+    if _local_bin.is_file():
+        _openspec_bin = str(_local_bin)
     proc = _sp.run(
-        ["openspec", "new", "change", change_name],
+        [_openspec_bin, "new", "change", change_name],
         cwd=str(root),
         capture_output=True,
         text=True,

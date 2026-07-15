@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-15
+goal: Track describe count, leaf test count, jest-collected total, and
+  addCommand count vs origin/main and fail if any drop

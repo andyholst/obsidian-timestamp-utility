@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-15
+goal: "Prevent loss of fix-work: agent never resets parent, works in a
+  per-change worktree, syncs back."

@@ -62,7 +62,7 @@ services:
     # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:
       - host.docker.internal:host-gateway
-    command: ["bash", "-c", "cd /app && python -m pytest tests/unit/ -vv -s --tb=long $${TEST_FILTER}"]
+    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/unit/ -vv -s --tb=long $${TEST_FILTER}\""]
     network_mode: host
 
   integration-test-agents:
@@ -78,6 +78,7 @@ services:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
       - ..:/app
+      - ..:/project
       - ../logs:/app/logs
       - ../agents/agentics/.cache/huggingface:/tmp/.cache/huggingface
     environment:
@@ -99,6 +100,6 @@ services:
     # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:
       - host.docker.internal:host-gateway
-    command: ["bash", "-c", "cd /app && python -m pytest tests/integration/ -vv -s --tb=long $${TEST_FILTER}"]
+    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/integration/ -vv -s --tb=long $${TEST_FILTER}\""]
     network_mode: host
 

@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# git-hooks/commit-msg — per-commit Conventional-Commits linting gate.
+#
+# Invoked by git as `commit-msg <path-to-commit-message-file>`. Runs commitlint
+# (using the repo's commitlint.config.cjs) against the message. On a violation
+# commitlint exits non-zero and the commit is REJECTED, so a malformed/untyped
+# message never enters history. This is the "changelog lint on each commit" the
+# release flow relies on.
+#
+# Wired into .git/hooks by `make install-git-hooks` (which copies this file and
+# makes it executable). No git push is performed anywhere (B14).
+set -euo pipefail
+
+MSG_FILE="${1:-}"
+
+if [ -z "$MSG_FILE" ]; then
+  echo "commit-msg hook: no message file provided; aborting." >&2
+  exit 1
+fi
+
+# Resolve the repo root so we use the repo's commitlint + config regardless of CWD.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+COMMITLINT="${REPO_ROOT}/node_modules/.bin/commitlint"
+
+if [ ! -x "$COMMITLINT" ]; then
+  echo "commit-msg hook: commitlint not found at $COMMITLINT." >&2
+  echo "commit-msg hook: run 'npm install' first (commitlint is a devDependency)." >&2
+  # Do NOT silently accept — better to fail closed than let an untyped commit slip.
+  exit 1
+fi
+
+if ! "$COMMITLINT" --config "${REPO_ROOT}/commitlint.config.cjs" --edit "$MSG_FILE"; then
+  echo "commit-msg hook: commit message is NOT a valid Conventional Commit (see above)." >&2
+  echo "commit-msg hook: expected first line: 'type(scope): subject' (type in feat|fix|docs|refactor|perf|test|chore|build|ci|style|revert)." >&2
+  exit 1
+fi
+
+echo "commit-msg hook: message OK (Conventional Commit)."
+exit 0

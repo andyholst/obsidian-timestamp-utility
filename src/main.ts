@@ -175,6 +175,22 @@ export default class TimestampPlugin extends obsidian.Plugin {
         },
     });
 
+
+    this.addCommand({
+        id: 'encode-base64-message',
+        name: 'Encode Base64 Message',
+        callback: () => {
+            new Base64Modal(this.app, 'encode').open();
+        },
+    });
+    this.addCommand({
+        id: 'decode-base64-message',
+        name: 'Decode Base64 Message',
+        callback: () => {
+            new Base64Modal(this.app, 'decode').open();
+        },
+    });
+
         this.addCommand({
             id: 'process-tasks',
             name: 'Convert Reminders to Date Time-Blocked Tasks',
@@ -232,6 +248,13 @@ generateUuidV7(): string {
         hex(0x8000 | (r2 & 0x0fff), 4) + '-' + hex(r3, 4) + hex(r4, 4) + hex(r5, 4);
     return uuid;
 }
+
+encodeBase64(message: string): string {
+    return btoa(unescape(encodeURIComponent(message)));
+}
+decodeBase64(encoded: string): string {
+    return decodeURIComponent(escape(atob(encoded)));
+}
 }
 
 export class UuidV7Modal extends obsidian.Modal {
@@ -241,6 +264,43 @@ export class UuidV7Modal extends obsidian.Modal {
     onOpen() {
         const { contentEl } = this;
         contentEl.setText('UUID v7 (timestamp-based) copied to clipboard');
+    }
+    async onClose(): Promise<void> {
+        this.contentEl.empty();
+    }
+}
+
+export class Base64Modal extends obsidian.Modal {
+    private mode: 'encode' | 'decode';
+    constructor(app: obsidian.App, mode: 'encode' | 'decode') {
+        super(app);
+        this.mode = mode;
+    }
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.createEl('h3', {
+            text: this.mode === 'encode' ? 'Encode to Base64' : 'Decode from Base64',
+        });
+        const input = contentEl.createEl('textarea', { cls: 'base64-input' });
+        input.style.width = '100%';
+        input.style.minHeight = '120px';
+        const result = contentEl.createEl('pre', { cls: 'base64-result' });
+        const button = contentEl.createEl('button', { text: this.mode === 'encode' ? 'Encode' : 'Decode' });
+        button.addEventListener('click', () => {
+            try {
+                const value = input.value;
+                result.setText(this.mode === 'encode' ? this.pluginEncode(value) : this.pluginDecode(value));
+            } catch (error) {
+                new obsidian.Notice(`Failed to ${this.mode} base64: ${(error as Error).message}`);
+            }
+        });
+    }
+    private pluginEncode(message: string): string {
+        return btoa(unescape(encodeURIComponent(message)));
+    }
+    private pluginDecode(encoded: string): string {
+        return decodeURIComponent(escape(atob(encoded)));
     }
     async onClose(): Promise<void> {
         this.contentEl.empty();

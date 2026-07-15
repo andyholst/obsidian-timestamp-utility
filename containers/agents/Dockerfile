@@ -14,6 +14,17 @@ RUN apt-get update && apt-get install -y curl && \
 # Install TypeScript globally for use by agents that require it
 RUN npm install -g typescript
 
+# Install git-chglog (used by `make changelog` / `make release-flow` to regenerate CHANGELOG.md).
+# Must be present in THIS image because the changelog target runs in unit-test-agents (image `agentics`).
+RUN curl -sL --retry 3 -o git-chglog.tar.gz https://github.com/git-chglog/git-chglog/releases/download/v0.15.4/git-chglog_0.15.4_linux_amd64.tar.gz || { echo "curl failed to download git-chglog"; exit 1; } && \
+    [ $(stat -c %s git-chglog.tar.gz) -gt 1000000 ] || { echo "git-chglog.tar.gz too small, likely corrupted"; ls -l git-chglog.tar.gz; exit 1; } && \
+    tar xzf git-chglog.tar.gz || { echo "tar failed to extract git-chglog.tar.gz"; exit 1; } && \
+    mv git-chglog /usr/local/bin/ && \
+    chmod +x /usr/local/bin/git-chglog && \
+    rm git-chglog.tar.gz && \
+    git-chglog --version || { echo "git-chglog install failed"; exit 1; }
+
+
 FROM base
 
 ARG HOST_UID=1000

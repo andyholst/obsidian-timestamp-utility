@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-15
+goal: Prove the three release-finalisation make targets work, are idempotent,
+  handle corner cases, and bump the TS test file version literal.
