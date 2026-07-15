@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-15
+goal: Wire record-work into phase7-archive; update the record-work spec + sync
+  AGENTS.md and the loop-harness skill.

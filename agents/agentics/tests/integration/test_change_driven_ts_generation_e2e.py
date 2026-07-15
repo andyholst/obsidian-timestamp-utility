@@ -50,10 +50,12 @@ def _repo_root() -> str:
     """Resolve the repo root regardless of CWD / container mount layout.
 
     In the integration/e2e container ``__file__`` is under ``/app/tests/integration/``
-    (the whole repo is mounted at ``/app``); ``git rev-parse`` may still fail (no git,
-    or safe.directory), so we probe the candidate roots (walk-up + the well-known
-    container mount points ``/project``, ``/app``, cwd) and return the first that
-    actually contains ``openspec/changes``.
+    (the whole repo is mounted at ``/app`` AND ``/project``), but the compose file also
+    bind-mounts the agentics Python source onto ``/app/src``, which SHADOWS the repo's
+    own ``src/main.ts`` (TypeScript). So a candidate that merely contains ``openspec/changes``
+    (e.g. ``/app``) may NOT contain the real ``src/main.ts``. We therefore PREFER the
+    candidate that has BOTH ``openspec/changes`` AND ``src/main.ts``; that reliably resolves
+    to ``/project`` (the unshadowed repo root) rather than the shadowed ``/app``.
     """
     import subprocess as _sp
 
@@ -67,11 +69,14 @@ def _repo_root() -> str:
         )
         if out.returncode == 0 and out.stdout.strip():
             cand = os.path.normpath(out.stdout.strip())
-            if os.path.isdir(os.path.join(cand, "openspec", "changes")):
+            if os.path.isdir(os.path.join(cand, "openspec", "changes")) and os.path.isfile(
+                os.path.join(cand, "src", "main.ts")
+            ):
                 return cand
     except Exception:
         pass
     # (2) probe walk-up + well-known container mounts for a dir containing openspec/changes
+    #     AND src/main.ts (prefer the unshadowed repo root, e.g. /project).
     candidates = [here]
     cur = here
     for _ in range(8):
@@ -81,9 +86,14 @@ def _repo_root() -> str:
         candidates.append(parent)
         cur = parent
     candidates += ["/project", "/app", os.getcwd()]
+    best = None
     for c in candidates:
         if c and os.path.isdir(os.path.join(c, "openspec", "changes")):
-            return c
+            if os.path.isfile(os.path.join(c, "src", "main.ts")):
+                return c  # exact match: unshadowed repo root with the TS contract file
+            best = best or c  # keep an openspec/changes match as fallback
+    if best:
+        return best
     # (3) legacy fallback
     return os.path.normpath(os.path.join(here, "..", "..", "..", ".."))
 

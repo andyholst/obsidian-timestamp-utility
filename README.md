@@ -43,7 +43,7 @@ This repository is documentation-driven (OpenSpec workflow). The key references 
   [test suite guide](docs/architecture/TEST_SUITE_README.md), and the
   [integration test plan](docs/architecture/INTEGRATION_TEST_PLAN.md).
 - **[`docs/openspec-engineering-loop-harness.md`](docs/openspec-engineering-loop-harness.md)** —
-  the OpenSpec harness + loop engineering reference (durable behaviours B1–B21).
+  the OpenSpec harness + loop engineering reference (durable behaviours B1–B25).
 - **[`AGENTS.md`](AGENTS.md)** — the agent execution manual for this OpenSpec-driven repo
   (how changes are proposed, generated, verified, and archived).
 
@@ -290,17 +290,18 @@ For those interested in contributing:
 <!-- RELEASE_NOTES -->
 ## Release / Changelog
 
-Current plugin version: **0.4.10** (tag `v0.4.10`).
+Current plugin version: **0.4.11** (tag `v0.4.11`).
 
 The changelog is SECTIONED by commit type (git_chglog, `chglog/config.yml`):
-- 🚀 **New Features** (`feat`)
-- 🐞 **Bug Fixes** (`fix`)
-- ⚡ **Improvements** (`perf`)
-- 🔧 **Improvements** (`refactor`)
-- 📝 **Documentation** (`docs`)
-- 🛠️ **Maintenance** (`chore`)
+- 🚀 New Features (`feat`)
+- 🐞 Bug Fixes (`fix`)
+- ⚡ Improvements (`perf`)
+- 🔧 Improvements (`refactor`)
+- 📝 Documentation (`docs`)
+- 🚠️ Maintenance (`chore`)
 
 The full, per-version, categorized history lives in [CHANGELOG.md](CHANGELOG.md). The squashed
 release commit is written with a Conventional `type(scope):` prefix so it lands in the correct
 section and decides the version bump (feat/fix/perf -> minor, refactor/docs/chore -> patch).
 <!-- RELEASE_NOTES -->
+

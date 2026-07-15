@@ -384,10 +384,28 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # Exact contract lines in tasks.md look like:
         #   id: 'insert-uuid-v7'  /  name: 'Insert UUID v7 (timestamp-based)'
         #   and a Modal class named `UuidV7Modal` / `UuidV7Modal`.
-        m = re.search(r"id:\s*'(insert-[^']+)'", text)
-        if m:
-            contract["command_id"] = m.group(1)
-        # Also accept spec-style backtick: command (id `insert-...`)
+        # command_id: the authoritative `id: '...'` of the contract command. Anchor to the
+        # CONTRACT_COMMAND block (the spec-authored source of truth) so ANY command id is
+        # captured — not just ones prefixed `insert-`. (Previously this hard-coded
+        # `insert-[^']+`, which broke non-insert commands like `encode-base64-message` /
+        # `decode-base64-message`, leaving command_id unset and crashing the assembly floor
+        # with a KeyError -> 0-byte main.ts. The contract TS itself is the single source of
+        # truth, so we read the id the spec actually pins.)
+        cmd_block = re.search(
+            r"// === CONTRACT_COMMAND ===.*?// === (?:END_CONTRACT|CONTRACT_)",
+            text,
+            re.DOTALL,
+        )
+        if cmd_block:
+            m = re.search(r"id:\s*'([^']+)'", cmd_block.group(0))
+            if m:
+                contract["command_id"] = m.group(1)
+        # Fallback: any `id: '...'` in the text (covers spec prose that pins the id).
+        if "command_id" not in contract:
+            m = re.search(r"id:\s*'([^']+)'", text)
+            if m:
+                contract["command_id"] = m.group(1)
+        # Also accept spec-style backtick: command (id `encode-...`)
         if "command_id" not in contract:
             m = re.search(r"command \(id `([^`]+)`", text)
             if m:
@@ -728,12 +746,16 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             if re.search(rf"\b{re.escape(modal)}\b", blk):
                 cleaned_existing = cleaned_existing.replace(blk, "")
         # STRIP any existing generator-method definition from the baseline so the authoritative
-        # spec generator is the ONLY one present. Match the method DEFINITION line
-        # (`generateUuidV7(` at line start) -- never the call site `this.generateUuidV7()` --
-        # so call sites are preserved. This removes any stale/wrong variant and makes the
-        # spec authoritative (uuid tests are deterministic on the v7 variant nibble).
-        for blk in self._extract_balanced_blocks(cleaned_existing, "generateUuidV7("):
-            cleaned_existing = cleaned_existing.replace(blk, "")
+        # spec generator is the ONLY one present. Derive the method name(s) from the spec's
+        # `generator_fn` (name-agnostic -- not hard-coded to `generateUuidV7`, so base64's
+        # `encodeBase64`/`decodeBase64` and any future generator are handled too). Match the
+        # method DEFINITION line (`<name>(` at line start) -- never the call site
+        # `this.<name>()` -- so call sites are preserved. This removes any stale/wrong variant
+        # and makes the spec authoritative.
+        _gen_names = re.findall(r"^\s*(\w+)\s*\(", feat.get("generator_fn", ""), re.MULTILINE)
+        for _gname in _gen_names:
+            for blk in self._extract_balanced_blocks(cleaned_existing, f"{_gname}("):
+                cleaned_existing = cleaned_existing.replace(blk, "")
 
         # Merge: baseline + the authoritative contract command ONLY (no LLM code).
         merged = self.integrate_code_deterministic(cleaned_existing, injected)
@@ -757,7 +779,12 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # so inject the spec's verbatim generator UNCONDITIONALLY (never skip when "present",
         # never trust the LLM's body). The spec is the single source of truth -- the TS body
         # comes from the change's `## Contract` fenced block, never a Python literal.
-        if "generateUuidV7" in feat["generator_fn"]:
+        # Inject the spec generator UNCONDITIONALLY whenever the contract defines one
+        # (name-agnostic -- not hard-coded to `generateUuidV7`, so base64's
+        # `encodeBase64`/`decodeBase64` and any future generator are handled too). The
+        # baseline was already stripped of any stale generator above, so re-injection is
+        # idempotent and the spec's verbatim generator is the ONLY one present.
+        if feat.get("generator_fn"):
             lines = merged.split("\n")
             # Insert the generator INSIDE the TimestampPlugin class: find the opening
             # `class TimestampPlugin` and brace-match to its closing '}'.

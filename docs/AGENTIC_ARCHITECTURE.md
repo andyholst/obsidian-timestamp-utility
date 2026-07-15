@@ -131,4 +131,4 @@ framework), `docs/architecture/ARCHITECTURE_DEPENDENCY_MANAGEMENT.md` (dependenc
 This file describes **what the agentic code is and how it is structured**. The operational
 "how the whole loop is run and verified" reference is `docs/openspec-engineering-loop-harness.md`
 (and `AGENTS.md` + `hermes/skills/openspec-loop-harness.md`, kept in sync per B8). The durable
-behaviours B1–B21 enforced by the loop are defined there and in `AGENTS.md`.
+behaviours B1–B25 enforced by the loop are defined there and in `AGENTS.md`.

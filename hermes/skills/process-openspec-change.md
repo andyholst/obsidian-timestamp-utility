@@ -27,7 +27,9 @@ Use this skill when a new or active change exists in `openspec/changes/`.
    - Be strict.
 
 6. **Document**
-   - Call the `record-work` skill to create a wiki entry with verification results.
+   - The Phase-7 work-log entry is created automatically by `make phase7-archive CHANGE=<name>`
+     (it runs `scripts/record-work.py` after `openspec archive`). No separate `make record-work`
+     call is needed; it remains callable standalone for re-runs.
 
 7. **Report status**
    - Clearly state:

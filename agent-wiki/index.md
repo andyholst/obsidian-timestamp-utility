@@ -9,7 +9,13 @@ This wiki documents work done on OpenSpec changes for the **obsidian-timestamp-u
 - Weekly summaries live in `weekly-summaries/`.
 
 ## Change Entries
-- [2026-07-15-record-work-script](2026-07-15-record-work-script.md) — Replaced the missing `record-work` skill with a scriptable tool (`scripts/record-work.py` + `make record-work`) that drafts the agent-wiki entry via the Hermes CLI.
+- [2026-07-15-uuid-modal-agentic-generation](2026-07-15-uuid-modal-agentic-generation.md) — Summary
+- [2026-07-15-harden-docker-run-oneshell](2026-07-15-harden-docker-run-oneshell.md) — Summary
+- [2026-07-15-ztest-archive-order](2026-07-15-ztest-archive-order.md) — Summary
+- [2026-07-15-phase7-archive-containerized](2026-07-15-phase7-archive-containerized.md) — work-log entry for `phase7-archive-containerized`
+- [2026-07-15-strict-ts-test-floor](2026-07-15-strict-ts-test-floor.md) — added `loop-ts-floor` guard (stage 0.5): fails the loop if TS test/command counts drop below `origin/main`; fixed `main.test.ts` uuid/base64 test regression.
+
+- [2026-07-15-doc-sync-tests](2026-07-15-doc-sync-tests.md) — derived-contract B8 doc/loop-sync gate (no hardcoded constants) + per-file NEGATIVE tests proving RED when a B-step/stage/make-target is removed from ANY of the 5 sync files; `b9-perms` wired as a Makefile prerequisite.
 
 - [2026-07-13-uuid-modal-agentic-generation](2026-07-13-uuid-modal-agentic-generation.md) — deterministic floor green (`run-agentics`→`build-app`→`test-app` PASS); no hard-coded TS in Python (B10).
 - [2026-07-14-python-agentic-slim-refactor](2026-07-14-python-agentic-slim-refactor.md) — analysis-driven slim: removed dead/unused Python + the B10/B11-violating ultra-fast inline block; fixed fast-mode floor bypass (B7.1) + uuid-specific contract parser; 3 e2e (ticket20/22/greetings) GREEN; `make run-agentics` gates pass.

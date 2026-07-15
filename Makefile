@@ -29,15 +29,55 @@ TYPE              ?=
 CHANGE            ?= uuid-modal-agentic-generation
 export TEST_FILTER INTEGRATION_TEST_FILTER OLLAMA_TIMEOUT TYPE OLLAMA_HOST CHANGE
 
+# HERMES_BIN: the project-manager Hermes CLI that record-work.py invokes for prose drafting.
+# DEFAULT IS EMPTY on purpose: hermes is a HOST-ONLY CLI (a venv under ~/.hermes with hardcoded
+# absolute paths) that CANNOT be bind-mounted read-only into the container without changing the
+# source dir's permissions (forbidden). So prose drafting best-effort falls back to a stub inside
+# the container (git + openspec metadata is still captured for real). To enable real prose, either
+# bake hermes into the agentics image, or pass HERMES_BIN pointing at a world-readable install.
+# resolve_hermes() in record-work.py honours $HERMES_BIN -> `hermes` on PATH -> $HOME/.hermes venv.
+HERMES_BIN      ?=
+# HERMES_MOUNT: intentionally empty. We do NOT mount ~/.hermes (PermissionError under rootless
+# nerdctl + must-not-chmod constraint). Left as a hook if an image-baked hermes becomes available.
+HERMES_MOUNT    ?=
+# RECORD_WORK_CMD: quote-free so it survives the nested sh -c layering inside docker_run
+# (the container's /bin/sh is zsh and strips inner quotes). Runs INSIDE unit-test-agents
+# (B17, no host python3). We fix the two real in-container gaps so record-work.py can actually
+# access the project: (1) add /project/node_modules/.bin to PATH so `openspec` resolves; (2) mark
+# /project a safe.directory so git does not exit 128 (dubious ownership under rootless nerdctl uid
+# remap). We set a LITERAL absolute PATH (not $PATH-derived) that includes /usr/bin (git lives at
+# /usr/bin/git) plus /project/node_modules/.bin (for openspec) — a prior `export PATH=nodebin:$$PATH`
+# clobbered git because $$PATH expanded on the host layer without /usr/bin, yielding `git: not found`.
+# `hermes` is a host-only CLI not present in the image, so prose drafting best-effort falls
+# back to a stub (by design) — the substantive metadata (git + openspec) is still captured.
+RECORD_WORK_CMD ?= cd /project && export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/project/node_modules/.bin && git config --global --add safe.directory /project && python3 /project/scripts/record-work.py --change $(CHANGE) $(if $(DATE),--date $(DATE),)
+# NOTE: record-work / phase7-archive call $(call docker_run, ...) DIRECTLY (not via a
+# run-agentic-cmd target) because a target's $(1) is always empty — the command would be
+# lost. This mirrors the working test-check-docs-sync pattern. All execution is INSIDE
+# unit-test-agents (rootless nerdctl, /project RW) — NO host python3 (B17). HERMES_* is
+# forwarded so record-work.py's prose drafting reaches the project-manager Hermes CLI.
 # docker_run: run a `docker compose ... run` command, providing a PTY when needed.
 # nerdctl's `compose run` HARDCODES `--interactive --tty`, so the container needs a
 # real console; without one it dies with "provided file is not a console". When stdout
 # IS a terminal (interactive shell, or the loop runner's `setsid script` wrapper) we run
 # the command PLAIN -- this avoids ever NESTING PTYs (which triggers a SIGSTOP deadlock
 # under job control). When stdout is NOT a tty (CI / piped / redirected), we wrap in
-# `script -qec` to synthesize a console. `script` propagates the command's exit code.
+# `setsid script -qec` to synthesize a console. `setsid` detaches the script session so
+# its exit SIGHUP can NOT reach make's later recipe lines (otherwise a plain piped `make`
+# silently dies after the first docker_run call with RC=0). Output still flows to stdout.
+# `< /dev/null` stops `script` from consuming make's stdin. `script` propagates the
+# command's exit code via `_rc` (make exits with it).
+#
+# NOTE: some `script` variants (util-linux on certain hosts) mis-parse a path token from
+# the command string as the typescript output file, causing "script: cannot open /project".
+# To stay version-agnostic we write the command to a temp file and pass ONLY
+# "/bin/sh <tmpfile>" to `script` (no inline paths), so the typescript file is always the
+# explicit trailing `/dev/null`.
 define docker_run
-	@if [ -t 1 ]; then $(1); else script -qec "$(1)" /dev/null; fi
+	@if [ -t 1 ]; then $(1); else _drf=$$(mktemp); _dout=$$(mktemp); cat > "$$_drf" <<'DRF_EOF'
+$(1)
+DRF_EOF
+script -qec "/bin/sh $$_drf; echo $$? > $$_drf.rc" /dev/null < /dev/null > "$$_dout" 2>&1; _rc=$$(cat $$_drf.rc 2>/dev/null || echo 0); cat "$$_dout"; rm -f "$$_drf" "$$_drf.rc" "$$_dout"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi; fi
 endef
 
 DOCKER_SOCK := $(shell \
@@ -52,15 +92,16 @@ DOCKER_SOCK := $(shell \
         lint-python test-validator format \
         test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast test-agents-e2e \
         test-agents test-agents-real verify-agentics-after-run \
-        run-agentics phase7-archive b9-perms record-work squash-commits openspec-new \
+        run-agentics phase7-archive b9-perms record-work record-work-prompt squash-commits openspec-new \
         check-deps check-github check-issue-url check-ollama check-secrets \
         fix-perms create-logs \
         collect-tests collect-executed generate-requirements \
         stop-containers \
         clean clean-cache clean-logs clean-oci \
-        loop-harness loop-unit loop-integration loop-build-app loop-test-app loop-verify loop-tasks \
+        loop-harness loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-verify loop-tasks \
         squash-commits \
-        bump-version release-notes tag-release loop-release check-released release bump-local release-prep
+        squash-commits bump-version release-notes tag-release loop-release check-released release bump-local release-prep \
+        lint-commits install-git-hooks release-flow
 
 .DEFAULT_GOAL := help
 
@@ -77,12 +118,12 @@ all: build-app test-app release ## Full pipeline
 
 build-app: b9-perms ## Build Obsidian plugin via docker compose (containers/npm)
 	@echo "Building plugin (npm run build) via containers/npm..."
-	docker compose -f docker-compose-files/tools.yaml run --rm app npm run build
+	@$(call docker_run, docker compose -f docker-compose-files/tools.yaml run --rm app npm run build)
 	@echo "Build complete"
 
 test-app: b9-perms ## Test the built plugin via docker compose (containers/npm)
 	@echo "Running jest via containers/npm..."
-	docker compose -f docker-compose-files/tools.yaml run --rm app npm test
+	@$(call docker_run, docker compose -f docker-compose-files/tools.yaml run --rm app npm test)
 	@echo "=== Plugin test output above ==="
 
 validate-ts: ## Fast TypeScript validation (runs tsc directly)
@@ -105,8 +146,16 @@ validate-tests: ## Fast test validation (runs jest directly)
 	@npx jest --no-cache --passWithNoTests 2>&1
 	@echo "Test validation complete"
 
-changelog: ## Generate CHANGELOG.md (git_chglog via the unit-test-agents service)
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents python -m git_chglog -o CHANGELOG.md) || echo "changelog skipped"
+changelog: b9-perms ## Generate CHANGELOG.md: render new work as a '## Unreleased' (or versioned) section and OVERWRITE-merge it onto the curated history (idempotent re-run: no duplicate sections). Run 'make bump-from-changelog' to version it.
+	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents /project/scripts/gen_changelog.sh) || echo "changelog skipped"
+	@$(MAKE) changelog-format
+
+changelog-format: b9-perms ## Normalise CHANGELOG.md with Prettier (markdown-lint clean: tight lists, trimmed whitespace, consistent spacing). Idempotent.
+	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && node_modules/.bin/prettier --write CHANGELOG.md") || echo "changelog-format skipped"
+
+bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchored to released state = tags merged into origin/main, so re-runs do NOT climb), fill gap versions in versions.json with the Obsidian minAppVersion from manifest.json, bump package.json/manifest.json AND the TS test file version literal, re-point v<next> locally. Fail-closed only if already released on the REMOTE.
+	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py") || echo "bump-from-changelog skipped"
+	@$(MAKE) changelog-format
 
 release: clean build-app ## Create release + ZIP check
 	@if [ -z "$(TAG)" ]; then echo "Error: TAG could not be determined from package.json" >&2; exit 1; fi
@@ -143,7 +192,7 @@ test-agents-unit-mock: ## Mocked unit tests (fast, no Ollama)
 	@echo "=== Mock unit test output above ==="
 
 test-agents-integration: ## Full integration tests (needs GITHUB_TOKEN + Ollama)
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e TEST_FILTER='$(INTEGRATION_TEST_FILTER)' integration-test-agents)
+	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e "TEST_FILTER=$(INTEGRATION_TEST_FILTER)" integration-test-agents)
 	@echo "=== Integration test results ==="
 
 test-agents-integration-fast: INTEGRATION_TEST_FILTER = --maxfail=1 -k not slow ## Fast integration tests (fail fast, skip slow)
@@ -154,6 +203,18 @@ test-agents-e2e: test-agents-integration
 
 test-agents: lint-python test-agents-unit-mock test-agents-integration ## All agent tests
 test-agents-real: lint-python test-agents-unit test-agents-integration ## Agent tests on REAL logic (no mocks for units; real Ollama/GitHub calls)
+
+test-check-docs-sync: b9-perms ## Hermetic unit tests for scripts/check-docs-sync.py (edge-case fixtures, run INSIDE the unit-test-agents container — no host python3)
+	@echo "=== TEST-CHECK-DOCS-SYNC: pytest tests/test_check_docs_sync.py (in container) ==="
+	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
+	@echo "=== test-check-docs-sync done ==="
+
+check-docs-sync-and-test: check-docs-sync test-check-docs-sync ## Run the doc-sync gate AND its unit tests (proves it behaves, not just passes)
+
+regen-doc-sync-fixtures: b9-perms ## Regenerate the doc-sync .md fixtures from the CURRENT real docs (anchor-checked; run after any AGENTS.md/skill/harness-doc change), then verify
+	@echo "=== REGEN-DOC-SYNC-FIXTURES (in container) ==="
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/regen_doc_sync_fixtures.py")
+	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
 # Collection guard (audit-mcp-slim-refactor-integrity 4.2): fail fast if any test file has a
 # dangling import / collection error — a slim-refactor that orphans a symbol must surface here
 # instead of reporting a cached "green". Runs hermetic (no Ollama) and is non-zero on any error.
@@ -217,44 +278,62 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 	done
 
 # ---- Loop-harness stage: run the harness/loop-engineering verification gates in the
-#      EXACT order AGENTS.md prescribes, via `make loop-harness`. SEVEN stages (a collection
-#      guard + six gates), AGENTS.md Phase 6 + B1/B3/B7.1/B17:
+#      EXACT order AGENTS.md prescribes, via `make loop-harness`. EIGHT loop stages + a FINAL
+#      B8 doc-sync gate + a PRE-FLIGHT 0 (check-docs-sync unit tests + live gate) so a broken
+#      gate or a drifted doc fails before any heavy stage runs (AGENTS.md Phase 6 + B1/B3/B7.1/B8/B17
+#      + ts-test-floor):
 #        0. collect guard     (loop-collect)   -- hermetic collection guard (fail fast on dangling imports), audit-mcp-slim-refactor-integrity 4.2
+#        0.5 ts-floor         (loop-ts-floor)   -- STRICT TS test/command floor vs origin/main: FAIL if describe/leaf/jest-collected/addCommand drop (silent feature/test removal guard)
 #        1. unit tests        (loop-unit)       -- Fast/Unit gate FIRST (hermetic, no Ollama)
 #        2. unit-real tests   (loop-unit-real)  -- REAL agent unit tests (live Ollama, no mocks)
 #        3. e2e tests         (loop-e2e)        -- the 3 standing e2e gates (ticket20+ticket22+greetings), B1/B3
 #        4. integration tests (loop-integration) -- broad agentic integration suite (B17)
 #        5. build-app         (loop-build-app)  -- tsc/rollup of the plugin, must exit 0
 #        6. test-app          (loop-test-app)   -- jest of the plugin, must pass
+#        7. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
+#      B8 durable-behaviour range: B1-B25 (the loop's "laws of physics"; see AGENTS.md). The
+#      final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
+#      Canonical stage order (B8 source of truth):
+#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> check-docs-sync
+#      Durable behaviours span B1-B25 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B25 range.
+#      `make check-docs-sync` is the FINAL loop stage (enforced, not advisory) so doc/loop drift
+#      fails the whole run (B8 enforced).
 #      Each stage fails the whole run if it fails (no silent green). No git commit/push
 #      (B4/B14). Optional post-check: `make loop-verify CHANGE=<name>` runs openspec
-#      (B4/B14). Optional post-check: `make loop-verify CHANGE=<name>` runs openspec
 #      validate + status for the active change.
-loop-collect: ## Loop gate 0/7: hermetic collection guard (fail fast on dangling imports)
+check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B25). Runs INSIDE unit-test-agents (no host python3).
+	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — in container ==="
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py")
+
+loop-collect: ## Loop gate 0: hermetic collection guard (fail fast on dangling imports)
 	@echo "=== LOOP-HARNESS [collect] collection guard (no dangling imports) ==="
 	@$(MAKE) test-agents-collect
 
-loop-unit: ## Loop gate 1/7: hermetic unit tests (fast, no Ollama/GitHub)
+loop-ts-floor: ## Loop gate 0.5: STRICT TS test/command floor — FAIL if current describe/leaf/jest-collected/addCommand counts drop below origin/main (silent feature/test removal guard)
+	@echo "=== LOOP-HARNESS [ts-floor] strict TS test/command surface floor vs origin/main ==="
+	@bash scripts/ts_test_floor.sh
+
+loop-unit: ## Loop gate 1: hermetic unit tests (fast, no Ollama/GitHub)
 	@echo "=== LOOP-HARNESS [1/6] unit tests (mocked, hermetic) ==="
 	@$(MAKE) test-agents-unit-mock
 
-loop-unit-real: ## Loop gate 2/7: REAL agent unit tests (live Ollama, no mocks)
+loop-unit-real: ## Loop gate 2: REAL agent unit tests (live Ollama, no mocks)
 	@echo "=== LOOP-HARNESS [2/6] real agent unit tests (Ollama) ==="
 	@$(MAKE) test-agents-unit
 
-loop-e2e: ## Loop gate 3/7: standing e2e gates (ticket20 + ticket22 + greetings)
+loop-e2e: ## Loop gate 3: standing e2e gates (ticket20 + ticket22 + greetings)
 	@echo "=== LOOP-HARNESS [3/6] e2e gates (-m e2e) ==="
 	@$(MAKE) test-agents-e2e
 
-loop-integration: ## Loop gate 4/7: broad agentic integration suite (B17) — excludes e2e (its own stage) and slow full-pipeline tests
+loop-integration: ## Loop gate 4: broad agentic integration suite (B17) — excludes e2e (its own stage) and slow full-pipeline tests
 	@echo "=== LOOP-HARNESS [4/6] integration suite (-m 'integration and not e2e and not slow') ==="
 	@$(MAKE) test-agents-integration INTEGRATION_TEST_FILTER="-m 'integration and not e2e and not slow'"
 
-loop-build-app: ## Loop gate 5/7: build the Obsidian plugin (tsc/rollup, exit 0)
+loop-build-app: ## Loop gate 5: build the Obsidian plugin (tsc/rollup, exit 0)
 	@echo "=== LOOP-HARNESS [5/6] build-app ==="
 	@$(MAKE) build-app
 
-loop-test-app: ## Loop gate 6/7: run jest on the plugin
+loop-test-app: ## Loop gate 6: run jest on the plugin
 	@echo "=== LOOP-HARNESS [6/6] test-app ==="
 	@$(MAKE) test-app
 
@@ -264,7 +343,7 @@ loop-harness: ## Full loop-harness: SINGLE source of truth = scripts/run-loop-ha
 	@# The script calls back into these same `loop-*` targets, so what runs is
 	@# identical whether you invoke `make loop-harness` or the script directly.
 	@bash scripts/run-loop-harness.sh
-	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> unit -> unit-real -> e2e -> integration -> build-app -> test-app) ==="
+	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> check-docs-sync) ==="
 
 loop-trigger: ## B20 mandatory pre-flight: run the loop gate (scripts/run-loop-harness.sh) before claiming done
 	@bash scripts/run-loop-harness.sh
@@ -306,12 +385,27 @@ deliver-change: ## Pull verified worktree TS (src/main.ts + main.test.ts) onto t
 #   (B4) The pipeline MUST NEVER commit/push when generated task code already exists.
 #        This guard only archives the SPEC (openspec archive) -- it never `git add`,
 #        `git commit`, or `git push`. Committing/pushing is a SEPARATE, explicit human step.
-phase7-archive: ## Archive an OpenSpec change (spec only) + assert durable E2E present
+phase7-archive: ## Archive an OpenSpec change (spec only) + auto-emit work-log (both containerised, no host python3 — B17) + assert durable E2E present
 	@test -n "$(CHANGE)" || { echo "ERROR: set CHANGE=<openspec-change-name>"; exit 1; }
+	@# Phase-7 work-log (record-work) runs FIRST so it references the LIVE change dir,
+	@# before `openspec archive` moves it. Three-step hermes handoff:
+	@# container --emit-prompt -> host hermes -z -> container --prose-file (no host python3, no
+	@# chmod on ~/.hermes, B17). Falls back to stub if host hermes is unavailable.
+	@$(eval H := /project/backups/record-work-$(CHANGE))
+	@echo "Phase-7 work-log (step 1/3 — container): gathering context + emitting prompt..."
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --emit-prompt $(H).prompt")
+	@echo "Phase-7 work-log (step 2/3 — HOST): hermes -z draft..."
+	@if command -v hermes >/dev/null 2>&1; then \
+	  hermes profile use project-manager 2>/dev/null; \
+	  { hermes -z "$$(cat backups/record-work-$(CHANGE).prompt)" > backups/record-work-$(CHANGE).prose 2>/dev/null; } || true; \
+	fi
+	@echo "Phase-7 work-log (step 3/3 — container): writing entry with prose..."
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --prose-file $(H).prose") || echo "WARN: record-work failed for $(CHANGE) (see above); archive still proceeds."
+	@rm -f backups/record-work-$(CHANGE).prompt backups/record-work-$(CHANGE).prose 2>/dev/null || true
 	@# B16 (enforce-task-completion-gate): FAILS-CLOSED. Refuse to archive a change
-	@#      with open `- [ ]` tasks. A half-done change must never be silently archived.
-	@echo "B16: checking for open tasks in $(CHANGE)..."
-	@python3 -c "import sys; sys.path.insert(0, 'agents/agentics/src'); from openspec_loader import assert_no_open_tasks; assert_no_open_tasks('$(CHANGE)')" || { echo "FAIL(B16): $(CHANGE) has open tasks (see above). Tick them in tasks.md, then re-run."; exit 1; }
+	@#      with open `- [ ]` tasks. Runs INSIDE the container (no host python3, B17).
+	@echo "B16: checking for open tasks in $(CHANGE) (in container)..."
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "python3 /project/scripts/assert_no_open_tasks_cli.py $(CHANGE)") || { echo "FAIL(B16): $(CHANGE) has open tasks (see above). Tick them in tasks.md, then re-run."; exit 1; }
 	@# B1: the persistent E2E harness must still exist -- never deleted on archive.
 	@test -f agents/agentics/tests/integration/test_change_driven_ts_generation_e2e.py || { echo "FAIL(B1): persistent e2e harness missing -- do NOT remove it on archive."; exit 1; }
 	@# B4: refuse to touch git. This target archives ONLY the openspec spec; it does
@@ -319,6 +413,42 @@ phase7-archive: ## Archive an OpenSpec change (spec only) + assert durable E2E p
 	@echo "Archiving spec for $(CHANGE) (openspec archive -y -- spec only, no git commit/push)..."
 	@openspec archive -y $(CHANGE)
 	@echo "DONE: spec archived. No git commit/push performed. Verify + commit TS/tests manually if intended."
+
+# ---- loop-finish: green-gated release finalisation (B23, loop-green-auto-squash-changelog) ----
+# When the loop gate is GREEN (B20 pre-flight) and the backlog is clear (every active change
+# has open=0), finalise the release LOCALLY and safely:
+#   assert-backlog-clear -> archive-all-complete -> squash-commits -> changelog
+#   -> bump-from-changelog -> changelog-format.  NO push (B4/B14).
+assert-backlog-clear: ## FAILS CLOSED if any active OpenSpec change still has an open `- [ ]` task.
+	@echo "=== ASSERT-BACKLOG-CLEAR: every active change must have open=0 ==="
+	@bad=0; for d in $$(ls -1 openspec/changes 2>/dev/null); do \
+		if [ "$$d" = "archive" ] || [ "$$d" = ".gitkeep" ]; then continue; fi; \
+		tf=openspec/changes/$$d/tasks.md; \
+		if [ ! -f "$$tf" ]; then continue; fi; \
+		open=$$(grep -cE '^- \[ \]' $$tf); \
+		if [ "$$open" != "0" ]; then echo "  BACKLOG NOT CLEAR: $$d has $$open open task(s)"; bad=1; fi; \
+	done; \
+	if [ "$$bad" = "1" ]; then echo "ASSERT-BACKLOG-CLEAR: FAILED -- clear the backlog (tick + archive all changes) before loop-finish."; exit 1; fi; \
+	echo "OK: no active change has open tasks."
+
+archive-all-complete: assert-backlog-clear ## Archive EVERY active OpenSpec change (B16 gate per change).
+	@echo "=== ARCHIVE-ALL-COMPLETE: archiving all active changes (open=0 enforced) ==="
+	@for d in $$(ls -1 openspec/changes 2>/dev/null); do \
+		if [ "$$d" = "archive" ] || [ "$$d" = ".gitkeep" ]; then continue; fi; \
+		tf=openspec/changes/$$d/tasks.md; \
+		if [ ! -f "$$tf" ]; then continue; fi; \
+		echo "  archiving $$d ..."; \
+		$(MAKE) phase7-archive CHANGE=$$d || { echo "ARCHIVE-ALL: FAILED on $$d (see above)."; exit 1; }; \
+	done; \
+	echo "=== ARCHIVE-ALL-COMPLETE DONE: all active changes archived (specs merged). ==="
+
+loop-finish: archive-all-complete ## Green-gated release finalisation: archive-all -> squash -> changelog -> bump-from-changelog -> format. NO push (B4/B14). Run ONLY after `make loop-harness` is GREEN (B20).
+	@echo "=== LOOP-FINISH: backlog clear + all changes archived; finalising release LOCALLY ==="
+	@$(MAKE) squash-commits
+	@$(MAKE) changelog
+	@$(MAKE) bump-from-changelog
+	@$(MAKE) changelog-format
+	@echo "=== LOOP-FINISH COMPLETE: squashed typed commit + regenerated CHANGELOG (## Unreleased -> ## <next>) + bumped package/manifest/versions.json. NO push (B14) -- push deliberately. ==="
 
 # ---- Phase 7: scriptable work-log entry (replaces the never-created `record-work` skill) ----
 #
@@ -341,11 +471,25 @@ openspec-new: b9-perms ## Scaffold an OpenSpec change via the openspec CLI + see
 	@bash scripts/scaffold-openspec-change.sh --name $(NAME) $(if $(DESC),--desc "$(DESC)",) $(if $(GOAL),--goal "$(GOAL)",) $(if $(CAPABILITY),--capability $(CAPABILITY),)
 	@echo "=== OPENSPEC-NEW complete: review openspec/changes/$(NAME)/ ==="
 
-record-work: b9-perms ## Phase 7 work-log: write agent-wiki/YYYY-MM-DD-<change>.md via scripts/record-work.py
+record-work-prompt: b9-perms ## Steps 1+2 of the hermes handoff: container emit-prompt + host hermes -z (used by record-work)
+	@$(eval H := /project/backups/record-work-$(CHANGE))
+	@echo "(step 1/3 — container): gathering context + emitting prompt..."
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --emit-prompt $(H).prompt")
+	@echo "(step 2/3 — HOST): hermes -z drafting..."
+	@if command -v hermes >/dev/null 2>&1; then hermes profile use project-manager 2>/dev/null; fi
+	@if command -v hermes >/dev/null 2>&1; then hermes -z "$$(cat backups/record-work-$(CHANGE).prompt)" > backups/record-work-$(CHANGE).prose 2>/dev/null || true; fi
+
+record-work: b9-perms ## Phase 7 work-log: write agent-wiki/YYYY-MM-DD-<change>.md via hermes handoff (container prompts, host drafts, container writes — no host python3, no chmod on ~/.hermes)
 	@test -n "$(CHANGE)" || { echo "ERROR: set CHANGE=<openspec-change-name> (e.g. make record-work CHANGE=uuid-modal-agentic-generation)"; exit 1; }
+	@$(eval H := /project/backups/record-work-$(CHANGE))
+	@$(eval L := backups/record-work-$(CHANGE))
 	@echo "=== RECORD-WORK: agent-wiki entry for $(CHANGE) ==="
-	@python3 scripts/record-work.py --change $(CHANGE) $(if $(DATE),--date $(DATE),)
-	@echo "=== RECORD-WORK complete: review agent-wiki/$(shell date +%Y-%m-%d)-$(CHANGE).md ==="
+	@if [ ! -f $(L).prose ]; then echo "(prompt/prose absent — running steps 1+2 via record-work-prompt)"; $(MAKE) --quiet record-work-prompt CHANGE=$(CHANGE); fi
+	@if [ ! -f $(L).prose ]; then echo "WARN: no prose handoff — will use stub body"; fi
+	@echo "(step 3/3 — container): writing entry with prose..."
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --prose-file $(H).prose")
+	@rm -f $(L).prompt $(L).prose 2>/dev/null || true
+	@echo "=== RECORD-WORK complete: review agent-wiki/$$(date +%Y-%m-%d)-$(CHANGE).md ==="
 
 loop-tasks: ## Loop visibility: list open/done task counts for every active change
 	@echo "=== LOOP-TASKS: open/done per active change (changes with open tasks first) ==="
@@ -359,7 +503,7 @@ loop-tasks: ## Loop visibility: list open/done task counts for every active chan
 	done
 	@echo "=== run 'make phase7-archive CHANGE=<name>' only when open=0 ==="
 
-squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed Conventional commit (Hermes, project-manager). The FIRST line MUST be `type(scope): subject` (type in feat|fix|docs|refactor|perf|test|chore|build|ci|style|revert) so the changelog sections and the version bump are tagged accordingly. NO push (B14).
+squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed Conventional commit (Hermes, project-manager). The FIRST line MUST be `type(scope): subject` (type in feat|fix|docs|refactor|perf|test|chore|build|ci|style|revert) so the changelog sections and the version bump are tagged accordingly. The drafted message is FAIL-CLOSED through `commitlint` before commit. NO push (B14).
 	@# Diff base is `main` (the real branch origin), NOT the loose upstream.
 	@# Hermes receives the changed-file list + diff-stat vs `main` and must
 	@# write a THOROUGH body describing what the substantive files
@@ -368,7 +512,12 @@ squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed 
 	@# tag (e.g. `feat(loop): ...`, `fix(agentics): ...`, `docs(readme): ...`).
 	@# The changelog sections (chglog/config.yml) and `bump-version` PART are
 	@# derived from this type, so it MUST start with `^(feat|fix|docs|refactor
-	@# |perf|test|chore|build|ci|style|revert)(\(.*\))?:\s`. Fail-closed otherwise.
+	@# |perf|test|chore|build|ci|style|revert)(\\\(.*\\))?:\\s`. Fail-closed otherwise.
+	@# HARDENING (enhance-squash-commits): after Hermes drafts the message we run
+	@# `commitlint` on it (the same gate as the per-commit `commit-msg` hook).
+	@# If commitlint rejects it, we restore the pre-squash state and abort -- no
+	@# untyped/malformed commit is ever created. This is the "tag it accordingly"
+	@# guarantee that drives the CHANGELOG sections and the version bump.
 	@MAIN=$$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse --verify main 2>/dev/null || echo ""); \
 	if [ -z "$$MAIN" ]; then echo "COMMIT: no 'main' ref found -- aborting."; exit 1; fi; \
 	AHEAD=$$(git rev-list --count $$MAIN..HEAD 2>/dev/null || echo 0); \
@@ -381,16 +530,46 @@ squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed 
 	echo "COMMIT: $$AHEAD commits squashed. Changed files vs main:"; echo "$$FILES"; \
 	echo "COMMIT: asking Hermes (profile=project-manager) for a THOROUGH, TYPED Conventional message..."; \
 	hermes profile use project-manager >/dev/null 2>&1 || true; \
-	PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch being squashed into a single commit. RULE 1 (mandatory): the FIRST line is EXACTLY 'type(scope): subject' where type is ONE of: feat, fix, docs, refactor, perf, test, chore, build, ci, style, revert; scope is the area (e.g. loop, agentics, readme, release); subject is imperative, <=72 chars, no trailing period. RULE 2: then a blank line, then a THOROUGH human-readable body (wrapped ~72 cols) describing WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B21 durable behaviours), agentic pipeline changes, Makefile / docker-compose / Containerfile changes, OpenSpec specs merged, and any test/behaviour fixes. Be specific. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
+	PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch being squashed into a single commit. RULE 1 (mandatory): the FIRST line is EXACTLY 'type(scope): subject' where type is ONE of: feat, fix, docs, refactor, perf, test, chore, build, ci, style, revert; scope is the area (e.g. loop, agentics, readme, release); subject is imperative, <=72 chars, no trailing period. RULE 2: then a blank line, then a THOROUGH human-readable body (wrapped ~72 cols) describing WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B25 durable behaviours), agentic pipeline changes, Makefile / docker-compose / Containerfile changes, OpenSpec specs merged, and any test/behaviour fixes. Be specific. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
 	MSG=$$(hermes -z "$$PROMPT" 2>/dev/null); \
 	if [ -z "$$MSG" ]; then echo "COMMIT: Hermes returned no message -- aborting (no empty commit)."; git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; fi; \
 	FIRST=$$(printf '%s' "$$MSG" | head -1); \
-	if ! printf '%s' "$$FIRST" | grep -qE '^(feat|fix|docs|refactor|perf|test|chore|build|ci|style|revert)(\([^)]*\))?:\s'; then \
+	if ! printf '%s' "$$FIRST" | grep -qE '^(feat|fix|docs|refactor|perf|test|chore|build|ci|style|revert)(\([^)]*\))?:[[:space:]]'; then \
 		echo "COMMIT: FAIL-CLOSED -- first line is not a typed Conventional commit: '$$FIRST'"; \
 		echo "COMMIT: refusing to create an untyped commit (changelog + bump need the type)."; \
 		git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; \
 	fi; \
-	git commit -m "$$MSG" && echo "COMMIT: created one TYPED Conventional commit (not pushed -- B14). Review with 'git show'."
+	if ! printf '%s\n' "$$MSG" | "$(CURDIR)/node_modules/.bin/commitlint" --config "$(CURDIR)/commitlint.config.cjs"; then \
+		echo "COMMIT: FAIL-CLOSED -- message failed commitlint (Conventional-Commits gate)."; \
+		echo "COMMIT: refusing to create a non-conformant commit (changelog + bump need a valid type)."; \
+		git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; \
+	fi; \
+	git commit -m "$$MSG" && echo "COMMIT: created one TYPED Conventional commit (commitlint-passed, not pushed -- B14). Review with 'git show'."
+
+# ---- Commit linting gate (enhance-squash-commits) ----
+#
+# `lint-commits` runs commitlint (using the repo's commitlint.config.cjs) over the
+# commits being squashed (or HEAD when run standalone). It is the "changelog lint"
+# the user asked for: every squashed/committed message MUST be a valid Conventional
+# Commit so the type drives the CHANGELOG sections and the bump PART.
+# `install-git-hooks` wires the per-commit `commit-msg` hook so typos are caught at
+# commit time. Both are hermetic (commitlint is a committed devDependency).
+COMMITLINT_BIN := $(CURDIR)/node_modules/.bin/commitlint
+COMMITLINT_CFG := $(CURDIR)/commitlint.config.cjs
+
+lint-commits: ## Lint the commits being squashed (or HEAD) with commitlint (Conventional-Commits gate). Fail-closed: non-zero exit on any invalid message.
+	@test -x "$(COMMITLINT_BIN)" || { echo "LINT: commitlint not found at $(COMMITLINT_BIN) -- run 'npm install' first."; exit 1; }
+	@MAIN=$$(git rev-parse --verify origin/main 2>/dev/null || git rev-parse --verify main 2>/dev/null || echo ""); \
+	if [ -z "$$MAIN" ]; then echo "LINT: no 'main' ref -- linting HEAD only."; "$(COMMITLINT_BIN)" --config "$(COMMITLINT_CFG)" --from HEAD~1 --to HEAD || exit 1; \
+	else echo "LINT: linting $$MAIN..HEAD with commitlint..."; "$(COMMITLINT_BIN)" --config "$(COMMITLINT_CFG)" --from $$MAIN --to HEAD || exit 1; fi; \
+	echo "LINT: all commits in range are valid Conventional Commits."
+
+install-git-hooks: ## Wire the per-commit `commit-msg` hook (git-hooks/commit-msg) into .git/hooks.
+	@test -f git-hooks/commit-msg || { echo "HOOKS: git-hooks/commit-msg missing -- aborting."; exit 1; }
+	@chmod +x git-hooks/commit-msg
+	@mkdir -p .git/hooks
+	@cp -f git-hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+	@echo "HOOKS: installed .git/hooks/commit-msg (per-commit Conventional-Commit lint)."
 
 # ---- Release automation (post-green loop-engineering stage) ----
 #
@@ -456,7 +635,7 @@ bump-version: ## Bump the Obsidian plugin version (Obsidian way): package.json +
 
 release-notes: ## Refresh the README "Release / Changelog" block to the current version, categorized by commit type (mirrors the changelog sections).
 	@command -v node >/dev/null 2>&1 || { echo "RELNOTES: node required -- aborting."; exit 1; }
-	@python3 scripts/update-release-notes.py README.md
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/update-release-notes.py README.md")
 
 tag-release: ## Create a LOCAL git tag v<version> (NO push -- B14). Run AFTER squash-commits.
 	@command -v node >/dev/null 2>&1 || { echo "TAG: node required -- aborting."; exit 1; }
@@ -468,7 +647,8 @@ tag-release: ## Create a LOCAL git tag v<version> (NO push -- B14). Run AFTER sq
 	echo "TAG: verify with 'git show $$TAG'."
 
 release-prep: check-released ## LOCAL release prep (publish happens in CI): bump (Obsidian way) -> typed squash -> sectioned changelog -> README release-notes -> local tag. Refuses if current version already released on GitHub. NO push (B14) -- the actual GitHub release is done by .github/workflows/release.yml on merge to main.
-	@echo "=== RELEASE-PREP: local release prep (guarded) ==="; \
+	@set -e; \
+	echo "=== RELEASE-PREP: local release prep (guarded) ==="; \
 	$(MAKE) bump-version PART=$(PART); \
 	$(MAKE) squash-commits; \
 	$(MAKE) changelog; \
@@ -477,7 +657,8 @@ release-prep: check-released ## LOCAL release prep (publish happens in CI): bump
 	echo "=== RELEASE-PREP COMPLETE: bump + squashed typed commit + changelog + release-notes + local tag. The GITHUB RELEASE is cut by CI (.github/workflows/release.yml) when you merge to main / push the tag. NO push here (B14). ==="
 
 loop-release: ## Post-green release stage: guard (generated TS changed + not already released) -> bump -> squash -> changelog -> release-notes -> local tag. NO push.
-	@echo "=== LOOP-RELEASE: post-green release stage ==="; \
+	@set -e; \
+	echo "=== LOOP-RELEASE: post-green release stage ==="; \
 	CHANGED=0; for f in src/main.ts src/__tests__/main.test.ts; do \
 		if [ -f "$$f" ] && ! git diff --quiet HEAD -- "$$f"; then CHANGED=1; echo "LOOP-RELEASE: $$f changed vs HEAD"; fi; \
 	done; \
@@ -492,10 +673,32 @@ loop-release: ## Post-green release stage: guard (generated TS changed + not alr
 	echo "=== LOOP-RELEASE COMPLETE: bump + squashed typed commit + changelog + release-notes + local tag. NO push (B14). ==="
 
 bump-local: check-released ## LOCAL-ONLY: bump the Obsidian version + create a LOCAL tag, WITHOUT the full release flow (no squash-commits, no changelog, no release-notes, no push). For advancing the version locally.
-	@echo "=== BUMP-LOCAL: bump version + local tag only (no squash/changelog/publish) ==="; \
+	@set -e; \
+	echo "=== BUMP-LOCAL: bump version + local tag only (no squash/changelog/publish) ==="; \
 	$(MAKE) bump-version PART=$(PART); \
 	$(MAKE) tag-release; \
 	echo "=== BUMP-LOCAL COMPLETE: version bumped (Obsidian way) + local tag. NO commit squash, NO changelog, NO push (B14). ==="
+
+# ---- Canonical release-flow (enhance-squash-commits) ----
+#
+# Single command encoding the user's exact flow, LOCAL only (no push, B14):
+#   1. squash-commits  -- one TYPED Conventional commit (commitlint-gated: "tag it accordingly")
+#   2. bump-local      -- check-released guard -> bump-version (Obsidian way, refuses unless NEW
+#                         plugin TS in src/main.ts vs origin/main) -> tag-release (LOCAL v<version>)
+#   3. changelog       -- regenerate CHANGELOG.md so the new ## <version> section is present
+#                         (driven by the local v<version> tag)
+#   4. release-notes   -- refresh the README release-notes block to the new version
+# The bump is guarded so it only advances to the NEXT UNRELEASED version (no semver gap vs the
+# latest released, and not already released on GitHub -- tolerant of X / vX). The tag is local
+# only; pushing commit + tag remains a deliberate human action.
+release-flow: ## Canonical local release flow: squash (typed, commitlint-gated) -> bump to next unreleased version (TS+released guarded) -> changelog -> release-notes. NO push (B14).
+	@set -e; \
+	echo "=== RELEASE-FLOW: squash -> bump-local -> changelog -> release-notes (LOCAL, no push) ==="; \
+	$(MAKE) squash-commits; \
+	$(MAKE) bump-local PART=$(PART); \
+	$(MAKE) changelog; \
+	$(MAKE) release-notes; \
+	echo "=== RELEASE-FLOW COMPLETE: one typed squashed commit + bumped version (Obsidian way) + local tag + refreshed CHANGELOG.md (new ## <version>) + README release-notes. NO push (B14). ==="
 
 # ---- Checks ----
 
@@ -525,8 +728,12 @@ check-secrets: ## Scan for leaked secrets
 b9-perms: ## B9: ensure repo is world-readable + write-targets world-writable (rootless nerdctl)
 	@echo "B9: applying rootless nerdctl read/write permission floor..."
 	@chmod -R a+rX . 2>/dev/null || true
-	@for d in src backups openspec results agent-wiki; do \
+	@for d in src backups openspec results agent-wiki tests; do \
 		if [ -d "$$d" ]; then chmod -R a+rwX "$$d" 2>/dev/null || true; fi; \
+	done
+	@# Release/changelog write-targets (rootless nerdctl remaps container uid to host 'other')
+	@for f in CHANGELOG.md package.json manifest.json versions.json README.md src/__tests__/main.test.ts src/main.ts; do \
+		if [ -f "$$f" ]; then chmod a+rw "$$f" 2>/dev/null || true; fi; \
 	done
 	@echo "B9: permission floor applied."
 

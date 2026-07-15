@@ -1,6 +1,6 @@
 {
     "name": "obsidian-timestamp-utility",
-    "version": "0.4.10",
+    "version": "0.4.11",
     "description": "Insert timestamps and rename files with timestamp prefixes.",
     "main": "dist/main.js",
     "type": "module",
@@ -10,6 +10,9 @@
         "test": "jest --runInBand"
     },
     "devDependencies": {
+        "@commitlint/cli": "^19.0.0",
+        "@commitlint/config-conventional": "^19.0.0",
+        "@fission-ai/openspec": "^1.6.0",
         "@rollup/plugin-node-resolve": "^15.2.3",
         "@rollup/plugin-terser": "^0.4.4",
         "@rollup/plugin-typescript": "^11.1.6",
