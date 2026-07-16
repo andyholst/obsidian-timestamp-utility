@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-07-16
+goal: Every git commit runs a pre-commit hook that lints and removes trailing
+  whitespace from staged files; the hook is installed via make install-git-hooks
+  and never blocks the agentic loop.

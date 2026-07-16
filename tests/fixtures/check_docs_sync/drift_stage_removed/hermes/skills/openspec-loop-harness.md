@@ -178,6 +178,23 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   affect which TS writer runs — the deterministic floor is now the unconditional writer. Treat
   the var as legacy/no-op for the orchestration path; don't add new flow logic keyed on it in
   `composable_workflows.py`.
+- **Request intake gate (front door) — turn inbound requests into OpenSpec changes before acting.**
+  Before implementing/answering a new work request, convert it into an OpenSpec change of record
+  (`make openspec-new NAME=<derived>` → `openspec new change`, per B15) + tasks, validate it, and
+  start the loop — according to the **per-channel trigger**:
+  - **Hermes dashboard:** ALWAYS converts by default — no keyword required.
+  - **Telegram:** converts / creates tasks / starts the loop ONLY IF the message contains the
+    keyword `openspec` (case-insensitive). Messages without `openspec` are exempt.
+  - **Hermes terminal CLI:** converts / creates tasks / starts the loop ONLY IF the command/text
+    contains `openspec` (case-insensitive). Requests without `openspec` are exempt.
+  Degenerate cases: re-use an in-flight change for the same intent (no duplicate dir); use
+  `clarify` first if ambiguous.
+  **Kanban-delivery path:** when a request arrives AS a Kanban task (assigned into a kanban
+  workspace, agent scoped to that task), the Kanban wrapper is only the *delivery envelope* —
+  the agent MUST still apply the per-channel trigger and scaffold the OpenSpec change via
+  `make openspec-new` / `openspec new change`; do NOT limit itself to kanban tooling.  Mirrored in `AGENTS.md` (General Rules) and
+  `docs/openspec-engineering-loop-harness.md` (B8). The reusable directive is the Hermes skill
+  `request-to-openspec` (loaded at request entry).
 
 ## Durable agent behaviours (B1–B25) — MUST always hold, never regress
 

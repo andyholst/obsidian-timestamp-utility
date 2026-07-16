@@ -564,11 +564,17 @@ lint-commits: ## Lint the commits being squashed (or HEAD) with commitlint (Conv
 	else echo "LINT: linting $$MAIN..HEAD with commitlint..."; "$(COMMITLINT_BIN)" --config "$(COMMITLINT_CFG)" --from $$MAIN --to HEAD || exit 1; fi; \
 	echo "LINT: all commits in range are valid Conventional Commits."
 
-install-git-hooks: ## Wire the per-commit `commit-msg` hook (git-hooks/commit-msg) into .git/hooks.
+install-git-hooks: ## Wire the per-commit `commit-msg` + `pre-commit` hooks into .git/hooks.
 	@test -f git-hooks/commit-msg || { echo "HOOKS: git-hooks/commit-msg missing -- aborting."; exit 1; }
 	@chmod +x git-hooks/commit-msg
 	@mkdir -p .git/hooks
 	@cp -f git-hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+	@test -f git-hooks/pre-commit || { echo "HOOKS: git-hooks/pre-commit missing -- skipping pre-commit install."; } || true
+	@if [ -f git-hooks/pre-commit ]; then \
+		chmod +x git-hooks/pre-commit; \
+		cp -f git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit; \
+		echo "HOOKS: installed .git/hooks/pre-commit (trailing-whitespace auto-fix)."; \
+	fi
 	@echo "HOOKS: installed .git/hooks/commit-msg (per-commit Conventional-Commit lint)."
 
 # ---- Release automation (post-green loop-engineering stage) ----
