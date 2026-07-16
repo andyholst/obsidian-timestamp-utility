@@ -1,25 +1,32 @@
-name: TruffleHog Secret Scan
+name: Secret Scan (gitleaks)
+
+# Replaces the broken TruffleHog Action with gitleaks, executed via the
+# maintained gitleaks/gitleaks-action. The repo's .gitleaks.toml (useDefault=true
+# plus repo-local allowlists) drives detection, so local hooks and CI share the
+# exact same ruleset. On a detected secret the job fails and the push/PR is blocked.
 
 on:
   push:
-    branches: [ '*' ]
+    branches: ['*']
   pull_request:
-    branches: [ '*' ]
+    branches: ['*']
+
+permissions:
+  contents: read
 
 jobs:
-  trufflehog:
+  gitleaks:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-    - name: Run TruffleHog
-      uses: trufflesecurity/trufflehog@main
-      with:
-        path: ./
-        verified_only: true
-        base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'main' }}
-        head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-        extra_args: --debug --only-verified
-        ignore_paths: .trufflehog-ignore
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Point the action at the repo's config (defaults to .gitleaks.toml anyway).
+          GITLEAKS_CONFIG: .gitleaks.toml
+          # Fail the build on any finding.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'

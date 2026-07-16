@@ -37,6 +37,7 @@ agentics_integration_tests_output.txt
 *.xml
 *.log
 agents/agentics/.cache/huggingface
+.gitleaks-report.json
 
 **/dagger-venv
 **/bin

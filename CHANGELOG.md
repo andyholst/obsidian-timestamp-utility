@@ -2,6 +2,107 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.13
+
+### ✨ New Features
+
+- **feat(loop): add openspec intake gate, lint hook, docs-sync guards (#53)**
+  - Add a request-to-openspec intake gate that converts inbound work
+  - requests into OpenSpec changes of record before any implementation
+  - runs. Per-channel triggers: the Hermes dashboard always converts;
+  - Telegram and terminal CLI convert only when the message contains the
+  - keyword "openspec" (case-insensitive); Kanban-delivered tasks still
+  - scaffold an OpenSpec change via `make openspec-new` rather than relying
+  - on kanban tooling alone. The gate is an agent instruction only — the
+  - erroneous `request_intake.py` in `agents/agentics/` was removed, so the
+  - Python pipeline never performs intake. The new capability is codified in
+  - `openspec/specs/request-intake/spec.md` (generated from the
+  - `request-to-openspec` change) and mirrored in AGENTS.md,
+  - `hermes/skills/openspec-loop-harness.md`, and
+  - `docs/openspec-engineering-loop-harness.md` per the B8 bidirectional
+  - sync rule.
+  - Introduce a trailing-whitespace lint guard: `git-hooks/pre-commit`
+  - auto-strips trailing whitespace from staged text files and never exits
+  - non-zero, so it is inert under the agentic loop (which performs no git
+  - commit). `make install-git-hooks` wires both `commit-msg` (Conventional
+  - Commit lint) and the new `pre-commit` into `.git/hooks`. The behaviour is
+  - specified in `openspec/specs/lint-trailing-whitespace/spec.md`.
+  - Strengthen the B8 doc-sync guard (`make check-docs-sync`, the final loop
+  - stage) with fixtures under `tests/fixtures/check_docs_sync/`: in_sync,
+  - in_sync_ascii, and in_sync_en_dash (all pass — en-dash/ascii variants of
+  - the B-range are treated as equivalent), plus negative cases
+  - drift_b_range_low, drift_reorder, and drift_stage_removed that must fail
+  - the guard. This proves the sync check detects disagreements on the
+  - 8-stage order, the `loop-ts-floor` guard, and the B1–B25 behaviour
+  - range across AGENTS.md, the skill mirror, the technical reference, and
+  - the loop runner — closing the drift that let docs silently disagree.
+  - Align README with the actual commit history and add an architecture
+  - overview. `readme-align-with-commits` and `readme-architecture-overview`
+  - specs drive updates to README.md, `docs/AGENTIC_ARCHITECTURE.md`, and
+  - `docs/openspec-engineering-loop-harness.md`; the merged specs live under
+  - `openspec/specs/readme-alignment/`, `readme-align-with-commits/`, and
+  - `readme-architecture-overview/`.
+  - Refresh the durable behaviour set in AGENTS.md and the skill mirror
+  - (B1–B25), recording the deterministic `code_integrator` floor, the
+  - no-commit/no-push gates, the worktree-only edit rule, and the
+  - release-automation post-green stage. Version metadata is advanced in
+  - manifest.json, package.json, and versions.json, `src/__tests__/main.test.ts`
+  - is updated, and each change is documented under `agent-wiki/` with the
+  - backlog kept in `agent-wiki/index.md`.
+
+- **feat(secret-scan): replace TruffleHog with gitleaks and add loop gate**
+  - Replace the broken TruffleHog GitHub Action with gitleaks as the
+  - project's secret scanner and wire it into the OpenSpec loop-harness as
+  - a first-class, containerized verification stage with real tests.
+  - Detection engine and config
+  - Add scripts/secret_scanner.py, which delegates 100% of detection to
+  - the gitleaks binary (no homemade regex/entropy). It supports
+    --staged (pre-commit), --message-file (commit-msg), and --path
+  - (on-demand) modes and fails closed on a detected secret.
+  - Add .gitleaks.toml using `[extend] useDefault = true` plus a
+  - repo-local allowlist covering test fixtures, docs, and dependency /
+  - build caches (.venv, node_modules, **pycache**, .env, .git) so the
+  - default ruleset is never silently disabled.
+  - Add scripts/print_gitleaks_report.py, which renders each finding as
+  - `file | rule | line` so a block is never an opaque "secrets
+  - detected" message.
+  - Containers, compose, and Makefile gates
+  - Add containers/gitleaks/Dockerfile and containers/gitleaks-tests/
+  - Dockerfile (real gitleaks + pytest) plus docker-compose-files/
+  - gitleaks.yaml and gitleaks-tests.yaml.
+  - Extend the Makefile with `loop-secret-scan-tests` (canonical loop
+  - entry), `secret-scan-image`, `secret-scan-tests-image`, and the
+  - on-demand `loop-secret-scan` / `check-secrets` alias. Docker compose
+  - only, consistent with the rest of the harness (no Dagger, no MCP).
+  - Loop-harness integration
+  - Update scripts/run-loop-harness.sh to insert the `loop-secret-scan-
+  - tests`stage between`loop-test-app`and the final`check-docs-sync`,
+  - keeping the canonical 8(+2) stage order in sync with the Makefile.
+  - Dev-side hooks and CI
+  - Add git-hooks/pre-commit (runs `secret_scanner.py --staged`) and
+  - git-hooks/commit-msg (runs `--message-file`); both reject a commit
+  - that contains or messages a secret. Installed via `make
+  - install-git-hooks`.
+  - Replace .github/workflows/trufflehog.yml with a gitleaks workflow
+  - (gitleaks/gitleaks-action@v2, fetch-depth: 0, GITLEAKS_CONFIG).
+  - Tests (no mocks on detection)
+  - Add tests/test_secret_scanner.py (hermetic unit) and tests/
+  - test_secret_scanner_integration.py (real gitleaks binary, no mocks)
+  - to exercise the scanner's detection logic every loop run.
+  - Specs and docs-sync (B8)
+  - Merge openspec/specs/secret-scan/spec.md and openspec/specs/loop-
+  - secret-scan/spec.md from the four archived changes
+  - (replace-trufflehog-with-gitleaks, loop-harness-secret-scan,
+  - secret-scan-show-findings, secret-scanner-loop-tests).
+  - Keep AGENTS.md, hermes/skills/openspec-loop-harness.md,
+  - docs/openspec-engineering-loop-harness.md, and run-loop-harness.sh in
+  - agreement on stage order, the loop-ts-floor guard, the B1-B25
+  - behaviours, and the live-test skip rule (OLLAMA_HOST only).
+  - Add agent-wiki entries documenting the migration and the visible-
+  - findings behaviour.
+  - Credential hygiene: only documented example shapes (e.g. AKIA…EXAMPLE,
+  - xoxb-…) appear in tests; no real keys are committed.
+
 ## 0.4.12
 
 ### ✨ New Features

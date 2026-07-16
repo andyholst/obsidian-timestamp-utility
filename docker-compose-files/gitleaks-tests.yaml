@@ -1,0 +1,23 @@
+# gitleaks-tests compose — runs the secret-scanner's OWN pytest suite (loop stage)
+# inside the gitleaks-tests image (real gitleaks binary + pytest, no mocks).
+#
+# The repo is mounted at /src (read-only) so the suite runs against the LIVE
+# tests/ + scripts/ + .gitleaks.toml, not a stale image copy. The service
+# entrypoint runs pytest over tests/test_secret_scanner*.py and exits non-zero
+# on any failure (fail-closed, like every other loop gate).
+services:
+  gitleaks-tests:
+    image: ${GITLEAKS_TESTS_IMAGE:-obsidian-timestamp-util-gitleaks-tests:dev}
+    build:
+      context: ..
+      dockerfile: containers/gitleaks-tests/Dockerfile
+    # Disable the build-arg gitleaks install (image already has it); keep build
+    # idempotent. `entrypoint` overrides the image CMD to run the suite.
+    entrypoint: ["/opt/venv/bin/python", "-m", "pytest", "-v"]
+    command: ["/src/tests/test_secret_scanner.py", "/src/tests/test_secret_scanner_integration.py"]
+    volumes:
+      - ..:/src:ro
+    environment:
+      - GITLEAKS_BIN=/usr/local/bin/gitleaks
+      - PYTHONPATH=/src/scripts
+    network_mode: "host"

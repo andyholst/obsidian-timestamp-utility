@@ -289,12 +289,14 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #        3. e2e tests         (loop-e2e)        -- the 3 standing e2e gates (ticket20+ticket22+greetings), B1/B3
 #        4. integration tests (loop-integration) -- broad agentic integration suite (B17)
 #        5. build-app         (loop-build-app)  -- tsc/rollup of the plugin, must exit 0
-#        6. test-app          (loop-test-app)   -- jest of the plugin, must pass
-#        7. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
+#        6. test-app          (loop-test-app)  -- jest of the plugin, must pass
+#        7. secret-scan-tests  (loop-secret-scan-tests) -- secret-scanner pytest suite, containerized (B9), real gitleaks, fail-closed
+#           (the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop)
+#        8. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
 #      B8 durable-behaviour range: B1-B25 (the loop's "laws of physics"; see AGENTS.md). The
 #      final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
 #      Canonical stage order (B8 source of truth):
-#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> check-docs-sync
+#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync
 #      Durable behaviours span B1-B25 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B25 range.
 #      `make check-docs-sync` is the FINAL loop stage (enforced, not advisory) so doc/loop drift
 #      fails the whole run (B8 enforced).
@@ -343,7 +345,7 @@ loop-harness: ## Full loop-harness: SINGLE source of truth = scripts/run-loop-ha
 	@# The script calls back into these same `loop-*` targets, so what runs is
 	@# identical whether you invoke `make loop-harness` or the script directly.
 	@bash scripts/run-loop-harness.sh
-	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> check-docs-sync) ==="
+	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> secret-scan-tests -> check-docs-sync) ==="
 
 loop-trigger: ## B20 mandatory pre-flight: run the loop gate (scripts/run-loop-harness.sh) before claiming done
 	@bash scripts/run-loop-harness.sh
@@ -721,13 +723,10 @@ check-ollama: ## Check Ollama availability
 	if [ "$$code" != "200" ]; then echo "Error: Ollama not reachable at $(OLLAMA_HOST)"; exit 1; fi
 	@echo "Ollama reachable at $(OLLAMA_HOST)."
 
-check-secrets: ## Scan for leaked secrets
-	@echo "Secret scan: ensure .env is gitignored and no tokens committed."
-	@git check-ignore .env >/dev/null 2>&1 && echo ".env is ignored." || echo "WARNING: .env not ignored!"
+check-secrets: loop-secret-scan  ## [ALIAS] Deprecated name -> loop-secret-scan (containerized gitleaks loop gate).
+	@true
 
-# ---- B9 permission floor (rootless nerdctl bind-mount READ+WRITE) ----
 # AGENTS.md (B9) requires the repo to be world-readable and the container write
-# targets to be world-writable BEFORE any docker compose run, or rootless nerdctl
 # remaps the container uid to the host 'other' class and fails with
 # "Permission denied: '/project/src/main.ts'". This target ENFORCES that rule so it
 # is never a forgotten manual pre-step.
@@ -792,3 +791,82 @@ clean-logs: ## Remove all logs
 clean-oci: ## Fast OCI nuke (nerdctl prune best practice)
 	nerdctl system prune -a -f --volumes || true
 	@echo "OCI pruned."
+
+# ---- Secret scanning (gitleaks) — HOOK/CI SCAN + LOOP TESTS, CONTAINER-ONLY (B9) ----
+#
+# The actual gitleaks TREE SCAN is NOT a loop-harness stage: it lives in the
+# pre-commit hook (`scripts/secret_scanner.py --staged`), the commit-msg hook
+# (`--message-file`), and CI (.github/workflows/trufflehog.yml). A standalone
+# `loop-secret-scan` target exists for on-demand scans only.
+# The loop stage is `loop-secret-scan-tests` — it runs the scanner's OWN pytest
+# suite INSIDE the `gitleaks-tests` compose container
+# (docker-compose-files/gitleaks-tests.yaml), exercising the REAL gitleaks binary.
+# The Makefile NEVER shells out to `python3 scripts/secret_scanner.py` or a bare
+# host `gitleaks` binary for the scan — docker compose only (B9). The Python
+# wrapper remains the LOCAL fail-closed hook guard (git-hooks/), not a Makefile command.
+# There is exactly ONE canonical loop scan entry: loop-secret-scan-tests.
+#
+# Images:
+#   containers/gitleaks/Dockerfile        -> base image (gitleaks binary only)
+#   containers/gitleaks-tests/Dockerfile  -> extends base + Python/pytest (test image)
+#   docker-compose-files/gitleaks.yaml    -> `gitleaks` compose service (loop stage)
+GITLEAKS_IMAGE ?= obsidian-timestamp-util-gitleaks:dev
+GITLEAKS_VERSION ?= v8.18.4
+GITLEAKS_COMPOSE ?= docker-compose-files/gitleaks.yaml
+GITLEAKS_TESTS_COMPOSE ?= docker-compose-files/gitleaks-tests.yaml
+GITLEAKS_TESTS_IMAGE ?= obsidian-timestamp-util-gitleaks-tests:dev
+
+secret-scan-image: ## Build the gitleaks secret-scanning container image (base, for the loop stage).
+	@echo "SECRET-SCAN: building $(GITLEAKS_IMAGE) (gitleaks $(GITLEAKS_VERSION))..."
+	@nerdctl build -f containers/gitleaks/Dockerfile \
+		--build-arg GITLEAKS_VERSION=$(GITLEAKS_VERSION) \
+		-t $(GITLEAKS_IMAGE) . \
+		|| docker build -f containers/gitleaks/Dockerfile \
+		--build-arg GITLEAKS_VERSION=$(GITLEAKS_VERSION) \
+		-t $(GITLEAKS_IMAGE) .
+
+# Standalone secret scan (NOT a loop-harness stage). Runs the gitleaks repo scan
+# containerized; the actual scan lives in the pre-commit hook (scripts/secret_scanner.py
+# --staged) and CI (.github/workflows/trufflehog.yml). Kept as a Makefile target so it
+# can be invoked on demand. Honours .gitignore + .gitleaks.toml allowlists.
+# A detected secret fails (non-zero).
+loop-secret-scan: ## gitleaks secret scan of the repo, containerized (docker compose only).
+	@echo "LOOP-SECRET-SCAN: scanning repository with gitleaks (container)..."
+	@rm -f .gitleaks-report.json
+	@set +e; script -qec "docker compose -f $(GITLEAKS_COMPOSE) run --rm gitleaks" /dev/null >/dev/null 2>&1; RC=$$?; set -e; \
+	if [ $$RC -ne 0 ] && [ -s .gitleaks-report.json ]; then \
+		echo "LOOP-SECRET-SCAN: SECRETS DETECTED -- loop blocked."; \
+		echo "LOOP-SECRET-SCAN: findings (file | rule | line):"; \
+		python3 scripts/print_gitleaks_report.py .gitleaks-report.json || true; \
+		rm -f .gitleaks-report.json; exit 1; \
+	fi; \
+	rm -f .gitleaks-report.json; \
+	echo "LOOP-SECRET-SCAN: clean."
+
+# MANDATORY loop-harness gate: run the secret-scanner's OWN pytest suite, containerized.
+# Builds the gitleaks-tests image (real gitleaks + pytest) and runs
+# tests/test_secret_scanner*.py inside the container (docker compose only, B9).
+# Verifies the scanner's detection logic itself — no mocks on detection.
+loop-secret-scan-tests: ## [LOOP] run secret-scanner pytest suite (containerized, real gitleaks).
+	@echo "LOOP-SECRET-SCAN-TESTS: building test image + running suite (container)..."
+	@$(MAKE) secret-scan-tests-image
+	@script -qec "docker compose -f $(GITLEAKS_TESTS_COMPOSE) run --rm gitleaks-tests" /dev/null \
+		|| { echo "LOOP-SECRET-SCAN-TESTS: tests FAILED -- loop blocked."; exit 1; }
+	@echo "LOOP-SECRET-SCAN-TESTS: all passed."
+
+# Non-scan helper: run the pytest suites that exercise the Python wrapper
+# (developer/hook guard + real-gitleaks integration). Does NOT scan via Makefile.
+test-secret-scanner: ## Run tests/test_secret_scanner*.py (wrapper/hook guard + integration).
+	@echo "SECRET-SCAN: running pytest suites (tests/test_secret_scanner*.py)..."
+	@python3 -m pytest tests/test_secret_scanner.py tests/test_secret_scanner_integration.py -v
+
+# Test image build (extends base + pytest). Used by integration tests; not a scan command.
+secret-scan-tests-image: ## Build the gitleaks + pytest test image.
+	@echo "SECRET-SCAN: building test image (extends $(GITLEAKS_IMAGE))..."
+	@$(MAKE) secret-scan-image
+	@nerdctl build -f containers/gitleaks-tests/Dockerfile \
+		-t $(GITLEAKS_TESTS_IMAGE) . \
+		|| docker build -f containers/gitleaks-tests/Dockerfile \
+		-t $(GITLEAKS_TESTS_IMAGE) .
+
+.PHONY: secret-scan-image secret-scan-tests-image loop-secret-scan test-secret-scanner

@@ -398,7 +398,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
  coordinate `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not
  skip) — root resolution is the actual bug to fix, not a skip guard.
   - **(B20) NEVER declare a change "done" without running the loop gate first — this is a hard pre-flight, not optional.** Before reporting any OpenSpec change as complete (or before claiming "the harness is green / aligned / fixed"), the agent MUST execute the loop gate and report its real output:
-      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all eight stages in order: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
+      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
          **HOW TO RUN (never make excuses):** long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the **REAL HOST** (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live Ollama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will print `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it. **Never say "can't run from here" / "environment absent" — the host runs `make` for you.** Drive verification through `make` with REAL output, always.
       2. **If the full `make loop-harness` cannot complete in the session** (e.g. an explicit
          timeout, or a stage is deliberately disabled via env), the agent MUST STILL run the
@@ -638,7 +638,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   stage order, the `loop-ts-floor` guard, or the B-behaviour range:
   1. **`Makefile`** — the executable gates + canonical stage-order comment; `make loop-harness`
      runs `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e`
-     → `loop-integration` → `loop-build-app` → `loop-test-app` → `check-docs-sync` (final).
+           → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync` (final).
   2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B25 durable behaviours.
   3. **`hermes/skills/openspec-loop-harness.md`** — the loadable skill mirror of AGENTS.md.
   4. **`docs/openspec-engineering-loop-harness.md`** — the human-readable technical reference
@@ -695,3 +695,43 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   `make openspec-new` / `openspec new change`; do NOT limit itself to kanban tooling.  The reusable directive lives in the Hermes skill
   `request-to-openspec` (loaded at request entry). Mirrored in `openspec-loop-harness.md` and
   `docs/openspec-engineering-loop-harness.md` (B8).
+
+---
+
+## Secret scanning (gitleaks)
+
+The broken TruffleHog GitHub Action was replaced by **gitleaks** (the de-facto open-source scanner).
+The actual secret **scan** lives in the pre-commit hook + CI (NOT a loop-harness stage); the
+secret-scanner's own **pytest suite** runs as a loop-harness stage (`loop-secret-scan-tests`).
+
+- **Engine:** `scripts/secret_scanner.py` delegates 100% of detection to gitleaks — no homemade
+  regex/entropy detector. It is the LOCAL fail-closed **hook** guard (dev-side), not a loop command.
+- **Config:** `.gitleaks.toml` uses `[extend] useDefault = true` plus repo-local `allowlist` entries
+  for test fixtures, docs, dependency/build caches (`.venv`, `node_modules`, `__pycache__`, and so on),
+  and `.env`/`.git`. **Do NOT replace `useDefault = true` with an empty `path`** — that silently
+  disables the entire default ruleset.
+- **Scan lives in the hook + CI (NOT the loop):** the gitleaks repo scan runs in `git-hooks/pre-commit`
+  (`python3 scripts/secret_scanner.py --staged`) and `git-hooks/commit-msg` (`--message-file`), and in
+  CI (`.github/workflows/trufflehog.yml`, `gitleaks/gitleaks-action@v2`). A detected secret blocks the
+  commit / fails CI. A standalone `make loop-secret-scan` target exists for on-demand scans but is NOT
+  a loop stage (the loop must not re-scan the tree — the hook already guards every commit).
+- **Loop stage = the scanner's own tests (containerized, B9):** `make loop-secret-scan-tests` builds
+  `secret-scan-tests-image` (real gitleaks + pytest) and runs `tests/test_secret_scanner*.py` **inside
+  the `gitleaks-tests` compose container** (`docker-compose-files/gitleaks-tests.yaml`), exercising the
+  REAL gitleaks binary (no mocks on detection). It sits between `loop-test-app` and `check-docs-sync`
+  in the canonical stage order. This verifies the scanner's detection logic itself every loop run.
+- **No duplicate scan commands:** the Makefile has exactly ONE on-demand scan target (`loop-secret-scan`,
+  alias `check-secrets`); it does NOT shell out to `python3` or a bare host `gitleaks` binary — docker
+  compose only, like every other harness gate. `make secret-scan-image` / `make secret-scan-tests-image`
+  build images; `make test-secret-scanner` runs the pytest suites on the host. `loop-secret-scan-tests`
+  is the canonical loop entry that runs the suite containerized.
+- **Hooks (fail-closed, local dev guard):** `git-hooks/pre-commit` runs `python3 scripts/secret_scanner.py --staged`;
+  `git-hooks/commit-msg` runs `python3 scripts/secret_scanner.py --message-file`. A detected secret
+  rejects the commit. Installed via `make install-git-hooks`.
+- **CI:** `.github/workflows/trufflehog.yml` is a gitleaks workflow (`gitleaks/gitleaks-action@v2`,
+  `fetch-depth: 0`, `GITLEAKS_CONFIG=.gitleaks.toml`).
+- **Tests:** `tests/test_secret_scanner.py` (hermetic unit) + `tests/test_secret_scanner_integration.py`
+  (real gitleaks binary, no mocks on detection). Run with `make test-secret-scanner` (host) or via the
+  loop stage `loop-secret-scan-tests` (containerized).
+- **Credential hygiene:** never put real API keys/tokens in source or tests. Use documented example
+  shapes (e.g. `AKIA…EXAMPLE`, `xoxb-…`) or `[REDACTED]`.

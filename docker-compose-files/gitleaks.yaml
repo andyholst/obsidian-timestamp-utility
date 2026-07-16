@@ -1,0 +1,23 @@
+# Secret-scanning service — runs gitleaks (container) over the mounted repo.
+# Used by the loop-harness stage `make loop-secret-scan` (docker compose only, B9).
+# Scans the WHOLE working tree (uncommitted + staged files included), using the
+# repo's .gitleaks.toml (default ruleset + repo-local rules + allowlists). .git is
+# auto-ignored; caches/docs are skipped via the .gitleaks.toml allowlist.
+services:
+  gitleaks:
+    build:
+      context: ..
+      dockerfile: containers/gitleaks/Dockerfile
+    image: obsidian-timestamp-util-gitleaks:dev
+    volumes:
+      - ..:/src:ro
+      # Writable scratch for the gitleaks JSON report (so we can surface findings).
+      - ..:/out:rw
+    entrypoint: ["/usr/local/bin/gitleaks"]
+    # --no-git => scan the working tree as files (catches uncommitted secrets like a
+    # stray password.txt), not just committed git history. Redacts matches.
+    # --report-path writes a JSON report we surface in the Makefile so the user can
+    # SEE which file/rule fired (not just "secrets detected").
+    command: ["detect", "--no-git", "--source=/src", "--redact",
+              "--report-format=json", "--report-path=/out/.gitleaks-report.json",
+              "--config=/src/.gitleaks.toml"]

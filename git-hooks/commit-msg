@@ -35,5 +35,21 @@ if ! "$COMMITLINT" --config "${REPO_ROOT}/commitlint.config.cjs" --edit "$MSG_FI
   exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Secret scanning (gitleaks) of the commit message itself.
+# A secret pasted into a commit message would otherwise be committed to history.
+# ---------------------------------------------------------------------------
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+SCANNER="${REPO_ROOT}/scripts/secret_scanner.py"
+if [ -f "$SCANNER" ]; then
+  if ! python3 "$SCANNER" --message-file "$MSG_FILE"; then
+    echo "commit-msg hook: SECRET(S) DETECTED in commit message -- commit blocked." >&2
+    echo "commit-msg hook: remove the secret from the message and try again." >&2
+    exit 1
+  fi
+else
+  echo "commit-msg hook: secret_scanner.py not found at $SCANNER; skipping message scan." >&2
+fi
+
 echo "commit-msg hook: message OK (Conventional Commit)."
 exit 0

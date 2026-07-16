@@ -53,5 +53,24 @@ done
 if [ "$cleaned" -gt 0 ]; then
   echo "pre-commit: stripped trailing whitespace from $cleaned staged file(s)."
 fi
+# ---------------------------------------------------------------------------
+# Secret scanning (gitleaks) of staged content.
+# Runs scripts/secret_scanner.py --staged. If a secret is detected the commit is
+# BLOCKED (non-zero exit) so leaked credentials never enter history. This replaces
+# the broken TruffleHog GitHub Action with a local, repo-owned gitleaks scan.
+# ---------------------------------------------------------------------------
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+SCANNER="${REPO_ROOT}/scripts/secret_scanner.py"
+if [ -f "$SCANNER" ]; then
+  if ! python3 "$SCANNER" --staged; then
+    echo "pre-commit hook: SECRET(S) DETECTED in staged content -- commit blocked." >&2
+    echo "pre-commit hook: remove the secret (or rotate it) and re-stage, then commit again." >&2
+    echo "pre-commit hook: to scan a specific file: python3 scripts/secret_scanner.py --file <path>" >&2
+    exit 1
+  fi
+else
+  echo "pre-commit hook: secret_scanner.py not found at $SCANNER; skipping secret scan." >&2
+fi
+
 # Always exit 0 — auto-fix only; never block the commit.
 exit 0

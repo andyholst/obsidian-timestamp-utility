@@ -5,13 +5,13 @@
 # Thin, honest wrapper over `make loop-harness`. Runs the eight loop stages IN FULL, then a
 # FINAL B8 doc-sync gate,
 # in order (loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration
-# -> loop-build-app -> loop-test-app -> check-docs-sync), and prints a per-stage PASS/FAIL/TIMEOUT summary,
+# -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync), and prints a per-stage PASS/FAIL/TIMEOUT summary,
 # exiting non-zero if any stage is red.
 #
 # B8 durable-behaviour range: B1-B25 (the loop's "laws of physics"; see AGENTS.md). The
 # final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
 # Canonical stage order (B8 source of truth):
-#   loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> check-docs-sync
+#   loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync
 #
 # Ollama is expected to be running on the host (bound to 127.0.0.1:11434) and is
 # reachable from the containers via network_mode: host (see docker-compose-files/agents.yaml).
@@ -51,10 +51,11 @@ declare -A STAGE_TIMEOUT=(
   [loop-integration]=1500
   [loop-build-app]=900
   [loop-test-app]=900
+  [loop-secret-scan-tests]=300
   [check-docs-sync]=120
 )
 
-STAGES=(loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app check-docs-sync)
+STAGES=(loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-secret-scan-tests check-docs-sync)
 HERMETIC=(loop-collect loop-ts-floor loop-unit)
 
 summary=()
@@ -81,7 +82,8 @@ stage_desc() {
     loop-unit-real)   echo "pytest tests/unit on LIVE Ollama (no mocks) via agents.yaml -> unit-test-agents" ;;
     loop-e2e)         echo "3 standing e2e gates (ticket20 / ticket22 / greetings) via agents.yaml -> integration-test-agents" ;;
     loop-build-app)   echo "docker compose tools.yaml run app: npm run build (rollup)" ;;
-    loop-test-app)    echo "docker compose tools.yaml run app: npm test (jest)" ;;
+    loop-test-app)   echo "docker compose tools.yaml run app: npm test (jest)" ;;
+    loop-secret-scan-tests) echo "secret-scanner pytest suite (real gitleaks, no mocks) containerized via docker-compose-files/gitleaks-tests.yaml (fail-closed)" ;;
     check-docs-sync)  echo "scripts/check-docs-sync.py -> FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B25) — FINAL gate" ;;
 
     *)                echo "make $1" ;;
