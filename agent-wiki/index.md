@@ -9,6 +9,10 @@ This wiki documents work done on OpenSpec changes for the **obsidian-timestamp-u
 - Weekly summaries live in `weekly-summaries/`.
 
 ## Change Entries
+- [2026-07-16-lint-fix-trailing-whitespace](2026-07-16-lint-fix-trailing-whitespace.md) — Summary
+- [2026-07-16-readme-architecture-overview](2026-07-16-readme-architecture-overview.md) — Summary
+- [2026-07-16-request-to-openspec](2026-07-16-request-to-openspec.md) — Summary
+- [2026-07-16-readme-align-with-commits](2026-07-16-readme-align-with-commits.md) — Summary
 - [2026-07-15-uuid-modal-agentic-generation](2026-07-15-uuid-modal-agentic-generation.md) — Summary
 - [2026-07-15-harden-docker-run-oneshell](2026-07-15-harden-docker-run-oneshell.md) — Summary
 - [2026-07-15-ztest-archive-order](2026-07-15-ztest-archive-order.md) — Summary

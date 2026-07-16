@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# pre-commit: strip trailing whitespace from staged text files (auto-fix only).
+# Never exits non-zero on a clean diff — loop runs (make loop-*) perform no `git commit`,
+# so this hook is inert there and cannot break the loop.
+set -uo pipefail
+
+# Text-file extension allowlist (skip anything binary / non-text by default).
+ALLOWED_EXT_RE='\.(ts|tsx|js|jsx|json|md|cjs|mjs|py|sh|bash|yml|yaml|txt|toml|cfg|ini|css|html|xml|svg|mk|Makefile|Dockerfile)$'
+# Also allow files with no extension (e.g. Makefile, Dockerfile, LICENSE) via a name list.
+ALLOWED_NAME_RE='^(Makefile|Dockerfile|LICENSE|CHANGELOG|\.gitignore|\.dockerignore|Justfile|Cargo\.toml|pyproject)$'
+
+changed_files=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+
+cleaned=0
+for f in $changed_files; do
+  # Skip if the path no longer exists (deleted files handled separately).
+  [ -f "$f" ] || continue
+
+  base=$(basename "$f")
+  case "$f" in
+    $ALLOWED_NAME_RE) : ;;
+    *) case "$f" in
+         *.*) echo "$f" | grep -Eq "$ALLOWED_EXT_RE" || continue ;;
+         *) continue ;;
+       esac ;;
+  esac
+
+  # Skip binary files: `file` reports anything containing "binary".
+  if command -v file >/dev/null 2>&1; then
+    if file --mime-encoding "$f" 2>/dev/null | grep -qi 'binary'; then
+      continue
+    fi
+  fi
+
+  # Skip files that are not valid UTF-8 (treat as binary) when `iconv` is available.
+  if command -v iconv >/dev/null 2>&1; then
+    if ! iconv -f UTF-8 -t UTF-8 "$f" >/dev/null 2>&1; then
+      continue
+    fi
+  fi
+
+  # Detect trailing whitespace BEFORE mutating.
+  if grep -qE '[[:space:]]+$' "$f"; then
+    # Rewrite the file in place, stripping trailing whitespace from every line.
+    # Use a temp file to avoid truncating on interrupt.
+    tmp="${f}.twb.$$"
+    sed 's/[[:space:]]*$//' "$f" > "$tmp" && mv "$tmp" "$f"
+    git add "$f"
+    cleaned=$((cleaned + 1))
+  fi
+done
+
+if [ "$cleaned" -gt 0 ]; then
+  echo "pre-commit: stripped trailing whitespace from $cleaned staged file(s)."
+fi
+# Always exit 0 — auto-fix only; never block the commit.
+exit 0

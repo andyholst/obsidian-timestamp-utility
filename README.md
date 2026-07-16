@@ -1,8 +1,37 @@
 # Timestamp Plugin for Obsidian
 
-This plugin enhances your Obsidian experience by adding six convenient commands
-for working with timestamps, date ranges, and task processing to support the
-Zettelkasten notes and effecient planning:
+> **What this project is (helicopter view).** This repository contains a complete
+> Obsidian community plugin **plus the machinery that builds and maintains it**.
+> There are two halves:
+>
+> 1. **The plugin (what you run).** A TypeScript Obsidian plugin (`src/main.ts` +
+>    `src/*.ts`, compiled by rollup into `dist/main.js`) that adds **nine**
+>    timestamp / date-range / UUID / Base64 / reminder commands to Obsidian. This is
+>    the product a user installs and the detail listed in the [Commands](#commands)
+>    and [Usage](#usage) sections below.
+> 2. **The agentic pipeline (how it is built).** A Python pipeline
+>    (`agents/agentics/`) that reads an [OpenSpec](https://fission-ai.github.io/openspec/)
+>    change (proposal + tasks + specs) and **deterministically generates** the plugin's
+>    TypeScript code and jest tests — it never hands the LLM the final file. Generation
+>    is gated by a self-correcting **OpenSpec loop / harness** that re-runs until the
+>    build and tests are green and every spec requirement is met, then archives the
+>    change. The plugin you install is the *output* of that loop.
+>
+> In short: the OpenSpec loop drives the Python pipeline, which generates the TypeScript
+> plugin. The authoritative map of the whole system — plugin surface, pipeline, and loop
+> — lives in **[`docs/AGENTIC_ARCHITECTURE.md`](docs/AGENTIC_ARCHITECTURE.md)**; the
+> operational "how the loop runs and verifies" reference is
+> **[`docs/openspec-engineering-loop-harness.md`](docs/openspec-engineering-loop-harness.md)**.
+
+This plugin enhances your Obsidian experience by adding nine convenient commands
+for working with timestamps, date ranges, UUIDs, Base64 encoding, and task
+processing to support the Zettelkasten notes and efficient planning:
+
+## Commands
+
+The plugin registers **nine** commands. Each is described below and demonstrated in
+[Usage](#usage); a machine-readable list of their `id`s is in
+[`src/main.ts`](src/main.ts) and [`manifest.json`](manifest.json).
 
 - **Insert Current Timestamp (YYYYMMDDHHMMSS)**: Inserts a timestamp at the
   cursor position in the format `YYYYMMDDHHMMSS` (e.g., `20250221134527` for
@@ -29,6 +58,13 @@ Zettelkasten notes and effecient planning:
   `- [ ] Task description (@YYYY-MM-DD HH:MM)` are transformed into tasks like
   `- [ ] HH:MM - HH:MM Task description` and grouped into daily files to be
   synced with ICAL services (like `2025-01-01.md`).
+- **Insert UUID v7 (timestamp-based)**: Inserts a UUID v7 at the cursor position.
+  UUID v7 embeds a millisecond timestamp in its first 48 bits, so generated IDs
+  are time-sortable (e.g., `01971a2b-3c4d-7e5f-8a9b-0c1d2e3f4a5b`).
+- **Encode Base64 Message**: Opens a modal where you type a message and copy its
+  Base64-encoded form — useful for embedding binary-safe payloads in notes.
+- **Decode Base64 Message**: Opens a modal where you paste Base64 text and view
+  the decoded message.
 
 ## Documentation
 
@@ -46,6 +82,8 @@ This repository is documentation-driven (OpenSpec workflow). The key references 
   the OpenSpec harness + loop engineering reference (durable behaviours B1–B25).
 - **[`AGENTS.md`](AGENTS.md)** — the agent execution manual for this OpenSpec-driven repo
   (how changes are proposed, generated, verified, and archived).
+- **[`docs/openspec-loop-harness-guide.md`](docs/openspec-loop-harness-guide.md)** — a short
+  redirect note that now points to the harness reference above.
 
 ## Installation
 
@@ -175,7 +213,38 @@ To process reminder files and convert them into organized time-blocked tasks:
 - Unchecked tasks are updated if they match current reminders.
 - New tasks are added to existing files or new files are created as needed.
 
-## Running the Ticket Interpreter Agent
+### Insert UUID v7
+
+To insert a time-sortable UUID v7 at the cursor position:
+
+1. Open the command palette (Ctrl+P or Cmd+P).
+2. Search for "Insert UUID v7 (timestamp-based)".
+3. Press Enter to insert the UUID v7 at the cursor.
+
+**Note**: the generated UUID v7 embeds a millisecond timestamp in its first 48 bits, so IDs are
+monotonically sortable by creation time.
+
+### Encode Base64 Message
+
+To Base64-encode a message:
+
+1. Open the command palette (Ctrl+P or Cmd+P).
+2. Search for "Encode Base64 Message".
+3. Press Enter to open the encode modal.
+4. Type or paste your message into the text area.
+5. Click "Encode" — the Base64 result appears in the modal, ready to copy.
+
+### Decode Base64 Message
+
+To Base64-decode a message:
+
+1. Open the command palette (Ctrl+P or Cmd+P).
+2. Search for "Decode Base64 Message".
+3. Press Enter to open the decode modal.
+4. Paste the Base64 text into the text area.
+5. Click "Decode" — the decoded message appears in the modal.
+
+## Running the Agentic Pipeline
 
 The agentic pipeline is an AI-powered tool that turns an OpenSpec change (or a GitHub issue) into
 TypeScript code and tests for the plugin, using LangChain and LangGraph. It reads the change's

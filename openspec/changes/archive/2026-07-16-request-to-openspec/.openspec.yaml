@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-16
+goal: Every request is first turned into a tracked OpenSpec proposal; the agent
+  implements only after validate passes

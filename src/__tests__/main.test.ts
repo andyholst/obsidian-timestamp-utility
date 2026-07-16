@@ -4,7 +4,7 @@ import * as obsidian from 'obsidian';
 const mockManifest: obsidian.PluginManifest = {
     id: 'obsidian-timestamp-utility',
     name: 'Timestamp Utility',
-    version: '0.4.11',
+    version: '0.4.12',
     minAppVersion: '0.15.0',
     description: 'Insert timestamps and rename files with timestamp prefixes.',
     author: 'Your Name',
@@ -532,7 +532,7 @@ describe('TimestampPlugin', () => {
     describe('insert-uuid-v7 command', () => {
             let uuidPlugin: TimestampPlugin;
             const uuidCommands: { [key: string]: obsidian.Command } = {};
-    
+
             beforeEach(() => {
                 jest.clearAllMocks();
                 uuidPlugin = new TimestampPlugin(mockApp, mockManifest);
@@ -549,14 +549,14 @@ describe('TimestampPlugin', () => {
                     return command;
                 };
             });
-    
+
             test('adds insert-uuid-v7 command', async () => {
                 await uuidPlugin.onload();
                 const insertCmd = uuidCommands['insert-uuid-v7'];
                 expect(insertCmd).toBeDefined();
                 expect(insertCmd!.name).toBe('Insert UUID v7 (timestamp-based)');
             });
-    
+
             test('inserts uuid v7 at cursor', async () => {
                 await uuidPlugin.onload();
                 const command = uuidCommands['insert-uuid-v7'];
@@ -570,7 +570,7 @@ describe('TimestampPlugin', () => {
                     throw new Error('insert-uuid-v7 command is not properly defined');
                 }
             });
-    
+
             test('shows Notice when no active editor', async () => {
                 mockApp.workspace.getActiveViewOfType = jest.fn(() => null);
                 await uuidPlugin.onload();

@@ -437,8 +437,11 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
          sections AND the bump PART.
        - **`make lint-commits`** — run `commitlint` over the squashed range / HEAD; the changelog lint
          gate (fail-closed on any invalid message).
-       - **`make install-git-hooks`** — wire `git-hooks/commit-msg` into `.git/hooks` so every
-         manual `git commit` is linted by commitlint (per-commit Conventional-Commit gate).
+       - **`make install-git-hooks`** — wire `git-hooks/commit-msg` (per-commit Conventional-Commit
+         lint) and `git-hooks/pre-commit` (trailing-whitespace auto-fix) into `.git/hooks` so every
+         manual `git commit` is linted. The pre-commit hook only strips trailing whitespace from
+         staged text files and **never exits non-zero**, so it is inert under the loop (which performs
+         no `git commit`).
        - **`make changelog`** — regenerate sectioned `CHANGELOG.md` (git_chglog; one `## <version>`
          section per git tag, so a local `v<version>` tag after bump yields a viewable new section).
        - **`make release-notes`** — refresh the README release-notes block.
@@ -675,3 +678,20 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   requirements regeneration, and the backup/omission-guard behaviour. Load it
   (`skill_view openspec-loop-harness`) whenever you work an OpenSpec change, the Makefile,
   `containers/`, or the agentic pipeline here.
+- **Request intake gate (front door) — turn inbound requests into OpenSpec changes before acting.**
+  Before implementing/answering a new work request, convert it into an OpenSpec change of record
+  (`make openspec-new NAME=<derived>`, which shells out to `openspec new change` per B15) +
+  tasks, validate it, and start the loop — according to the **per-channel trigger**:
+  - **Hermes dashboard:** ALWAYS converts by default — no keyword required.
+  - **Telegram:** converts / creates tasks / starts the loop ONLY IF the message contains the
+    keyword `openspec` (case-insensitive). Messages without `openspec` are exempt.
+  - **Hermes terminal CLI:** converts / creates tasks / starts the loop ONLY IF the command/text
+    contains `openspec` (case-insensitive). Requests without `openspec` are exempt.
+  Degenerate cases: re-use an in-flight change for the same intent (no duplicate dir); use
+  `clarify` first if ambiguous.
+  **Kanban-delivery path:** when a request arrives AS a Kanban task (assigned into a kanban
+  workspace, agent scoped to that task), the Kanban wrapper is only the *delivery envelope* —
+  the agent MUST still apply the per-channel trigger and scaffold the OpenSpec change via
+  `make openspec-new` / `openspec new change`; do NOT limit itself to kanban tooling.  The reusable directive lives in the Hermes skill
+  `request-to-openspec` (loaded at request entry). Mirrored in `openspec-loop-harness.md` and
+  `docs/openspec-engineering-loop-harness.md` (B8).

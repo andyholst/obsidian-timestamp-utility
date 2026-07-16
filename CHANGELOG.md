@@ -2,6 +2,117 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.12
+
+### ✨ New Features
+
+- **feat(loop): add release automation, doc-sync and TS-floor gates (#52)**
+  - Establish the OpenSpec loop-harness as a deterministic, spec-driven
+  - engineering discipline (behaviours B1-B25) and ship the release and
+  - verification machinery that implements it. The LLM generator is now
+  - constrained by a deterministic floor and corrected by a closed loop gate
+  - that must pass before any change is declared done.
+  - Agentic pipeline (agents/agentics/src)
+  - code_integrator_agent.py: the deterministic merge floor is now the sole
+  - writer of src/main.ts. It parses the spec contract (id/command name/
+  - Modal class) from the OpenSpec change, string-only strips any
+  - non-contract addCommand and existing Modal of that name from both the
+  - file and the LLM output, then injects the authoritative contract command
+  - body and appends the spec Modal + generator only if absent (idempotent).
+  - The LLM never holds the pen (B7/B10/B11).
+  - openspec_loader.py: contract resolution now also matches the date-prefixed
+  - archived change dir (archive/YYYY-MM-DD-<name>, B19); repo root is resolved
+  - by probing for a dir that contains openspec/changes rather than a fixed
+  - relative depth, so the e2e harness runs against the real /project mount
+  - instead of falsely skipping (false-skip-audit-and-root-fix).
+  - Release automation (B22/B23)
+  - Makefile: squash-commits forces a valid type(scope): first line and passes
+  - it through commitlint (lint-commits gate), restoring pre-squash state on
+  - failure; bump-from-changelog advances patch past max(released tags, HEAD);
+  - loop-finish runs assert-backlog-clear -> archive-all -> squash -> changelog
+    -> bump -> format, no push; release-flow / release-prep / loop-release added.
+  - scripts: gen_changelog.sh, merge_changelog.py (dedup vs committed HEAD),
+  - bump_from_changelog.py, assert_no_open_tasks_cli.py (archive gate fails
+  - closed on any open - [ ] task, B16), record-work.py containerized.
+  - CHANGELOG sections are now driven by the squashed commit's Conventional
+  - type (feat/fix/docs/refactor/chore) instead of hand authoring.
+  - Verification gates (now mandatory loop stages)
+  - scripts/check-docs-sync.py: final loop stage asserting AGENTS.md,
+  - hermes/skills/openspec-loop-harness.md, docs/...loop-harness.md,
+  - Makefile, scripts/run-loop-harness.sh and the e2e gates all agree on the
+  - 8-stage order + final check-docs-sync, the loop-ts-floor guard and the
+  - B1-B25 range. Hermetic mutation tests under tests/ (real fixture copies,
+  - regen_doc_sync_fixtures.py, test_check_docs_sync.py) flip green<->red on
+  - in-sync vs drifted fixtures.
+  - scripts/ts_test_floor.sh: FAILS if the branch's describe/leaf it/test/
+  - jest-collected/addCommand counts drop below origin/main (silent
+  - feature/test-removal guard, ts-test-floor spec).
+  - Docker / Makefile hardening (B9)
+  - Makefile docker_run macro rewritten for .ONESHELL: no longer ends recipes
+  - with a bare `exit` that silently dropped later lines; non-tty runs use a
+  - `script -qec` PTY wrap so nerdctl's forced --tty never deadlocks. RECORD_WORK
+  - uses a literal node_modules/.bin PATH that no longer clobbers git.
+  - scripts/run-loop-harness.sh streams each stage live, prints a start banner
+  - and heartbeat on quiet stages, and ends with a per-stage PASS/FAIL summary.
+  - containers/agents/Dockerfile and docker-compose-files/agents.yaml updated
+  - for the rootless-nerdctl bind-mount perms floor and correct /project mount.
+  - Workflow / behaviours (B1-B25)
+  - worktree-per-openspec-change: each change gets its own linked worktree
+  - sandbox; phase7-archive now runs containerized record-work and merges the
+  - spec only (never commits/pushes, B4/B14).
+  - base64-tool and uuid-modal agentic generation land as new specs with
+  - standing e2e coverage (test_base64_e2e_integration.py,
+  - test_change_driven_ts_generation_e2e.py); greetings e2e proves the
+  - deterministic floor injected a feature absent from the committed baseline.
+  - Merged OpenSpec specs: loop-finish-make-target, loop-harness-integrity,
+  - openspec-workflow, record-work, release-automation, ts-test-floor, doc-sync,
+  - base64-tool, docker-run, false-skip-audit-and-root-fix. Updated
+  - AGENTS.md / hermes skill / docs to mirror all behaviour changes (B8 sync).
+  - manifest.json, package.json and versions.json bumped; README + CHANGELOG
+  - refreshed.
+
+- **feat(loop): add request-intake gate, lint hook, and docs-sync fixtures**
+  - Add the OpenSpec request-intake gate plus supporting lint, README, and
+  - docs-sync work, all driven through the spec-driven loop:
+  - Request-intake gate (openspec/specs/request-intake/spec.md, from the
+  - request-to-openspec change): new per-channel discipline that turns an
+  - inbound request into an OpenSpec change of record via `make openspec-new`
+  - /`openspec new change` before any implementation. Triggers are per-channel:
+  - the Hermes dashboard always converts; Telegram and the terminal CLI convert
+  - only when the message/text contains "openspec" (case-insensitive), and
+  - messages without it are exempt. A request delivered as a Kanban task still
+  - requires the agent to scaffold the OpenSpec change rather than limiting
+  - itself to kanban tooling. This is an agent instruction only — the earlier
+  - request_intake.py was removed from agents/agentics.
+  - Trailing-whitespace lint (openspec/specs/lint-trailing-whitespace/spec.md,
+  - git-hooks/pre-commit): a pre-commit hook that strips trailing whitespace
+  - from staged text files and never exits non-zero, so it is inert under the
+  - loop (which performs no git commit). Installed via `make install-git-hooks`.
+  - README alignment + architecture overview (openspec/specs/readme-alignment,
+  - openspec/specs/readme-architecture-overview; README.md,
+  - docs/AGENTIC_ARCHITECTURE.md, docs/openspec-engineering-loop-harness.md):
+  - brought README and architecture docs in line with actual committed
+  - behaviour, grouped docs into subfolders, and added an architecture overview.
+  - Loop-harness engineering + B8 sync (AGENTS.md, Makefile,
+  - hermes/skills/openspec-loop-harness.md,
+  - docs/openspec-engineering-loop-harness.md): kept the sync set consistent on
+  - the deterministic code_integrator floor (sole writer of src/main.ts; the LLM
+  - only proposes raw candidate text), the B1–B25 durable behaviours, the
+  - 8-stage loop order (loop-collect → loop-ts-floor → loop-unit →
+  - loop-unit-real → loop-e2e → loop-integration → loop-build-app →
+  - loop-test-app), and the final `check-docs-sync` stage that fails closed if
+  - any sync doc disagrees on stage order, the loop-ts-floor guard, or the
+  - B-behaviour range.
+  - Docs-sync drift fixtures (tests/fixtures/check_docs_sync/\*): added
+  - in_sync / in_sync_ascii / in_sync_en_dash / drift_reorder /
+  - drift_stage_removed / drift_b_range_low fixture triples (AGENTS.md,
+  - docs/openspec-engineering-loop-harness.md, hermes/skills/openspec-loop-harness.md)
+  - to prove the B8 drift detector catches reorderings, stage removals, and
+  - B-range drift while tolerating ASCII/en-dash variants.
+  - agent-wiki entries (agent-wiki/index.md + 2026-07-16-\* entries): recorded
+  - the lint-fix, readme-align, readme-architecture, and request-to-openspec
+  - work with verification against spec.
+
 ## 0.4.11
 
 ### ✨ New Features
