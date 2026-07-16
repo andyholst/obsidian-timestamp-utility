@@ -9,6 +9,9 @@ This wiki documents work done on OpenSpec changes for the **obsidian-timestamp-u
 - Weekly summaries live in `weekly-summaries/`.
 
 ## Change Entries
+- [2026-07-16-loop-harness-secret-scan](2026-07-16-loop-harness-secret-scan.md) — Summary
+- [2026-07-16-secret-scan-show-findings](2026-07-16-secret-scan-show-findings.md) — Summary
+- [2026-07-16-replace-trufflehog-with-gitleaks](2026-07-16-replace-trufflehog-with-gitleaks.md) — Summary
 - [2026-07-16-lint-fix-trailing-whitespace](2026-07-16-lint-fix-trailing-whitespace.md) — Summary
 - [2026-07-16-readme-architecture-overview](2026-07-16-readme-architecture-overview.md) — Summary
 - [2026-07-16-request-to-openspec](2026-07-16-request-to-openspec.md) — Summary

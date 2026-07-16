@@ -1,0 +1,56 @@
+# gitleaks configuration for obsidian-timestamp-utility.
+# The upstream gitleaks detection rules are used as-is; we only add repo-local
+# allowlists so the scanner does not flag intentional test fixtures / docs.
+
+title = "obsidian-timestamp-utility gitleaks config"
+
+# Inherit gitleaks' built-in default ruleset, then layer repo-local allowlists.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Repo-local allowlist for intentional, non-secret fixtures and docs."
+paths = [
+  # Dependency / build caches (not source; full of test-fixture false positives).
+  '''(?i).*/\.venv/.*''',
+  '''(?i).*/venv/.*''',
+  '''(?i).*/node_modules/.*''',
+  '''(?i).*__pycache__/.*''',
+  '''(?i).*\.pyc$''',
+  '''(?i).*/\.git/.*''',
+  '''(?i).*/dist/.*''',
+  '''(?i).*/build/.*''',
+  '''(?i).*backups/.*''',
+  # Test fixtures that deliberately contain example/placeholder secrets.
+  '''(?i)tests/.*secret.*''',
+  '''(?i).*fixtures?/.*''',
+  '''(?i).*\.gitleaks\.toml''',
+  # Docs / changelog prose that may quote example tokens.
+  '''(?i)(CHANGELOG|README|docs/).*''',
+]
+# Generic high-entropy false-positive reducers (kept minimal so real leaks still fire).
+regexes = [
+  '''(?i)^xoxb-0-0$''',            # empty slack placeholder
+  '''«redacted:AKIA…»''',      # AWS documented example key
+]
+
+# Repo-local DETECTION rules layered on top of the default ruleset.
+#
+# The built-in gitleaks ruleset focuses on high-entropy / well-known secret
+# formats (AWS keys, Slack tokens, RSA keys, ...). It does NOT flag a low-entropy
+# credential assignment like `PASSWORD='fsdfsdf#"!¤!"'` or `SECRET=abc123`, which is
+# exactly the kind of password file this repo must catch. Add a conservative rule so
+# the loop secret-scan fails closed on any `KEYWORD = <value>` / `KEYWORD: <value>`
+# assignment with a non-empty value (excluding obvious variable references / empty
+# placeholders). This is why `loop-secret-scan` is git-aware and scans the whole
+# working tree, not just committed history.
+[[rules]]
+id = "repo-password-assignment"
+description = "Repo-local: detect explicit password/secret/token assignments (catches low-entropy values the default ruleset misses, e.g. PASSWORD='fsdfsdf#\"!¤!\"')."
+# Capture the value as the secret. Supports single-quoted, double-quoted, or bare
+# values. RE2 has no lookahead, so the bare-value branch excludes '${' (env-var ref)
+# and '(' (function call) via a negated class. Entropy 0 so even low-entropy
+# passwords are caught (the whole point of this rule).
+regex = '''(?i)^\s*(PASSWORD|PASSWD|PWD|SECRET|API[_-]?KEY|ACCESS[_-]?TOKEN|PRIVATE[_-]?KEY|CLIENT[_-]?SECRET)\s*[:=]\s*(?P<secret>'([^']*)'|"([^"]*)"|[^$(){}\s]+)\s*$'''
+keywords = ["PASSWORD", "PASSWD", "PWD", "SECRET", "API_KEY", "ACCESS_TOKEN", "PRIVATE_KEY", "CLIENT_SECRET"]
+entropy = 0.0
