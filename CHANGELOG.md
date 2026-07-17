@@ -2,6 +2,112 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.14
+
+### ✨ New Features
+
+- **feat(pr): enforce no-squash and no-revert governance on open PRs**
+  - This change codifies the agent's PR delivery governance as durable
+  - loop-harness behaviours (B27-B30) and wires the worktree-confined
+  - delivery flow into the OpenSpec pipeline. The motivation: open PRs
+  - were being destabilised by squash/revert operations that broke the
+  - human review workflow. The agent now delivers verified work as a
+  - branch-pushed PR and forbids history-rewriting once a PR is live.
+  - Loop-harness durable behaviours
+  - B27 (openspec-change-flow): on completion (all tasks.md boxes
+  - ticked + loop gate green + hook pass) the agent auto-promotes
+  - wt/<name> -> feat/<name>, pushes, and opens the PR with no second
+  - prompt. Delivery is always a PR push, never a file copy back into
+  - the parent tree.
+  - B28 (pr-review-no-squash): squash is forbidden once a PR is open /
+  - under review. It is only permitted while still local and pre-PR.
+  - B29 (pr-agent-comment-resolve): a red gate after push drives a
+  - forward fixup commit plus an agent PR comment; never revert,
+  - squash, or reset.
+  - B30 (pr-fix-no-revert): reverting commits is never allowed on any
+  - branch, especially a PR. Fixes are forward normal commits.
+  - HARD rule (B28a/B30): revert forbidden on pushed/open PRs; squash
+  - forbidden post-push. Correct failures forward, not backwards.
+  - Agentic pipeline / delivery scripts
+  - scripts/openspec-change-flow.sh (new, 156 lines): scaffolds the
+  - OpenSpec change inside a dedicated worktree, runs agentic
+  - generation + the loop gate there, archives on green, and (with
+  - PUSH=1) delivers by pushing feat/<name> as the PR. All artifacts
+  - stay in the worktree; the parent tree is never touched.
+  - scripts/pr_comment.sh (new, 45 lines): posts the agent's
+  - resolution comment on the PR red-gate.
+  - scripts/pr_resolve.sh (new, 68 lines): drives the forward-fixup +
+  - comment-resolve flow for an open PR.
+  - scripts/regen_doc_sync_fixtures.py: updated fixture regeneration.
+  - Execution / Makefile / compose
+  - Makefile gains openspec-flow / openspec-redeliver targets and the
+  - worktree-confined delivery wiring.
+  - docker-compose-files/worktree-override.yaml (new): compose override
+  - for worktree-confined container execution.
+  - scripts/run-loop-harness.sh: stage-order tweaks kept in sync.
+  - OpenSpec specs merged
+  - agent-branch-governance, openspec-change-flow, pr-agent-comment-resolve,
+  - pr-fix-no-revert, pr-review-stability, and readme-worktree-flow-doc
+  - are merged into openspec/specs, each with proposal/tasks/spec.
+  - Docs / sync (B8)
+  - AGENTS.md, docs/openspec-engineering-loop-harness.md and
+  - hermes/skills/openspec-loop-harness.md are updated and kept in
+  - agreement. check-docs-sync now detects richer drift: B-behaviour
+  - range gaps, stage reordering, removed stages, and en-dash/ascii
+  - variants, backed by new fixtures under tests/fixtures/check_docs_sync.
+  - Tests / versioning
+  - tests/test_check_docs_sync.py extended to cover the new drift
+  - fixtures (in_sync, drift_b_range_low, drift_reorder,
+  - drift_stage_removed, in_sync_ascii, in_sync_en_dash).
+  - src/**tests**/main.test.ts adjusted to the new command contract.
+  - package.json / manifest.json / versions.json bumped.
+  - agent-wiki entries recorded for the no-squash review and the
+  - uuid-modal agentic generation work.
+
+- **feat(pr): add PR stability & worktree-flow governance**
+  - Introduce PR lifecycle governance that keeps an open PR stable while still
+  - letting the human override it deliberately.
+  - PR stability (B28/B29/B30):
+  - Squash is forbidden once a PR is open/under review (B28a); the squash
+  - gate refuses while a branch is pushed or a PR is open.
+  - Revert is forbidden on any branch once pushed/open (B30); a red gate
+  - after push is fixed by a forward fixup commit, never revert/squash/reset.
+  - PR review comments are resolved by actually commenting back on the PR
+  - (B29a): scripts/pr_comment.sh and scripts/pr_resolve.sh post the
+  - resolution so the loop closes the thread instead of only editing code.
+  - Explicit override (squash-override-flag): when the human sets
+  - ALLOW_SQUASH=1 / force-push, the governance is overridden on purpose; the
+  - spec documents the override path so it is a recorded exception, not a hole.
+  - Agent branch governance (B27): the agent must prompt for the target
+  - branch before promoting; on completion (tasks ticked + loop green + hook
+  - pass) it auto-promotes wt/<name> -> feat/<name>, pushes, and opens the PR
+  - with no second prompt.
+  - OpenSpec change/worktree flow (openspec-change-worktree-flow): every change
+  - gets its own linked worktree; delivery is the PR push (never a file copy
+  - back to the parent) and corrections redeliver via force-with-lease to the
+  - same PR branch. scripts/openspec-change-flow.sh orchestrates new -> worktree
+    -> generate -> verify -> archive -> deliver, with
+  - docker-compose-files/worktree-override.yaml isolating each change via
+  - COMPOSE_PROJECT_NAME=otu-<name>.
+  - Loop-harness sync (B8): AGENTS.md, docs/openspec-engineering-loop-harness.md
+  - and hermes/skills/openspec-loop-harness.md are kept in lockstep on the
+  - canonical 10-stage order (loop-collect -> ... -> check-docs-sync) and the
+  - B1-B30 behaviours. The check-docs-sync fixture set (in_sync, in_sync_ascii,
+  - in_sync_en_dash, drift_b_range_low, drift_reorder, drift_stage_removed) and
+  - tests/test_check_docs_sync.py were regenerated to assert drift on stage
+  - order, B-behaviour range, and the OLLAMA_HOST-only live-test skip rule.
+  - scripts/run-loop-harness.sh and scripts/regen_doc_sync_fixtures.py reflect
+  - the same order.
+  - Docs: agent-wiki entries record each change's verification-against-spec and
+  - README documents the worktree flow. manifest.json/package.json/versions.json
+  - bumped accordingly; src/**tests**/main.test.ts updated to match.
+
+### 📝 Documentation
+
+- **docs(changelog): regenerate CHANGELOG from squashed PR governance commit**
+  - regenerated via make changelog after squashing B28 B29 B30 B30d into one commit
+  - no behaviour change; changelog only
+
 ## 0.4.13
 
 ### ✨ New Features
