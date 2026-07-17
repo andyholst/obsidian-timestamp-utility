@@ -69,7 +69,7 @@ every spec requirement/scenario); (3) **diagnose & correct by fixing the SOURCE 
 symptom** — edit the OpenSpec spec/contract, restore the generated files to a clean baseline, and
 re-run; NEVER hand-edit generated TS (B11), and each pass must try a *different* correction; and
 (4) **terminate** — a bounded ~5 attempts with a clear escalation (fix the Python floor as a last
-resort, B13). The durable behaviours B1–B25 are the loop's "laws of physics" — invariants that
+resort, B13). The durable behaviours B1–B26 are the loop's "laws of physics" — invariants that
 never regress on any pass (permanent e2e B1–B6, no-commit/no-push gate B4/B14, delivery step B12).
 
 **How they fit:** the harness is the **floor** (nothing worse than the contract can ever be
@@ -546,6 +546,32 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
        3. `make squash-commits` is a HUMAN-TRIGGERED command only. The agent may mention it as an
           option, but must not execute it unless the human approved it for the current branch.
      B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md`.
+  - **(B26) AGENT MAY COMMIT AND PUSH ITS OWN CHANGES on a non-main branch when the LOOP GATE IS
+     GREEN and the PRE-COMMIT HOOK PASSES.** The agent is permitted to `git commit` (and
+     `git merge`/`git cherry-pick`, and `git push` to its OWN feature/PR branch) its OWN
+     work-in-progress — e.g. landing this branch's OpenSpec change, scripts, Makefile, and
+     doc-sync edits — so the remote stays synced without a human hand-driving every step. Bounded:
+       1. **Branch guard:** the current branch MUST NOT be `main` or `origin/main` (nor any other
+          protected branch). On `main`, B4/B14/B25 still forbid the agent from committing/pushing on
+          its own — a human triggers that.
+       2. **Hook guard:** the `git-hooks/pre-commit` (gitleaks secret scan + trailing-whitespace) MUST
+          pass. The agent commits ONLY through the normal `git commit` path so the hook runs; it
+          NEVER uses `--no-verify`.
+       3. **Loop-gate guard (push only after green):** the agent pushes its branch ONLY after the
+          OpenSpec/loop gate is GREEN for the change it is delivering — i.e. `make build-app` exit 0
+          + `make test-app` pass AND/OR `make check-docs-sync` PASS for doc-only changes (B20). It
+          MUST NOT push red work. This is the sync-to-remote step that keeps the feature branch
+          current on the remote (so a PR can be opened / kept up to date) — it is NOT a push to `main`.
+       4. **Still forbidden (human-only):** `git push` to `main`/`origin/main` (B14), `make
+          squash-commits`, `git rebase -i` with squash/fixup, and `git reset --soft` + collapse (B25).
+          This behaviour ADDS commit/merge/**push-to-own-branch** latitude on feature branches; it
+          does NOT lift the no-push-to-main / no-squash / no-force gates.
+       5. Commits should be atomic and conventionally-scoped (the `git-hooks/commit-msg` lint applies).
+          The agent keeps `tasks.md` ticked as work is verified (B16) and re-runs `make check-docs-sync`
+          whenever it edits a sync doc, committing + pushing the result so AGENTS.md / the skill / the
+          harness doc stay in lockstep on the remote too.
+     B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
+     `docs/openspec-engineering-loop-harness.md`.
   - **(B7.1) The deterministic floor runs in EVERY mode (incl. fast).** `route_hitl` in
     `composable_workflows.py` previously returned `output_result` when `TEST_FAST_MODE=1` (set by
     `tests/integration/conftest.py` to skip the npm-test phase), which bypassed `integration_testing`
@@ -603,17 +629,18 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
          code lingers and the next run starts clean).
       3. **Re-run** `make run-agentics` to regenerate from the corrected spec, then
          `make build-app` + `make test-app` until green.
-  - **(B12) Delivery gap — the verified worktree TS MUST reach the active branch.** The
-    agentic pipeline generates + verifies TS **inside a git worktree** (`worktrees/<name>`,
-    branch `feat/<name>`). The harness MUST NOT stop there: a feature that is green only in the
-    worktree and never lands on the branch it targets is a failed delivery. After `make
-    build-app` + `make test-app` are green in/for the worktree, the agent MUST pull the verified
-    `src/main.ts` + `src/__tests__/main.test.ts` back onto the **current branch's working tree**
-    (e.g. `make deliver-change CHANGE=<name>`, which copies the worktree files into the repo tree).
-    This is a file copy only — it does NOT commit/push (B4); committing remains a deliberate human
-    step. The agent must NEVER declare a change "done" while its generated TS still lives only in
-    the worktree. (Pitfall: AGENTS.md Phase 5's "the old TS remains until you deliberately merge
-    the worktree" previously let verified code die in the worktree — B12 overrides that silence.)
+  - **(B12) Delivery gap — verified worktree TS MUST reach the target branch as the PR.** The
+    pipeline generates + verifies TS **inside a git worktree** (`worktrees/<name>`, branch
+    `feat/<name>`). The harness MUST NOT stop there: a feature green only in the worktree that never
+    lands on its target branch is a failed delivery. The agent delivers by **pushing the worktree
+    branch as the PR** (`git push origin feat/<name>`, or `make openspec-flow NAME=<name> PUSH=1`) —
+    it MUST NOT copy generated TS back into the parent working tree (that would re-introduce
+    pollution; ALL artifacts stay in the worktree by design — see `openspec-change-worktree-flow`).
+    Corrections redeliver via `make openspec-redeliver NAME=<name>` (`git push --force-with-lease`
+    to the SAME PR branch only; never `main`). Never declare a change "done" while its worktree
+    branch (`feat/<name>`) has not been delivered. (Earlier wording told the agent to
+    `make deliver-change` — a file copy onto the current branch — which conflicts with the
+    worktree-confinement invariant; this override supersedes it.)
     **Bounded self-correct loop (≈5 e2e attempts):** repeat the fix-spec → restore → re-run
     sequence for up to ~5 full e2e runs (`make run-agentics` with that spec file). Each failed
     attempt MUST first try a **different adjustment to the spec/contract file** (tasks.md
@@ -639,7 +666,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   1. **`Makefile`** — the executable gates + canonical stage-order comment; `make loop-harness`
      runs `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e`
            → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync` (final).
-  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B25 durable behaviours.
+  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B26 durable behaviours.
   3. **`hermes/skills/openspec-loop-harness.md`** — the loadable skill mirror of AGENTS.md.
   4. **`docs/openspec-engineering-loop-harness.md`** — the human-readable technical reference
      (named by B8 itself as authoritative; MUST be kept in the sync set, not treated as a 4th
@@ -651,7 +678,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
      marked `@pytest.mark.e2e`) — the runtime proof the loop works.
   Before claiming "the loop is green / aligned", run `make check-docs-sync` (the final loop stage)
   and confirm it PASSES: all sync docs agree on the 8-stage order + final `check-docs-sync`, the
-  `loop-ts-floor` guard, the B1–B25 behaviours, and the live-test skip rule (`OLLAMA_HOST` only,
+  `loop-ts-floor` guard, the B1–B26 behaviours, and the live-test skip rule (`OLLAMA_HOST` only,
   not `GITHUB_TOKEN`). A change is NOT done while any of the sync docs disagree.
 - The harness is the OpenSpec change: `proposal.md` defines *why*, `specs/**` defines *what must
   hold*, `tasks.md` defines *the steps to run*. The agentic pipeline turns tasks into code+tests.
@@ -681,12 +708,19 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
 - **Request intake gate (front door) — turn inbound requests into OpenSpec changes before acting.**
   Before implementing/answering a new work request, convert it into an OpenSpec change of record
   (`make openspec-new NAME=<derived>`, which shells out to `openspec new change` per B15) +
-  tasks, validate it, and start the loop — according to the **per-channel trigger**:
+  tasks, validate it, and **start the worktree flow** — according to the **per-channel trigger**:
   - **Hermes dashboard:** ALWAYS converts by default — no keyword required.
-  - **Telegram:** converts / creates tasks / starts the loop ONLY IF the message contains the
+  - **Telegram:** converts / creates tasks / starts the flow ONLY IF the message contains the
     keyword `openspec` (case-insensitive). Messages without `openspec` are exempt.
-  - **Hermes terminal CLI:** converts / creates tasks / starts the loop ONLY IF the command/text
+  - **Hermes terminal CLI:** converts / creates tasks / starts the flow ONLY IF the command/text
     contains `openspec` (case-insensitive). Requests without `openspec` are exempt.
+  After the change validates, the agent runs `make openspec-flow NAME=<name>` (or
+  `scripts/openspec-change-flow.sh --name <name>`), which creates a dedicated worktree
+  `feat/<name>`, scaffolds the change INSIDE it, generates + runs the loop gate inside it, archives
+  on green, finalizes (squash in the worktree), and — with PUSH=1/`--push` — delivers by pushing
+  `feat/<name>` as the PR. ALL artifacts stay in the worktree; the parent working tree is NEVER
+  touched (B12 override: deliver = PR push, never a file copy). Corrections →
+  `make openspec-redeliver NAME=<name>` (force-pushes to the SAME PR branch).
   Degenerate cases: re-use an in-flight change for the same intent (no duplicate dir); use
   `clarify` first if ambiguous.
   **Kanban-delivery path:** when a request arrives AS a Kanban task (assigned into a kanban

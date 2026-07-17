@@ -24,7 +24,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   walk), (3) **diagnose & correct by fixing the SOURCE OF TRUTH not the symptom** (edit the spec,
   restore, re-run — never hand-edit generated TS, B11; each pass a *different* tweak), and
   (4) **terminate** (bounded ~5 attempts, then escalate to fixing the Python floor B13). Durable
-  invariants B1–B25 are the loop's "laws of physics" that never regress on any pass.
+  invariants B1–B26 are the loop's "laws of physics" that never regress on any pass.
 - **How they fit:** the harness is the **floor** (nothing worse can be written); the loop is the
   **ratchet** (each pass only moves toward green, invariants never slip). Full write-up:
   `docs/openspec-engineering-loop-harness.md` §0.
@@ -181,12 +181,19 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
 - **Request intake gate (front door) — turn inbound requests into OpenSpec changes before acting.**
   Before implementing/answering a new work request, convert it into an OpenSpec change of record
   (`make openspec-new NAME=<derived>` → `openspec new change`, per B15) + tasks, validate it, and
-  start the loop — according to the **per-channel trigger**:
+  **start the worktree flow** — according to the **per-channel trigger**:
   - **Hermes dashboard:** ALWAYS converts by default — no keyword required.
-  - **Telegram:** converts / creates tasks / starts the loop ONLY IF the message contains the
+  - **Telegram:** converts / creates tasks / starts the flow ONLY IF the message contains the
     keyword `openspec` (case-insensitive). Messages without `openspec` are exempt.
-  - **Hermes terminal CLI:** converts / creates tasks / starts the loop ONLY IF the command/text
+  - **Hermes terminal CLI:** converts / creates tasks / starts the flow ONLY IF the command/text
     contains `openspec` (case-insensitive). Requests without `openspec` are exempt.
+  After the change validates, the agent runs `make openspec-flow NAME=<name>` (or
+  `scripts/openspec-change-flow.sh --name <name>`), which creates a dedicated worktree `feat/<name>`,
+  scaffolds the change INSIDE it, generates + runs the loop gate inside it, archives on green,
+  finalizes (squash in the worktree), and — with PUSH=1/`--push` — delivers by pushing `feat/<name>`
+  as the PR. ALL artifacts stay in the worktree; the parent working tree is NEVER touched
+  (B12 override: deliver = PR push, never a file copy). Corrections →
+  `make openspec-redeliver NAME=<name>` (force-pushes to the SAME PR branch).
   Degenerate cases: re-use an in-flight change for the same intent (no duplicate dir); use
   `clarify` first if ambiguous.
   **Kanban-delivery path:** when a request arrives AS a Kanban task (assigned into a kanban
@@ -196,7 +203,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   `docs/openspec-engineering-loop-harness.md` (B8). The reusable directive is the Hermes skill
   `request-to-openspec` (loaded at request entry).
 
-## Durable agent behaviours (B1–B25) — MUST always hold, never regress
+## Durable agent behaviours (B1–B26) — MUST always hold, never regress
 
 These are standing rules for the agent (also in `AGENTS.md`). They are enforced by
 `make phase7-archive` and the persistent harness
@@ -269,7 +276,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   different behaviour. The full B8 sync set (enforced by `make check-docs-sync`, the FINAL loop
   stage) also includes `Makefile`, `docs/openspec-engineering-loop-harness.md`, and
   `scripts/run-loop-harness.sh` — all MUST agree on the 8-stage order + final `check-docs-sync`,
-  the `loop-ts-floor` guard, and the B1–B25 range; a drift there fails the loop.
+  the `loop-ts-floor` guard, and the B1–B26 range; a drift there fails the loop.
 - **(B9) Rootless nerdctl bind-mount permissions (READ + WRITE).** Execution is docker compose
   with **rootless nerdctl**, which remaps the container uid (1000) to the host **`other`** class.
   Every file/dir the container must READ (the whole repo, since compose mounts `..:/project`)
@@ -323,15 +330,17 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   `_expected_contract_for_change`) only reads the spec contract and merges it deterministically —
   it must never author TS bodies. Hand-editing generated TS is forbidden because it bypasses the
   deterministic merge floor and desyncs the spec from the code.
-- **(B12) Delivery gap — verified worktree TS MUST reach the active branch.** The pipeline
+- **(B12) Delivery gap — verified worktree TS MUST reach the target branch as the PR.** The pipeline
   generates + verifies TS **inside a git worktree** (`worktrees/<name>`, branch `feat/<name>`).
   The harness MUST NOT stop there: a feature green only in the worktree that never lands on its
-  target branch is a failed delivery. After `build-app`+`test-app` are green, the agent MUST pull
-  the verified `src/main.ts` + `src/__tests__/main.test.ts` back onto the **current branch's
-  working tree** (e.g. `make deliver-change CHANGE=<name>` — a file copy, NOT a commit; B4 holds).
-  Never declare a change "done" while its generated TS still lives only in the worktree. (AGENTS.md
-  Phase 5's "old TS remains until you deliberately merge the worktree" previously let verified
-  code die in the worktree — B12 overrides that silence.)
+  target branch is a failed delivery. The agent delivers by **pushing the worktree branch as the PR**
+  (`git push origin feat/<name>`, or `make openspec-flow NAME=<name> PUSH=1`) — it MUST NOT copy
+  generated TS back into the parent working tree (that would re-introduce pollution; ALL artifacts
+  stay in the worktree by design — see `openspec-change-worktree-flow`). Corrections redeliver via
+  `make openspec-redeliver NAME=<name>` (`git push --force-with-lease` to the SAME PR branch only;
+  never `main`). Never declare a change "done" while its worktree branch has not been delivered.
+  (Earlier wording told the agent to `make deliver-change` — a file copy onto the current branch —
+  which conflicts with the worktree-confinement invariant; this override supersedes it.)
 - **(B13) Python *floor* defects are fixed directly, not via spec round-trips.** B11's spec-first
   rule applies when the GENERATED TS/test is wrong. If the defect is in the *deterministic floor*
   itself (e.g. the integrator skips injecting the spec contract when the LLM already emitted a same-
@@ -498,6 +507,18 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       graph. The agent MAY commit (B23) and merge/cherry-pick, but must NOT rewrite/squash existing
       history. If history is messy (leaked throwaway commits), FLAG it for the human and ask — do not
       decide unilaterally. `make squash-commits` is human-triggered only. B8: mirror in AGENTS.md.
+    - **(B26) AGENT MAY COMMIT AND PUSH ITS OWN CHANGES on a non-main branch when the LOOP GATE IS
+      GREEN and the PRE-COMMIT HOOK PASSES.** Permitted to `git commit` (and `git merge`/`git
+      cherry-pick`, and `git push` to its OWN feature/PR branch) its OWN work-in-progress so the
+      remote stays synced. Bounded by: (1) branch guard — current branch MUST NOT be `main`/
+      `origin/main`/protected; (2) hook guard — `git-hooks/pre-commit` (gitleaks + trailing-
+      whitespace) MUST pass; the agent commits only via the normal `git commit` path, NEVER
+      `--no-verify`; (3) loop-gate guard — push ONLY after the OpenSpec/loop gate is GREEN for the
+      change (build-app=0 + test-app pass, and/or check-docs-sync PASS for doc-only changes), never
+      push red work; (4) still forbidden (human-only): `git push` to main (B14), `make squash-commits`,
+      `git rebase -i` squash/fixup, `git reset --soft` collapse (B25). Adds commit/merge/**push-to-own-
+      branch** latitude on feature branches; does NOT lift no-push-to-main/no-squash/no-force. B8:
+      mirror in AGENTS.md + harness doc.
     ## Plan-B merge refactor (integrator-merge-refactor)
 
 - **Imports:** inject new `import` lines at the top (after the last existing top-level import).

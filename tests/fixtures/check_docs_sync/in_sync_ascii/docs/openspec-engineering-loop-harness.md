@@ -8,7 +8,7 @@
 > 2. **Harness engineering** — the Python "agentics" pipeline (`agents/agentics/`) and
 >    the deterministic merge floor that writes your `src/main.ts` / `src/__tests__/main.test.ts`.
 > 3. **Loop engineering** — the bounded self‑correcting build→test→fix loop and the
->    durable behaviours **B1–B25** that the loop must always honour.
+>    durable behaviours **B1–B26** that the loop must always honour.
 >
 > It also documents the **file structure**, every file that creates the harness's
 > behaviour, and a **how‑to‑use** walkthrough for authoring a new feature.
@@ -21,7 +21,7 @@ at repo root, the previous `docs/openspec-loop-harness-guide.md`) are historical
 ## 0. Fundamentals — what "harness" and "loop" engineering mean
 
 Before the technical detail, understand the two disciplines this whole system is built on.
-Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B25) is just a concrete
+Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B26) is just a concrete
 implementation of these two ideas. If you internalise this section, the rest of the document
 reads as "here is *how* we do harness + loop engineering in this repo."
 
@@ -91,7 +91,7 @@ A well‑engineered loop has four parts:
    a loop with no escalation hides real defects.
 
 The loop is also where **durability** lives: the invariants that must hold on *every* pass
-(B1–B25) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
+(B1–B26) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
 gate (B4/B14), the delivery step that moves verified code out of the worktree onto the branch
 (B12). These are the loop's "laws of physics": conditions that never regress no matter how many
 times you go round.
@@ -105,7 +105,7 @@ gate is green, then stop."
 | Discipline | Job | Answers the question | In this repo |
 |-----------|-----|----------------------|--------------|
 | **Harness engineering** | *Constrain* the generator into a verifiable shape | "How do I make one generation trustworthy?" | OpenSpec contract as source of truth + `CodeIntegratorAgent` deterministic merge floor + omission guard + B9 perms + git‑HEAD restore |
-| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B25 + delivery step B12 |
+| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B26 + delivery step B12 |
 
 The harness is the **floor** (nothing worse than this can be written); the loop is the **ratchet**
 (each pass can only move toward green, and the invariants never slip back). The rest of this
@@ -148,7 +148,7 @@ Three non‑negotiable principles:
 
 ```
 obsidian-timestamp-utility/
-├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B25 summary
+├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B26 summary
 ├── Makefile                          # ALL execution entry points (docker compose only, no Dagger)
 ├── docker-compose-files/
 │   ├── agents.yaml                   # agentics / unit‑test‑agents / integration‑test‑agents services
@@ -547,18 +547,23 @@ if invoking docker compose outside the Makefile. World‑readable on a private r
 
 `make run-agentics` generates + verifies TS **inside a worktree**. The harness must NOT stop
 there: a feature green only in the worktree that never lands on its target branch is a failed
-delivery. After `build-app`+`test-app` are green, pull the verified files back onto the current
-branch's working tree:
+delivery. Deliver it by **pushing the worktree branch as the PR** — NOT by copying files back into
+the parent working tree (that would re-introduce pollution; ALL artifacts stay in the worktree by
+design — see `openspec-change-worktree-flow`):
 
 ```bash
-make deliver-change CHANGE=<name>     # copies worktree src/main.ts + main.test.ts → repo (file copy, NO commit)
+make openspec-flow NAME=<name> PUSH=1     # creates worktree, archives on green, finalizes, pushes feat/<name> as PR
+# corrections after a pass:
+make openspec-redeliver NAME=<name>        # re-enters worktree, re-squashes, force-pushes to the SAME PR branch (--force-with-lease, never main)
 ```
 
-Never declare a change "done" while its generated TS still lives only in the worktree.
+Never declare a change "done" while its worktree branch (`feat/<name>`) has not been delivered.
+(The earlier `make deliver-change` file-copy directive conflicts with the worktree-confinement
+invariant and is superseded by this PR-push model.)
 
 ---
 
-## 6. Durable behaviours B1–B25 (must always hold, never regress)
+## 6. Durable behaviours B1–B26 (must always hold, never regress)
 
 | ID | Behaviour |
 |----|-----------|
@@ -573,14 +578,15 @@ Never declare a change "done" while its generated TS still lives only in the wor
 | **B9** | Rootless nerdctl bind‑mount permissions (READ+WRITE). Whole repo world‑readable; container write targets world‑writable. Enforced by the `b9-perms` Makefile prerequisite. |
 | **B10** | **NO hard‑coded generated TS/test code in Python** — only contract‑steered. Generated TS bodies live *only* in the change's `tasks.md`/`spec.md` markers; Python only parses + merges + injects verbatim. |
 | **B11** | On generated‑TS failure: **fix the SPEC, then restore, then re‑run** — never edit TS by hand. Bounded ~5‑attempt self‑correct loop; only then may Python floor code be touched as last resort. |
-| **B12** | Delivery gap — verified worktree TS MUST reach the active branch (`make deliver-change`). Never declare done while TS lives only in the worktree. |
+| **B12** | Delivery gap — verified worktree TS MUST reach the target branch as the PR (`make openspec-flow NAME=<name> PUSH=1` → `git push feat/<name>`; corrections via `make openspec-redeliver` force-push to the SAME PR branch). NEVER a file copy into the parent working tree (worktree-confinement invariant). Never declare done while the worktree branch is undelivered. |
 | **B13** | Python *floor* defects are fixed directly, not via spec round‑trips. If the defect is in the deterministic floor itself, fix `CodeIntegratorAgent` — that is the correct spec‑steered fix; only the *merge logic* is corrected, the contract TS body still comes from the spec. |
 | **B14** | Commit/push gating for *new* code (human‑only, behaviour‑scoped). Code is committed ONLY if NEW; pushed ONLY if that new code is part of a behaviour. Floor/integrator Python fixes MAY be committed (and pushed only when part of a committed behaviour) **once**: `build-app`=0, `test-app`=0, passing‑test count **>** previous run, and all OpenSpec checks clean. Rule of thumb: commit only if new AND build works AND tests pass > last run AND OpenSpec clean; push only if that commit is the behaviour landing. **Never squash/rebase/force‑push.** |
 | **B15** | **GitHub issue → local OpenSpec change via the OpenSpec CLI (seed‑then‑generate).** When a change is sourced from a GitHub issue, the agentic code MUST turn it into a local OpenSpec change by **shelling out to `openspec new change ticket<N>`** (the same CLI step a human runs) — never hand‑writing the directory, never a raw `Path.write_text` for the directory shape. `fetch_issue_agent.py` calls `openspec_loader.create_change_from_issue(url, title, body)` after the fetch; that scaffolds via the CLI, fills `proposal.md`/`specs/<cap>/spec.md`/`tasks.md` from the issue, and re‑points generation to `openspec:ticket<N>` so the rest of the loop runs offline. The change name is derived deterministically from the issue URL (`.../issues/20` → `ticket20`), so re‑runs are idempotent. The seeded `openspec/changes/ticket<N>/` is a RUNTIME artifact and MUST NOT be committed (extends B4); `ticket20`/`ticket22` e2e tests generate + clean it up in `finally`. Keeps B10 honest: the exact `openspec new change` a human runs is the one the pipeline runs. |
 | **B16** | **Task‑completion discipline — tick as you verify, never leave open tasks, archive gate fails closed.** `make phase7-archive` runs `openspec_loader.assert_no_open_tasks` BEFORE `openspec archive` and refuses (non‑zero exit, no spec merge) if any `- [ ]` task remains. A change is "done" only when all tasks are ticked AND verified AND archived. `make loop-tasks` lists open/done per change so the backlog is never invisible. |
-| **B17** | **Integration suite is a mandatory loop phase; no dead tests; live tests skip cleanly.** `make loop-harness` runs EIGHT loop stages plus a FINAL B8 doc-sync gate: a collection guard (gate 0), a strict TS test/command floor (gate 0.5), followed by six gates (1–6): `loop-collect` (hermetic collection guard) → `loop-ts-floor` (STRICT TS test/command floor — FAIL if the current branch's `describe`/leaf `it`/`test`/jest-collected/`addCommand` counts drop below `origin/main`) → `loop-unit` (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks) → `loop-e2e` (B1/B3 e2e) → `loop-integration` (broad suite) → `loop-build-app` → `loop-test-app`, then `check-docs-sync` (FINAL B8 gate — FAIL if any sync doc drifts on stage order / `loop-ts-floor` / B-range). No dead duplicates; live tests `skipif` cleanly on `OLLAMA_HOST`. |
+| **B17** | **Integration suite is a mandatory loop phase; no dead tests; live tests skip cleanly.** `make loop-harness` runs EIGHT loop stages plus a FINAL B8 doc-sync gate: a collection guard (gate 0), a strict TS test/command floor (gate 0.5), followed by six gates (1–6): `loop-collect` (hermetic collection guard) → `loop-ts-floor` (STRICT TS test/command floor — FAIL if the current branch's `describe`/leaf `it`/`test`/jest-collected/`addCommand` counts drop below `origin/main`) → `loop-unit` (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks) → `loop-e2e` (B1/B3 e2e) → `loop-integration` (broad suite) → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` (secret-scanner pytest suite, containerized, real gitleaks, fail-closed; the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop), then `check-docs-sync` (FINAL B8 gate — FAIL if any sync doc drifts on stage order / `loop-ts-floor` / B-range). No dead duplicates; live tests `skipif` cleanly on `OLLAMA_HOST`. |
 | **B18** | **Run the agents' REAL unit tests, not only the mocked ones.** The loop MUST execute BOTH the hermetic mocked unit run (`loop-unit` → `test-agents-unit-mock`) AND the real, non‑mocked agent unit run (`loop-unit-real` → `test-agents-unit`, live Ollama) as gates 1 and 2. Reporting "agent tests green" after ONLY the mocked run is INCOMPLETE. `test-agents-unit` MUST be run when Ollama is reachable and its result reported alongside — not instead of — the mocked run. If Ollama is unreachable, `loop-unit-real` SKIPS (must not error) but the agent MUST state the real unit gate did not run. |
 | **B20** | **NEVER declare a change "done" without running the loop gate first — hard pre-flight.** Before claiming any OpenSpec change complete (or "harness green/aligned/fixed"), run the gate and report real output. Preferred: `bash scripts/run-loop-harness.sh` (wrapper over `make loop-harness`, also `make loop-trigger`) — all eight stages. **HOW TO RUN: long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the REAL HOST (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live Ollama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will say `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it.** The host provides rootless `nerdctl` AND a live Ollama (host-networked, so `127.0.0.1:11434` reaches it — B19), so `loop-unit-real` and `loop-e2e` are EXPECTED to RUN, not skip. Only STILL run the hermetic gates `make loop-collect` + `make loop-ts-floor` + `make loop-unit` (no external dep) when a stage truly cannot finish in the session; they MUST be green before any "done". Report honestly (PASS/SKIP/FAIL, failing stage named); never claim green if `loop-unit`/`loop-collect` is red; **never claim "can't run from here" — the host runs `make` for you.** Fix root cause and re-run. (B4/B14: no git commit/push from the gate.) |
+| **B26** | **AGENT MAY COMMIT/MERGE ITS OWN CHANGES on a non‑main branch when the PRE‑COMMIT HOOK PASSES.** Permitted to `git commit` (and `git merge`/`git cherry‑pick`) its OWN work‑in‑progress on a feature branch so it can iterate productively. Bounded by: (1) branch guard — current branch MUST NOT be `main`/`origin/main`/protected; (2) hook guard — `git-hooks/pre-commit` (gitleaks + trailing‑whitespace) MUST pass; the agent commits only via the normal `git commit` path, NEVER `--no-verify`. Still forbidden (human‑only): `git push` (B14), `make squash-commits`, `git rebase -i` squash/fixup, `git reset --soft` collapse (B25). Adds commit/merge latitude on feature branches; does NOT lift no‑push/no‑squash/no‑force. (B21–B25 are documented in `AGENTS.md`.) |
 
 ---
 
@@ -714,12 +720,19 @@ Follow the §5.2 self‑correct loop:
 - **Request intake gate (front door) — turn inbound requests into OpenSpec changes before acting.**
   Before implementing/answering a new work request, convert it into an OpenSpec change of record
   (`make openspec-new NAME=<derived>` → `openspec new change`, per B15) + tasks, validate it, and
-  start the loop — according to the **per-channel trigger**:
+  **start the worktree flow** — according to the **per-channel trigger**:
   - **Hermes dashboard:** ALWAYS converts by default — no keyword required.
-  - **Telegram:** converts / creates tasks / starts the loop ONLY IF the message contains the
+  - **Telegram:** converts / creates tasks / starts the flow ONLY IF the message contains the
     keyword `openspec` (case-insensitive). Messages without `openspec` are exempt.
-  - **Hermes terminal CLI:** converts / creates tasks / starts the loop ONLY IF the command/text
+  - **Hermes terminal CLI:** converts / creates tasks / starts the flow ONLY IF the command/text
     contains `openspec` (case-insensitive). Requests without `openspec` are exempt.
+  After the change validates, the agent runs `make openspec-flow NAME=<name>` (or
+  `scripts/openspec-change-flow.sh --name <name>`), which creates a dedicated worktree `feat/<name>`,
+  scaffolds the change INSIDE it, generates + runs the loop gate inside it, archives on green,
+  finalizes (squash in the worktree), and — with PUSH=1/`--push` — delivers by pushing `feat/<name>`
+  as the PR. ALL artifacts stay in the worktree; the parent working tree is NEVER touched
+  (B12 override: deliver = PR push, never a file copy). Corrections →
+  `make openspec-redeliver NAME=<name>` (force-pushes to the SAME PR branch).
   Degenerate cases: re-use an in-flight change for the same intent (no duplicate dir); use
   `clarify` first if ambiguous.
   **Kanban-delivery path:** when a request arrives AS a Kanban task (assigned into a kanban
@@ -737,7 +750,7 @@ This file, `AGENTS.md`, and `hermes/skills/openspec-loop-harness.md` are the **s
 truth**. When you change a behaviour, constraint, command, or pitfall in **any one** of them,
 mirror it in the **other two** before considering the change done:
 
-- Repo authority: `AGENTS.md` (phase flow + B1–B25 summary).
+- Repo authority: `AGENTS.md` (phase flow + B1–B26 summary).
 - Skill mirror: `hermes/skills/openspec-loop-harness.md` (operator‑level detail + pitfalls).
 - This guide: `docs/openspec-engineering-loop-harness.md` (human‑readable technical reference).
 
