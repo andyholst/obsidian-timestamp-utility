@@ -79,11 +79,40 @@ This repository is documentation-driven (OpenSpec workflow). The key references 
   [test suite guide](docs/architecture/TEST_SUITE_README.md), and the
   [integration test plan](docs/architecture/INTEGRATION_TEST_PLAN.md).
 - **[`docs/openspec-engineering-loop-harness.md`](docs/openspec-engineering-loop-harness.md)** —
-  the OpenSpec harness + loop engineering reference (durable behaviours B1–B25).
+  the OpenSpec harness + loop engineering reference (durable behaviours B1–B27).
 - **[`AGENTS.md`](AGENTS.md)** — the agent execution manual for this OpenSpec-driven repo
   (how changes are proposed, generated, verified, and archived).
 - **[`docs/openspec-loop-harness-guide.md`](docs/openspec-loop-harness-guide.md)** — a short
   redirect note that now points to the harness reference above.
+
+## How a change is built and delivered
+
+Every feature/fix starts as an [OpenSpec](https://fission-ai.github.io/openspec/) change and is
+built, verified, and delivered through a per-change **git worktree** — the parent working tree is
+never touched until the work is green.
+
+1. **Scaffold the change.** `make openspec-new NAME=<name>` creates
+   `openspec/changes/<name>/` (via the `openspec` CLI — never hand-authored) with
+   `proposal.md`, `specs/<cap>/spec.md`, and `tasks.md`.
+2. **Work in an isolated `wt/<name>` sandbox.** The agent runs
+   `make openspec-flow NAME=<name>`, which spins up a throwaway local worktree
+   `worktrees/<name>` on branch `wt/<name>`. All generation, the loop gate
+   (`make loop-harness` — collect → ts-floor → unit → unit-real → e2e → integration →
+   build-app → test-app → secret-scan → docs-sync), and `openspec archive` happen **inside that
+   worktree**. The parent branch stays untouched.
+3. **Auto-deliver the PR on completion (B27).** As soon as the change is complete — every
+   `tasks.md` checkbox ticked, the loop gate green, and the pre-commit hook passing — the flow
+   **automatically** promotes `wt/<name>` → `feat/<name>`, pushes it, and opens the PR. No second
+   "make the PR" prompt: green-lighting a change *is* the delivery authorization. (`--no-push` opts
+   out and keeps the work in the local sandbox.)
+4. **Parallel by design.** Each change uses a unique worktree (`worktrees/<name>`), a unique branch
+   (`wt/<name>` during work, `feat/<name>` on delivery), and a unique compose project name
+   (`COMPOSE_PROJECT_NAME=otu-<name>`), so many changes deliver concurrently to distinct PR
+   branches with no collision.
+
+For the full machinery (the deterministic merge floor, self-correct loop, and the B1–B27 durable
+behaviours), see
+**[`docs/openspec-engineering-loop-harness.md`](docs/openspec-engineering-loop-harness.md)**.
 
 ## Installation
 

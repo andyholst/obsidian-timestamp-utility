@@ -8,7 +8,7 @@
 # -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync), and prints a per-stage PASS/FAIL/TIMEOUT summary,
 # exiting non-zero if any stage is red.
 #
-# B8 durable-behaviour range: B1-B25 (the loop's "laws of physics"; see AGENTS.md). The
+# B8 durable-behaviour range: B1–B30 (the loop's "laws of physics"; see AGENTS.md). The
 # final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
 # Canonical stage order (B8 source of truth):
 #   loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync
@@ -84,7 +84,7 @@ stage_desc() {
     loop-build-app)   echo "docker compose tools.yaml run app: npm run build (rollup)" ;;
     loop-test-app)   echo "docker compose tools.yaml run app: npm test (jest)" ;;
     loop-secret-scan-tests) echo "secret-scanner pytest suite (real gitleaks, no mocks) containerized via docker-compose-files/gitleaks-tests.yaml (fail-closed)" ;;
-    check-docs-sync)  echo "scripts/check-docs-sync.py -> FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B25) — FINAL gate" ;;
+    check-docs-sync)  echo "scripts/check-docs-sync.py -> FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1–B30) — FINAL gate" ;;
 
     *)                echo "make $1" ;;
   esac

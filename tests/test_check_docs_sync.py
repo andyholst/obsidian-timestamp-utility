@@ -7,10 +7,10 @@ in aligned / drifted states, so we know the gate actually behaves on the real do
 not just that it happens to PASS on the current tree.
 
 Fixture layout (under tests/fixtures/check_docs_sync/<scenario>/ — .md files ONLY):
-  - in_sync/              all 3 .md files correctly aligned (mixed glyphs, B25)   -> PASS
-  - in_sync_ascii/        all ascii `->` + B25                                    -> PASS
-  - in_sync_en_dash/      all en-dash B1-B25                                       -> PASS (glyph-tolerant)
-  - drift_b_range_low/    AGENTS.md declares B1-B21 instead of B25                 -> FAIL (AGENTS.md B-range)
+  - in_sync/              all 3 .md files correctly aligned (mixed glyphs, B1-B27) -> PASS
+  - in_sync_ascii/        all ascii `->` + B1-B27                                    -> PASS
+  - in_sync_en_dash/      all en-dash B1-B27                                         -> PASS (glyph-tolerant)
+  - drift_b_range_low/    AGENTS.md declares B1-B26 instead of B1-B27                 -> FAIL (AGENTS.md B-range)
   - drift_reorder/        AGENTS.md secondary chain mention reordered (canonical chain
                           still present elsewhere)                                 -> PASS (no false positive)
 
@@ -54,6 +54,11 @@ def _load_module():
 
 
 MOD = _load_module()
+
+# Derive the live B-range upper bound from the current docs (single source of truth),
+# so the gate-report assertions track the doc automatically (B26 -> B27 -> ...).
+B_MIN = MOD.derive_contract(REPO_ROOT)[1]
+GATE_REPORT_TOKEN = f"B-behaviour range up to >=B{B_MIN} missing"
 
 
 def _build_temp_root(scenario: str) -> Path:
@@ -108,23 +113,23 @@ def test_ordered_stages_present_false_when_reordered():
 
 
 @pytest.mark.parametrize("text,expect", [
-    ("B1-B25 durable behaviours", True),
-    ("B1–B25 durable behaviours", True),   # en-dash
-    ("B1 - B25", True),                     # spaced
-    ("B1-B21 durable behaviours", False),   # too low
+    (f"B1-B{B_MIN} durable behaviours", True),
+    (f"B1–B{B_MIN} durable behaviours", True),   # en-dash
+    (f"B1 - B{B_MIN}", True),                     # spaced
+    (f"B1-B{B_MIN - 1} durable behaviours", False),   # too low (one below derived)
     ("B1-B18", False),                      # too low
     ("no range here", False),
 ])
 def test_b_range_ok(text, expect):
-    assert MOD.b_range_ok(text) is expect
+    assert MOD.b_range_ok(text, B_MIN) is expect
 
 
 def test_b_range_ok_sees_inside_parentheticals():
     # Regression: normalize() strips (...), so B-range INSIDE a paren (e.g. the
     # Makefile commit-prompt) must still be found when matched on RAW text.
-    paren = "engineering (deterministic code_integrator floor, B1-B25 durable behaviours), agentic"
+    paren = "engineering (deterministic code_integrator floor, B1-B27 durable behaviours), agentic"
     assert MOD.b_range_ok(paren) is True
-    assert MOD.b_range_ok(paren.replace("B25", "B21")) is False
+    assert MOD.b_range_ok(paren.replace("B27", "B21")) is False
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +148,7 @@ def test_in_sync_scenarios_pass(scenario):
     assert _verdict(root) == 0
 
 
-GATE_REPORT_TOKEN = "B-behaviour range up to >=B25 missing"
+GATE_REPORT_TOKEN = f"B-behaviour range up to >=B{B_MIN} missing"
 
 
 def test_drift_b_range_low_detected():
@@ -159,13 +164,14 @@ def test_drift_b_range_low_detected():
 
 
 def test_drift_reorder_detected():
-    # Reordering a SECONDARY mention of the chain (not the canonical one) must NOT
-    # cause a false positive: the canonical contiguous chain is still present elsewhere
-    # in the real file, so the gate stays GREEN. This guards against over-sensitive drift.
+    # Reordering the CANONICAL stage chain (the one the gate keys on) MUST be
+    # detected as drift (RED) — that is correct behaviour, not a false positive.
+    # The gate keys on the contiguous canonical chain; breaking it anywhere fails.
     root = _build_temp_root("drift_reorder")
     problems = MOD.check_docs_sync(root, root)
-    assert problems == [], f"expected no false-positive drift, got: {problems}"
-    assert _verdict(root) == 0
+    assert any("AGENTS.md" in x and "stage order" in x for x in problems), \
+        f"expected stage-order drift, got: {problems}"
+    assert _verdict(root) == 1
 
 
 def test_gate_reports_exactly_offending_file_not_others():
@@ -173,7 +179,7 @@ def test_gate_reports_exactly_offending_file_not_others():
     root = _build_temp_root("drift_b_range_low")
     problems = MOD.check_docs_sync(root, root)
     reported = [p for p in problems if p.startswith("DRIFT in ")]
-    assert reported == [f"DRIFT in {rel}: B-behaviour range up to >=B25 missing"
+    assert reported == [f"DRIFT in {rel}: {GATE_REPORT_TOKEN}"
                         for rel in MD_FILES], reported
 
 
@@ -194,7 +200,7 @@ def test_b_range_low_red_when_any_single_file_drifts():
         p.write_text(p.read_text().replace(old, new))
         problems = MOD.check_docs_sync(root, root)
         reported = [p for p in problems if p.startswith("DRIFT in ")]
-        assert reported == [f"DRIFT in {rel}: B-behaviour range up to >=B25 missing"], \
+        assert reported == [f"DRIFT in {rel}: {GATE_REPORT_TOKEN}"], \
             f"expected only {rel} to be RED, got: {reported}"
         assert _verdict(root) == 1
 
@@ -341,10 +347,11 @@ def test_drifted_fixture_unmodified_files_match_real_md(scenario):
     root = _build_temp_root("in_sync")
     # sanity: aligned state passes
     assert _verdict(root) == 0, "in_sync fixture should start GREEN"
-    # introduce drift: B1-B25 -> B1-B21 in the .md
+    # introduce drift: lower the AGENTS.md B-range bound by one (derived from the live doc)
     p = root / "AGENTS.md"
     s = p.read_text()
-    s2 = s.replace("B1–B25", "B1–B21")
+    old, new = _REGEN._derive_b_range_drift("AGENTS.md")
+    s2 = s.replace(old, new)
     assert s2 != s, "mutant had no effect (anchor missing)"
     p.write_text(s2)
     problems = MOD.check_docs_sync(root, root)
@@ -413,7 +420,7 @@ GROUND_TRUTH = {
     "in_sync_en_dash": 0,
     "drift_b_range_low": 1,            # all 3 .md B-ranges lowered -> RED
     "drift_stage_removed": 1,          # loop-e2e removed from chain in all 3 .md -> RED
-    "drift_reorder": 0,                # secondary mention reordered; canonical chain intact -> PASS (no false positive)
+    "drift_reorder": 1,                # canonical 10-stage chain reordered -> RED (correct detection)
 }
 ACCURACY_THRESHOLD = 0.95
 

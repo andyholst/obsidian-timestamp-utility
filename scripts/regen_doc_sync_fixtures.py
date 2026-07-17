@@ -135,18 +135,20 @@ def regen() -> None:
         new_text, _ = _remove_loop_e2e(p.read_text(encoding="utf-8"))
         p.write_text(new_text)
 
-    # Drift scenario 3: a secondary chain mention reordered (canonical chain
-    # still present elsewhere -> no false positive). Derived from the live doc.
+    # Drift scenario 3: the CANONICAL stage chain reordered -> the gate MUST detect
+    # it (RED). We swap the contiguous `loop-ts-floor`/`loop-unit` adjacency inside
+    # the chain prefix (which appears on a single line in AGENTS.md), breaking the
+    # canonical order. This is a REAL detection case, not a false positive.
     d = FIXTURES / "drift_reorder"
     d.mkdir(parents=True)
     for rel in MD_FILES:
         _copy_real(rel, d / rel)
     text = (REPO / "AGENTS.md").read_text(encoding="utf-8")
-    old_chain = "loop-collect` → `loop-ts-floor` → `loop-unit`"
-    new_chain = "loop-collect` → `loop-unit` → `loop-ts-floor`"
+    old_chain = "`loop-collect` → `loop-ts-floor` → `loop-unit`"
+    new_chain = "`loop-collect` → `loop-unit` → `loop-ts-floor`"
     assert old_chain in text, (
-        "chain phrase 'loop-collect` → `loop-ts-floor` → `loop-unit`' no longer "
-        "found in current AGENTS.md — the doc was restructured. Update the "
+        "canonical chain prefix '`loop-collect` → `loop-ts-floor` → `loop-unit`' "
+        "no longer found in current AGENTS.md — the doc was restructured. Update the "
         "reorder drift in scripts/regen_doc_sync_fixtures.py before regenerating."
     )
     ag = d / "AGENTS.md"
