@@ -57,3 +57,7 @@ err.txt
 parse.err
 # Reversible holding area for quarantined (not deleted) Python modules
 .quarantine/
+# Linked git worktrees live here — NEVER commit their contents (they belong to
+# their own feat/<name> branches). Keep only the placeholder.
+worktrees/*
+!worktrees/.gitkeep

@@ -24,7 +24,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   walk), (3) **diagnose & correct by fixing the SOURCE OF TRUTH not the symptom** (edit the spec,
   restore, re-run — never hand-edit generated TS, B11; each pass a *different* tweak), and
   (4) **terminate** (bounded ~5 attempts, then escalate to fixing the Python floor B13). Durable
-  invariants B1–B28 are the loop's "laws of physics" that never regress on any pass.
+  invariants B1–B29 are the loop's "laws of physics" that never regress on any pass.
 - **How they fit:** the harness is the **floor** (nothing worse can be written); the loop is the
   **ratchet** (each pass only moves toward green, invariants never slip). Full write-up:
   `docs/openspec-engineering-loop-harness.md` §0.
@@ -203,7 +203,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   `docs/openspec-engineering-loop-harness.md` (B8). The reusable directive is the Hermes skill
   `request-to-openspec` (loaded at request entry).
 
-## Durable agent behaviours (B1–B28) — MUST always hold, never regress
+## Durable agent behaviours (B1–B29) — MUST always hold, never regress
 
 These are standing rules for the agent (also in `AGENTS.md`). They are enforced by
 `make phase7-archive` and the persistent harness
@@ -277,7 +277,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   stage) also includes `Makefile`, `docs/openspec-engineering-loop-harness.md`, and
   `scripts/run-loop-harness.sh` — all MUST agree on the 10-stage order (loop-collect → loop-ts-floor
   → loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B28 range; a drift
+  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B29 range; a drift
   there fails the loop.
 - **(B9) Rootless nerdctl bind-mount permissions (READ + WRITE).** Execution is docker compose
   with **rootless nerdctl**, which remaps the container uid (1000) to the host **`other`** class.
@@ -568,7 +568,19 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       `make loop-harness` (B20 pre-flight); when GREEN, commit the fix(es) as NORMAL (non-squashed)
       Conventional commits and push the PR branch normally (no `--force`, no squash). B28a still
       forbids squashing an engaged PR.
-      (3) **B29c Never self-resolve/approve:** the agent posts the fix comment and leaves the thread
+    - **(B30) NEVER REVERT — SQUASH ONLY PRE-PR.** Standing git-history rule (user correction):
+      (1) **B30a No revert ever:** never `git revert`/`reset`/`rebase -i` on ANY branch (esp. a PR
+      branch); corrections are forward NORMAL commits only. (2) **B30b Squash pre-PR only:** the
+      Makefile `squash-commits` guard refuses (fail-closed) when `gh pr view` shows an open PR for the
+      branch OR the branch tracks a pushed remote — once pushed, squash would rewrite public history
+      (extends B28a from "engaged" to "any open/pushed PR"). (3) **B30c Red gate → forward fix:**
+      a RED `loop-harness` after push is fixed with a new NORMAL commit (+B29a PR comment), never a
+      revert/rewrite. B8 sync in AGENTS.md + harness doc.
+    - **(B30d) Explicit override flag:** `make squash-commits ALLOW_SQUASH=1` lets the human
+      deliberately bypass the B28a/B30b guard (e.g. an agreed pre-merge cleanup). OFF by default;
+      always prints a loud WARNING that history is rewritten on explicit request. Does NOT bypass
+      B30a (no revert). Use only when the user explicitly asks. B8 sync in AGENTS.md + harness doc.
+    - **(B29c) Never self-resolve/approve:** the agent posts the fix comment and leaves the thread
       for the human participant; it does NOT resolve the reviewer's thread or approve its own PR.
       B8: mirror in AGENTS.md + harness doc.
     ## Plan-B merge refactor (integrator-merge-refactor)

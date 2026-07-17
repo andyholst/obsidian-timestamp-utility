@@ -69,7 +69,7 @@ every spec requirement/scenario); (3) **diagnose & correct by fixing the SOURCE 
 symptom** — edit the OpenSpec spec/contract, restore the generated files to a clean baseline, and
 re-run; NEVER hand-edit generated TS (B11), and each pass must try a *different* correction; and
 (4) **terminate** — a bounded ~5 attempts with a clear escalation (fix the Python floor as a last
-resort, B13). The durable behaviours B1–B29 are the loop's "laws of physics" — invariants that
+resort, B13). The durable behaviours B1–B30 are the loop's "laws of physics" — invariants that
 never regress on any pass (permanent e2e B1–B6, no-commit/no-push gate B4/B14, delivery step B12).
 
 **How they fit:** the harness is the **floor** (nothing worse than the contract can ever be
@@ -641,6 +641,29 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
           behalf, and it does NOT approve its own PR.
      B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
      `docs/openspec-engineering-loop-harness.md`.
+  - **(B30) NEVER REVERT — SQUASH ONLY PRE-PR.** A standing, non-negotiable git-history rule
+     (user correction):
+       1. **(B30a) Reverting commits is NEVER allowed — on ANY branch, especially a PR branch.** The
+          agent MUST NOT run `git revert` (nor `git reset`, `git rebase -i` squash/fixup, or any
+          history-rewriting command) to "undo" committed work. Corrections are ALWAYS made by adding a
+          NEW forward NORMAL (non-squashed) commit. This preserves the reviewer's per-commit view of
+          what changed and never rewrites visible history.
+       2. **(B30b) Squash is ONLY allowed while the change is LOCAL + pre-PR.** `squash-commits` /
+          `loop-finish` / `openspec-redeliver` may squash ONLY when the branch is not yet an open PR.
+          The Makefile `squash-commits` guard now refuses (fail-closed, B30) when `gh pr view` reports
+          an open PR for the branch OR the branch already tracks a pushed remote — once pushed, squash
+          would rewrite public history and is forbidden (this extends B28a from "engaged PR" to "any
+          open/pushed PR").
+       3. **(B30c) Red gate → forward fix, never revert.** If `make loop-harness` is RED after the
+          branch was already pushed / is an open PR, the agent adds a NORMAL forward fixup commit (and a
+          PR comment per B29a if resolving a review thread) — it NEVER reverts/rewrites the pushed
+          history to "undo" the work.
+       4. **(B30d) Explicit override flag.** `make squash-commits ALLOW_SQUASH=1` lets the human
+          deliberately bypass the B28a/B30b guard (e.g. an agreed pre-merge cleanup). It is OFF by
+          default and ALWAYS prints a loud WARNING that history is being rewritten on explicit request.
+          It does NOT bypass B30a (revert is never allowed). Use only when the user explicitly asks.
+     B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
+     `docs/openspec-engineering-loop-harness.md`.
   - **(B7.1) The deterministic floor runs in EVERY mode (incl. fast).** `route_hitl` in
     `composable_workflows.py` previously returned `output_result` when `TEST_FAST_MODE=1` (set by
     `tests/integration/conftest.py` to skip the npm-test phase), which bypassed `integration_testing`
@@ -737,7 +760,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   1. **`Makefile`** — the executable gates + canonical stage-order comment; `make loop-harness`
      runs `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` 
            → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync` (final).
-  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B29 durable behaviours.
+  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B30 durable behaviours.
   3. **`hermes/skills/openspec-loop-harness.md`** — the loadable skill mirror of AGENTS.md.
   4. **`docs/openspec-engineering-loop-harness.md`** — the human-readable technical reference
      (named by B8 itself as authoritative; MUST be kept in the sync set, not treated as a 4th
@@ -750,7 +773,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   Before claiming "the loop is green / aligned", run `make check-docs-sync` (the final loop stage)
   and confirm it PASSES: all sync docs agree on the 10-stage order (loop-collect → loop-ts-floor →
   loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B29 behaviours, and
+  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B30 behaviours, and
   the live-test skip rule (`OLLAMA_HOST` only, not `GITHUB_TOKEN`). A change is NOT done while any
   of the sync docs disagree.
 - The harness is the OpenSpec change: `proposal.md` defines *why*, `specs/**` defines *what must

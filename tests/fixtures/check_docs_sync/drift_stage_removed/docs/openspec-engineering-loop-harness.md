@@ -8,7 +8,7 @@
 > 2. **Harness engineering** — the Python "agentics" pipeline (`agents/agentics/`) and
 >    the deterministic merge floor that writes your `src/main.ts` / `src/__tests__/main.test.ts`.
 > 3. **Loop engineering** — the bounded self‑correcting build→test→fix loop and the
->    durable behaviours **B1–B29** that the loop must always honour.
+>    durable behaviours **B1–B30** that the loop must always honour.
 >
 > It also documents the **file structure**, every file that creates the harness's
 > behaviour, and a **how‑to‑use** walkthrough for authoring a new feature.
@@ -21,7 +21,7 @@ at repo root, the previous `docs/openspec-loop-harness-guide.md`) are historical
 ## 0. Fundamentals — what "harness" and "loop" engineering mean
 
 Before the technical detail, understand the two disciplines this whole system is built on.
-Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B29) is just a concrete
+Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B30) is just a concrete
 implementation of these two ideas. If you internalise this section, the rest of the document
 reads as "here is *how* we do harness + loop engineering in this repo."
 
@@ -91,7 +91,7 @@ A well‑engineered loop has four parts:
    a loop with no escalation hides real defects.
 
 The loop is also where **durability** lives: the invariants that must hold on *every* pass
-(B1–B29) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
+(B1–B30) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
 gate (B4/B14), the delivery step that moves verified code out of the worktree onto the branch
 (B12). These are the loop's "laws of physics": conditions that never regress no matter how many
 times you go round.
@@ -105,7 +105,7 @@ gate is green, then stop."
 | Discipline | Job | Answers the question | In this repo |
 |-----------|-----|----------------------|--------------|
 | **Harness engineering** | *Constrain* the generator into a verifiable shape | "How do I make one generation trustworthy?" | OpenSpec contract as source of truth + `CodeIntegratorAgent` deterministic merge floor + omission guard + B9 perms + git‑HEAD restore |
-| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B29 + delivery step B12 |
+| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B30 + delivery step B12 |
 
 The harness is the **floor** (nothing worse than this can be written); the loop is the **ratchet**
 (each pass can only move toward green, and the invariants never slip back). The rest of this
@@ -148,7 +148,7 @@ Three non‑negotiable principles:
 
 ```
 obsidian-timestamp-utility/
-├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B29 summary
+├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B30 summary
 ├── Makefile                          # ALL execution entry points (docker compose only, no Dagger)
 ├── docker-compose-files/
 │   ├── agents.yaml                   # agentics / unit‑test‑agents / integration‑test‑agents services
@@ -552,17 +552,17 @@ the parent working tree (that would re-introduce pollution; ALL artifacts stay i
 design — see `openspec-change-worktree-flow`):
 
 ```bash
-make openspec-flow NAME=<name>          # creates wt/<name> worktree, runs gate, archives on green, finalizes,
+make openspec-flow NAME=<name>          # creates wt/<name> worktree, runs the loop gate (make loop-harness), archives on green, finalizes,
                                     # and AUTO-PROMOTES to feat/<name> + opens the PR on completion (B27)
 # corrections after a pass:
-make openspec-redeliver NAME=<name>        # re-enters worktree, re-squashes, force-pushes to the SAME PR branch (--force-with-lease, never main)
+make openspec-redeliver NAME=<name>        # re-enters worktree, applies the fix as NORMAL forward commits, force-pushes to the SAME PR branch (--force-with-lease, never main)
 ```
 
 On completion (all tasks ticked + **loop gate GREEN** + hook pass) the agent promotes `wt/<name>` → `feat/<name>`
 and opens the PR automatically (B27) — never a second prompt.
 
-**What "loop gate GREEN" means (the steps that run):** the loop gate is `make loop-harness`
-(or `bash scripts/run-loop-harness.sh`), which runs **ten stages in order** and must exit 0 on every
+**What "loop gate GREEN" means (the steps that run):** the loop gate **is** `make loop-harness`
+(or `bash scripts/run-loop-harness.sh`) — i.e. the ten-stage loop-harness run below. It runs **ten stages in order** and must exit 0 on every
 one before a change is considered done:
 1. `loop-collect` — hermetic pytest collection guard (fail-fast on dangling imports)
 2. `loop-ts-floor` — strict TS test/command floor (fails if the branch's jest `describe`/`it`/`test`/`addCommand` counts drop below `origin/main`)
@@ -583,7 +583,7 @@ reviewer engagement, corrections land as normal commits, never squashed).
 
 ---
 
-## 6. Durable behaviours B1–B29 (must always hold, never regress)
+## 6. Durable behaviours B1–B30 (must always hold, never regress)
 
 | ID | Behaviour |
 |----|-----------|
@@ -615,6 +615,7 @@ reviewer engagement, corrections land as normal commits, never squashed).
 ---
 
 | **B29** | **TWO‑WAY PR INTERACTION — COMMENT THE FIX + COMMIT ON GREEN GATE.** Extends B28 so a human reviewer can resolve threads. (1) **B29a Comment the fix:** after applying a code fix for a PR comment/review thread, post a PR comment (`make pr-comment BRANCH=<b> BODY=<text>` → `scripts/pr_comment.sh` → `gh pr comment`) summarizing the fix and linking the fixing sha (e.g. `Fixed in <sha>: <summary> — resolves <comment>`). (2) **B29b Commit on green gate (no squash):** when resolving an open PR's comments, run `make loop-harness` (B20 pre‑flight); when GREEN commit the fix(es) as **NORMAL (non‑squashed) Conventional commits** and push the PR branch normally (no `--force`, no squash). B28a still forbids squashing an engaged PR. (3) **B29c Never self‑resolve/approve:** the agent posts the fix comment and leaves the thread for the human participant; it does NOT resolve the reviewer's thread or approve its own PR. |
+| **B30** | **NEVER REVERT — SQUASH ONLY PRE‑PR.** Standing git‑history rule (user correction). (1) **B30a No revert ever:** the agent MUST NOT run `git revert`/`reset`/`rebase -i` (squash/fixup) or any history‑rewriting command on ANY branch, especially a PR branch — corrections are ALWAYS a NEW forward NORMAL (non‑squashed) commit, never an undo. (2) **B30b Squash pre‑PR only:** `squash-commits`/`loop-finish`/`openspec-redeliver` may squash ONLY while the branch is local + not yet an open PR; the Makefile `squash-commits` guard now refuses (fail‑closed) when `gh pr view` shows an open PR for the branch OR the branch tracks a pushed remote (once pushed, squash would rewrite public history — extends B28a from "engaged" to "any open/pushed PR"). (3) **B30c Red gate → forward fix:** a RED `loop-harness` after push is fixed with a new NORMAL forward commit (+ B29a PR comment if resolving a review thread) — never a revert/rewrite. (4) **B30d Explicit override:** `make squash-commits ALLOW_SQUASH=1` lets the human deliberately bypass the guard (loud WARNING printed); OFF by default, never bypasses B30a. |
 ---
 
 ## 7. How to use it (authoring a new feature)
@@ -778,7 +779,7 @@ This file, `AGENTS.md`, and `hermes/skills/openspec-loop-harness.md` are the **s
 truth**. When you change a behaviour, constraint, command, or pitfall in **any one** of them,
 mirror it in the **other two** before considering the change done:
 
-- Repo authority: `AGENTS.md` (phase flow + B1–B29 summary).
+- Repo authority: `AGENTS.md` (phase flow + B1–B30 summary).
 - Skill mirror: `hermes/skills/openspec-loop-harness.md` (operator‑level detail + pitfalls).
 - This guide: `docs/openspec-engineering-loop-harness.md` (human‑readable technical reference).
 

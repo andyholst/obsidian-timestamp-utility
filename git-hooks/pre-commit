@@ -43,10 +43,23 @@ for f in $changed_files; do
   if grep -qE '[[:space:]]+$' "$f"; then
     # Rewrite the file in place, stripping trailing whitespace from every line.
     # Use a temp file to avoid truncating on interrupt.
-    tmp="${f}.twb.$$"
-    sed 's/[[:space:]]*$//' "$f" > "$tmp" && mv "$tmp" "$f"
-    git add "$f"
-    cleaned=$((cleaned + 1))
+    # Write the temp file in the same dir when writable; otherwise fall back to
+    # $TMPDIR so files under dirs we don't own (e.g. container-owned fixtures)
+    # don't abort the hook with "Permission denied".
+    d=$(dirname "$f")
+    if [ -w "$d" ]; then
+      tmp="${f}.twb.$$"
+    else
+      tmp="$(mktemp 2>/dev/null || echo "/tmp/twb.$$")"
+    fi
+    if sed 's/[[:space:]]*$//' "$f" > "$tmp" 2>/dev/null && cp "$tmp" "$f" 2>/dev/null; then
+      rm -f "$tmp" 2>/dev/null
+      git add "$f"
+      cleaned=$((cleaned + 1))
+    else
+      # Could not rewrite in place (unwritable file); leave it untouched.
+      rm -f "$tmp" 2>/dev/null
+    fi
   fi
 done
 
