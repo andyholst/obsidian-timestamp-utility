@@ -69,7 +69,7 @@ every spec requirement/scenario); (3) **diagnose & correct by fixing the SOURCE 
 symptom** — edit the OpenSpec spec/contract, restore the generated files to a clean baseline, and
 re-run; NEVER hand-edit generated TS (B11), and each pass must try a *different* correction; and
 (4) **terminate** — a bounded ~5 attempts with a clear escalation (fix the Python floor as a last
-resort, B13). The durable behaviours B1–B25 are the loop's "laws of physics" — invariants that
+resort, B13). The durable behaviours B1–B26 are the loop's "laws of physics" — invariants that
 never regress on any pass (permanent e2e B1–B6, no-commit/no-push gate B4/B14, delivery step B12).
 
 **How they fit:** the harness is the **floor** (nothing worse than the contract can ever be
@@ -398,7 +398,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
  coordinate `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not
  skip) — root resolution is the actual bug to fix, not a skip guard.
   - **(B20) NEVER declare a change "done" without running the loop gate first — this is a hard pre-flight, not optional.** Before reporting any OpenSpec change as complete (or before claiming "the harness is green / aligned / fixed"), the agent MUST execute the loop gate and report its real output:
-      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all eight stages in order: `loop-collect` → `loop-unit` → `loop-ts-floor` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
+      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-unit` → `loop-ts-floor` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
          **HOW TO RUN (never make excuses):** long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the **REAL HOST** (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live Ollama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will print `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it. **Never say "can't run from here" / "environment absent" — the host runs `make` for you.** Drive verification through `make` with REAL output, always.
       2. **If the full `make loop-harness` cannot complete in the session** (e.g. an explicit
          timeout, or a stage is deliberately disabled via env), the agent MUST STILL run the
@@ -437,8 +437,11 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
          sections AND the bump PART.
        - **`make lint-commits`** — run `commitlint` over the squashed range / HEAD; the changelog lint
          gate (fail-closed on any invalid message).
-       - **`make install-git-hooks`** — wire `git-hooks/commit-msg` into `.git/hooks` so every
-         manual `git commit` is linted by commitlint (per-commit Conventional-Commit gate).
+       - **`make install-git-hooks`** — wire `git-hooks/commit-msg` (per-commit Conventional-Commit
+         lint) and `git-hooks/pre-commit` (trailing-whitespace auto-fix) into `.git/hooks` so every
+         manual `git commit` is linted. The pre-commit hook only strips trailing whitespace from
+         staged text files and **never exits non-zero**, so it is inert under the loop (which performs
+         no `git commit`).
        - **`make changelog`** — regenerate sectioned `CHANGELOG.md` (git_chglog; one `## <version>`
          section per git tag, so a local `v<version>` tag after bump yields a viewable new section).
        - **`make release-notes`** — refresh the README release-notes block.
@@ -543,6 +546,26 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
        3. `make squash-commits` is a HUMAN-TRIGGERED command only. The agent may mention it as an
           option, but must not execute it unless the human approved it for the current branch.
      B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md`.
+  - **(B26) AGENT MAY COMMIT/MERGE ITS OWN CHANGES on a non-main branch when the PRE-COMMIT HOOK
+     PASSES.** The agent is permitted to `git commit` (and `git merge`/`git cherry-pick`) its OWN
+     work-in-progress — e.g. landing this feature branch's OpenSpec change, scripts, Makefile, and
+     doc-sync edits — so it can iterate productively without waiting for a human to commit each
+     step. The permission is bounded by two hard conditions:
+       1. **Branch guard:** the current branch MUST NOT be `main` or `origin/main` (nor any other
+          protected branch). On `main`, B4/B14/B25 still forbid the agent from committing/pushing on
+          its own — a human triggers that.
+       2. **Hook guard:** the `git-hooks/pre-commit` (gitleaks secret scan + trailing-whitespace) MUST
+          pass. The agent commits ONLY through the normal `git commit` path so the hook runs; it
+          NEVER uses `--no-verify`. If the hook fails, the commit is blocked and the agent fixes the
+          underlying issue (or stops) rather than bypassing the guard.
+       3. **Still forbidden (human-only):** `git push` (B14), `make squash-commits`, `git rebase -i`
+          with squash/fixup, and `git reset --soft` + collapse (B25). This behaviour ADDS commit/merge
+          latitude on feature branches; it does NOT lift the no-push / no-squash / no-force gates.
+       4. Commits should be atomic and conventionally-scoped (the `git-hooks/commit-msg` lint applies).
+          The agent keeps `tasks.md` ticked as work is verified (B16) and re-runs `make check-docs-sync`
+          when it edits a sync doc.
+     B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
+     `docs/openspec-engineering-loop-harness.md`.
   - **(B7.1) The deterministic floor runs in EVERY mode (incl. fast).** `route_hitl` in
     `composable_workflows.py` previously returned `output_result` when `TEST_FAST_MODE=1` (set by
     `tests/integration/conftest.py` to skip the npm-test phase), which bypassed `integration_testing`
@@ -600,17 +623,18 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
          code lingers and the next run starts clean).
       3. **Re-run** `make run-agentics` to regenerate from the corrected spec, then
          `make build-app` + `make test-app` until green.
-  - **(B12) Delivery gap — the verified worktree TS MUST reach the active branch.** The
-    agentic pipeline generates + verifies TS **inside a git worktree** (`worktrees/<name>`,
-    branch `feat/<name>`). The harness MUST NOT stop there: a feature that is green only in the
-    worktree and never lands on the branch it targets is a failed delivery. After `make
-    build-app` + `make test-app` are green in/for the worktree, the agent MUST pull the verified
-    `src/main.ts` + `src/__tests__/main.test.ts` back onto the **current branch's working tree**
-    (e.g. `make deliver-change CHANGE=<name>`, which copies the worktree files into the repo tree).
-    This is a file copy only — it does NOT commit/push (B4); committing remains a deliberate human
-    step. The agent must NEVER declare a change "done" while its generated TS still lives only in
-    the worktree. (Pitfall: AGENTS.md Phase 5's "the old TS remains until you deliberately merge
-    the worktree" previously let verified code die in the worktree — B12 overrides that silence.)
+  - **(B12) Delivery gap — verified worktree TS MUST reach the target branch as the PR.** The
+    pipeline generates + verifies TS **inside a git worktree** (`worktrees/<name>`, branch
+    `feat/<name>`). The harness MUST NOT stop there: a feature green only in the worktree that never
+    lands on its target branch is a failed delivery. The agent delivers by **pushing the worktree
+    branch as the PR** (`git push origin feat/<name>`, or `make openspec-flow NAME=<name> PUSH=1`) —
+    it MUST NOT copy generated TS back into the parent working tree (that would re-introduce
+    pollution; ALL artifacts stay in the worktree by design — see `openspec-change-worktree-flow`).
+    Corrections redeliver via `make openspec-redeliver NAME=<name>` (`git push --force-with-lease`
+    to the SAME PR branch only; never `main`). Never declare a change "done" while its worktree
+    branch (`feat/<name>`) has not been delivered. (Earlier wording told the agent to
+    `make deliver-change` — a file copy onto the current branch — which conflicts with the
+    worktree-confinement invariant; this override supersedes it.)
     **Bounded self-correct loop (≈5 e2e attempts):** repeat the fix-spec → restore → re-run
     sequence for up to ~5 full e2e runs (`make run-agentics` with that spec file). Each failed
     attempt MUST first try a **different adjustment to the spec/contract file** (tasks.md
@@ -635,8 +659,8 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   stage order, the `loop-ts-floor` guard, or the B-behaviour range:
   1. **`Makefile`** — the executable gates + canonical stage-order comment; `make loop-harness`
      runs `loop-collect` → `loop-unit` → `loop-ts-floor` → `loop-unit-real` → `loop-e2e`
-     → `loop-integration` → `loop-build-app` → `loop-test-app` → `check-docs-sync` (final).
-  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B25 durable behaviours.
+           → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync` (final).
+  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B26 durable behaviours.
   3. **`hermes/skills/openspec-loop-harness.md`** — the loadable skill mirror of AGENTS.md.
   4. **`docs/openspec-engineering-loop-harness.md`** — the human-readable technical reference
      (named by B8 itself as authoritative; MUST be kept in the sync set, not treated as a 4th
@@ -648,7 +672,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
      marked `@pytest.mark.e2e`) — the runtime proof the loop works.
   Before claiming "the loop is green / aligned", run `make check-docs-sync` (the final loop stage)
   and confirm it PASSES: all sync docs agree on the 8-stage order + final `check-docs-sync`, the
-  `loop-ts-floor` guard, the B1–B25 behaviours, and the live-test skip rule (`OLLAMA_HOST` only,
+  `loop-ts-floor` guard, the B1–B26 behaviours, and the live-test skip rule (`OLLAMA_HOST` only,
   not `GITHUB_TOKEN`). A change is NOT done while any of the sync docs disagree.
 - The harness is the OpenSpec change: `proposal.md` defines *why*, `specs/**` defines *what must
   hold*, `tasks.md` defines *the steps to run*. The agentic pipeline turns tasks into code+tests.
@@ -678,12 +702,19 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
 - **Request intake gate (front door) — turn inbound requests into OpenSpec changes before acting.**
   Before implementing/answering a new work request, convert it into an OpenSpec change of record
   (`make openspec-new NAME=<derived>`, which shells out to `openspec new change` per B15) +
-  tasks, validate it, and start the loop — according to the **per-channel trigger**:
+  tasks, validate it, and **start the worktree flow** — according to the **per-channel trigger**:
   - **Hermes dashboard:** ALWAYS converts by default — no keyword required.
-  - **Telegram:** converts / creates tasks / starts the loop ONLY IF the message contains the
+  - **Telegram:** converts / creates tasks / starts the flow ONLY IF the message contains the
     keyword `openspec` (case-insensitive). Messages without `openspec` are exempt.
-  - **Hermes terminal CLI:** converts / creates tasks / starts the loop ONLY IF the command/text
+  - **Hermes terminal CLI:** converts / creates tasks / starts the flow ONLY IF the command/text
     contains `openspec` (case-insensitive). Requests without `openspec` are exempt.
+  After the change validates, the agent runs `make openspec-flow NAME=<name>` (or
+  `scripts/openspec-change-flow.sh --name <name>`), which creates a dedicated worktree
+  `feat/<name>`, scaffolds the change INSIDE it, generates + runs the loop gate inside it, archives
+  on green, finalizes (squash in the worktree), and — with PUSH=1/`--push` — delivers by pushing
+  `feat/<name>` as the PR. ALL artifacts stay in the worktree; the parent working tree is NEVER
+  touched (B12 override: deliver = PR push, never a file copy). Corrections →
+  `make openspec-redeliver NAME=<name>` (force-pushes to the SAME PR branch).
   Degenerate cases: re-use an in-flight change for the same intent (no duplicate dir); use
   `clarify` first if ambiguous.
   **Kanban-delivery path:** when a request arrives AS a Kanban task (assigned into a kanban
@@ -692,3 +723,43 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   `make openspec-new` / `openspec new change`; do NOT limit itself to kanban tooling.  The reusable directive lives in the Hermes skill
   `request-to-openspec` (loaded at request entry). Mirrored in `openspec-loop-harness.md` and
   `docs/openspec-engineering-loop-harness.md` (B8).
+
+---
+
+## Secret scanning (gitleaks)
+
+The broken TruffleHog GitHub Action was replaced by **gitleaks** (the de-facto open-source scanner).
+The actual secret **scan** lives in the pre-commit hook + CI (NOT a loop-harness stage); the
+secret-scanner's own **pytest suite** runs as a loop-harness stage (`loop-secret-scan-tests`).
+
+- **Engine:** `scripts/secret_scanner.py` delegates 100% of detection to gitleaks — no homemade
+  regex/entropy detector. It is the LOCAL fail-closed **hook** guard (dev-side), not a loop command.
+- **Config:** `.gitleaks.toml` uses `[extend] useDefault = true` plus repo-local `allowlist` entries
+  for test fixtures, docs, dependency/build caches (`.venv`, `node_modules`, `__pycache__`, and so on),
+  and `.env`/`.git`. **Do NOT replace `useDefault = true` with an empty `path`** — that silently
+  disables the entire default ruleset.
+- **Scan lives in the hook + CI (NOT the loop):** the gitleaks repo scan runs in `git-hooks/pre-commit`
+  (`python3 scripts/secret_scanner.py --staged`) and `git-hooks/commit-msg` (`--message-file`), and in
+  CI (`.github/workflows/trufflehog.yml`, `gitleaks/gitleaks-action@v2`). A detected secret blocks the
+  commit / fails CI. A standalone `make loop-secret-scan` target exists for on-demand scans but is NOT
+  a loop stage (the loop must not re-scan the tree — the hook already guards every commit).
+- **Loop stage = the scanner's own tests (containerized, B9):** `make loop-secret-scan-tests` builds
+  `secret-scan-tests-image` (real gitleaks + pytest) and runs `tests/test_secret_scanner*.py` **inside
+  the `gitleaks-tests` compose container** (`docker-compose-files/gitleaks-tests.yaml`), exercising the
+  REAL gitleaks binary (no mocks on detection). It sits between `loop-test-app` and `check-docs-sync`
+  in the canonical stage order. This verifies the scanner's detection logic itself every loop run.
+- **No duplicate scan commands:** the Makefile has exactly ONE on-demand scan target (`loop-secret-scan`,
+  alias `check-secrets`); it does NOT shell out to `python3` or a bare host `gitleaks` binary — docker
+  compose only, like every other harness gate. `make secret-scan-image` / `make secret-scan-tests-image`
+  build images; `make test-secret-scanner` runs the pytest suites on the host. `loop-secret-scan-tests`
+  is the canonical loop entry that runs the suite containerized.
+- **Hooks (fail-closed, local dev guard):** `git-hooks/pre-commit` runs `python3 scripts/secret_scanner.py --staged`;
+  `git-hooks/commit-msg` runs `python3 scripts/secret_scanner.py --message-file`. A detected secret
+  rejects the commit. Installed via `make install-git-hooks`.
+- **CI:** `.github/workflows/trufflehog.yml` is a gitleaks workflow (`gitleaks/gitleaks-action@v2`,
+  `fetch-depth: 0`, `GITLEAKS_CONFIG=.gitleaks.toml`).
+- **Tests:** `tests/test_secret_scanner.py` (hermetic unit) + `tests/test_secret_scanner_integration.py`
+  (real gitleaks binary, no mocks on detection). Run with `make test-secret-scanner` (host) or via the
+  loop stage `loop-secret-scan-tests` (containerized).
+- **Credential hygiene:** never put real API keys/tokens in source or tests. Use documented example
+  shapes (e.g. `AKIA…EXAMPLE`, `xoxb-…`) or `[REDACTED]`.

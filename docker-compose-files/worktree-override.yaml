@@ -1,0 +1,31 @@
+# worktree-override.yaml — repoint the repository root (/project) at a git WORKTREE so the
+# OpenSpec change flow runs entirely inside an isolated, branch-specific working tree and NEVER
+# touches the parent repo dir.
+#
+# Only /project (and integration-test-agents' /app) are overridden. The absolute mounts that
+# already exist in agents.yaml are preserved across the merge:
+#   - <REPO_ROOT>/node_modules:/project/node_modules   (the worktree has no node_modules; bind main repo's)
+#   - <REPO_ROOT>/agents/agentics/src:/app/prod         (agentic pipeline sources)
+#   - <REPO_ROOT>/agents/agentics/src:/app/src + /tests (unit/integration test sources)
+# Because those are ABSOLUTE paths, they resolve to the MAIN repo regardless of cwd — so the
+# worktree only needs to supply the repo-root checkout (its own src/main.ts, openspec/changes/<name>/, etc).
+#
+# This file is appended to agents.yaml ONLY when WT_ROOT is set (Makefile COMPOSE_OVERRIDE), so
+# when WT_ROOT is empty there is NO behaviour change for existing targets (no regression).
+services:
+  agentics:
+    volumes:
+      - ${WT_ROOT}:/project
+    environment:
+      - PROJECT_ROOT=/project
+  unit-test-agents:
+    volumes:
+      - ${WT_ROOT}:/project
+    environment:
+      - PROJECT_ROOT=/project
+  integration-test-agents:
+    volumes:
+      - ${WT_ROOT}:/project
+      - ${WT_ROOT}:/app
+    environment:
+      - PROJECT_ROOT=/app

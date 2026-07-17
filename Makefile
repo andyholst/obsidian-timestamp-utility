@@ -74,8 +74,8 @@ RECORD_WORK_CMD ?= cd /project && export PATH=/usr/local/sbin:/usr/local/bin:/us
 # "/bin/sh <tmpfile>" to `script` (no inline paths), so the typescript file is always the
 # explicit trailing `/dev/null`.
 define docker_run
-	@if [ -t 1 ]; then $(1); else _drf=$$(mktemp); _dout=$$(mktemp); cat > "$$_drf" <<'DRF_EOF'
-$(1)
+	@if [ -t 1 ]; then $(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1); else _drf=$$(mktemp); _dout=$$(mktemp); cat > "$$_drf" <<'DRF_EOF'
+$(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1)
 DRF_EOF
 script -qec "/bin/sh $$_drf; echo $$? > $$_drf.rc" /dev/null < /dev/null > "$$_dout" 2>&1; _rc=$$(cat $$_drf.rc 2>/dev/null || echo 0); cat "$$_dout"; rm -f "$$_drf" "$$_drf.rc" "$$_dout"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi; fi
 endef
@@ -99,6 +99,7 @@ DOCKER_SOCK := $(shell \
         stop-containers \
         clean clean-cache clean-logs clean-oci \
         loop-harness loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-verify loop-tasks \
+        wt-create openspec-flow openspec-redeliver \
         squash-commits \
         squash-commits bump-version release-notes tag-release loop-release check-released release bump-local release-prep \
         lint-commits install-git-hooks release-flow
@@ -293,17 +294,17 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #        7. secret-scan-tests  (loop-secret-scan-tests) -- secret-scanner pytest suite, containerized (B9), real gitleaks, fail-closed
 #           (the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop)
 #        8. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
-#      B8 durable-behaviour range: B1-B25 (the loop's "laws of physics"; see AGENTS.md). The
+#      B8 durable-behaviour range: B1-B26 (the loop's "laws of physics"; see AGENTS.md). The
 #      final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
 #      Canonical stage order (B8 source of truth):
 #        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync
-#      Durable behaviours span B1-B25 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B25 range.
+#      Durable behaviours span B1-B26 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B26 range.
 #      `make check-docs-sync` is the FINAL loop stage (enforced, not advisory) so doc/loop drift
 #      fails the whole run (B8 enforced).
 #      Each stage fails the whole run if it fails (no silent green). No git commit/push
 #      (B4/B14). Optional post-check: `make loop-verify CHANGE=<name>` runs openspec
 #      validate + status for the active change.
-check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B25). Runs INSIDE unit-test-agents (no host python3).
+check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B26). Runs INSIDE unit-test-agents (no host python3).
 	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — in container ==="
 	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py")
 
@@ -473,6 +474,37 @@ openspec-new: b9-perms ## Scaffold an OpenSpec change via the openspec CLI + see
 	@bash scripts/scaffold-openspec-change.sh --name $(NAME) $(if $(DESC),--desc "$(DESC)",) $(if $(GOAL),--goal "$(GOAL)",) $(if $(CAPABILITY),--capability $(CAPABILITY),)
 	@echo "=== OPENSPEC-NEW complete: review openspec/changes/$(NAME)/ ==="
 
+wt-create: ## Create an isolated git worktree for an OpenSpec change: git worktree add worktrees/<name> -b feat/<name> (REPO_ROOT/node_modules symlinked in). Never touches the parent working tree.
+	@test -n "$(NAME)" || { echo "ERROR: NAME=<change> required. Run: make wt-create NAME=<kebab-name>"; exit 1; }
+	@REPO_ROOT=$$(git rev-parse --show-toplevel); WT=$$REPO_ROOT/worktrees/$(NAME); \
+	if [ -d "$$WT" ]; then echo "WT-CREATE: $$WT already exists — reuse it."; \
+	else git worktree add "$$WT" -b feat/$(NAME) && echo "WT-CREATE: created $$WT on branch feat/$(NAME)"; fi; \
+	if [ ! -e "$$WT/node_modules" ] && [ -d "$$REPO_ROOT/node_modules" ]; then ln -s ../../node_modules "$$WT/node_modules" && echo "WT-CREATE: symlinked node_modules into worktree (gitignored — stays in worktree only)."; fi; \
+	echo "WT-CREATE: done. Run flow: make openspec-flow NAME=$(NAME)"
+
+# ---- OpenSpec change → worktree → loop → archive → finalize → deliver-as-PR (B24 + B12 override) ----
+# ALL work happens INSIDE the worktree; the parent working tree is never touched. Delivery is a
+# `git push feat/<name>` (PR), NOT a file copy into the parent (that copy would re-introduce pollution).
+# Squashing is performed only INSIDE the worktree (agent/harness behaviour; the squash-commits script
+# itself is unrestricted). Parallel-safe: unique compose project name otu-<name> per flow.
+openspec-flow: ## Agent-driven change lifecycle CONFINED to a worktree: create worktree -> scaffold -> generate -> loop gate -> archive -> finalize (squash in worktree) -> (--push) PR. Args: NAME=<change> [PUSH=1] [NO_AGENTICS=1] [NO_LOOP=1]
+	@test -n "$(NAME)" || { echo "ERROR: NAME=<change> required. Run: make openspec-flow NAME=<kebab-name> [PUSH=1]"; exit 1; }
+	@bash scripts/openspec-change-flow.sh --name $(NAME) $(if $(PUSH),--push,) $(if $(NO_AGENTICS),--no-agentics,) $(if $(NO_LOOP),--no-loop,)
+
+openspec-redeliver: ## Re-enter the worktree, regenerate/re-squash, and FORCE-PUSH to the SAME PR branch (feat/<name>) after corrections. Guarded against main/protected refs. Args: NAME=<change> [PUSH_REMOTE=origin]
+	@test -n "$(NAME)" || { echo "ERROR: NAME=<change> required. Run: make openspec-redeliver NAME=<kebab-name>"; exit 1; }
+	@REPO_ROOT=$$(git rev-parse --show-toplevel); WT=$$REPO_ROOT/worktrees/$(NAME); BRANCH=feat/$(NAME); \
+	test -d "$$WT" || { echo "REDELIVER: worktree $$WT not found — run 'make openspec-flow NAME=$(NAME)' first."; exit 1; }; \
+	if [ "$(NAME)" = "main" ] || [ "$$BRANCH" = "main" ]; then echo "REDELIVER: REFUSING to force-push main."; exit 1; fi; \
+	cd "$$WT"; \
+	echo "=== REDELIVER: regenerating inside worktree $$WT ==="; \
+	$(MAKE) run-agentics CHANGE=$(NAME) || true; \
+	$(MAKE) squash-commits; \
+	$(MAKE) changelog; $(MAKE) bump-from-changelog; $(MAKE) changelog-format; \
+	echo "=== REDELIVER: force-pushing $$BRANCH to $(PUSH_REMOTE) (--force-with-lease; same PR branch) ==="; \
+	git push --force-with-lease $(PUSH_REMOTE) $$BRANCH; \
+	echo "REDELIVER: PR branch updated in place. Parent working tree untouched."
+
 record-work-prompt: b9-perms ## Steps 1+2 of the hermes handoff: container emit-prompt + host hermes -z (used by record-work)
 	@$(eval H := /project/backups/record-work-$(CHANGE))
 	@echo "(step 1/3 — container): gathering context + emitting prompt..."
@@ -532,7 +564,7 @@ squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed 
 	echo "COMMIT: $$AHEAD commits squashed. Changed files vs main:"; echo "$$FILES"; \
 	echo "COMMIT: asking Hermes (profile=project-manager) for a THOROUGH, TYPED Conventional message..."; \
 	hermes profile use project-manager >/dev/null 2>&1 || true; \
-	PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch being squashed into a single commit. RULE 1 (mandatory): the FIRST line is EXACTLY 'type(scope): subject' where type is ONE of: feat, fix, docs, refactor, perf, test, chore, build, ci, style, revert; scope is the area (e.g. loop, agentics, readme, release); subject is imperative, <=72 chars, no trailing period. RULE 2: then a blank line, then a THOROUGH human-readable body (wrapped ~72 cols) describing WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B25 durable behaviours), agentic pipeline changes, Makefile / docker-compose / Containerfile changes, OpenSpec specs merged, and any test/behaviour fixes. Be specific. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
+	PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch being squashed into a single commit. RULE 1 (mandatory): the FIRST line is EXACTLY 'type(scope): subject' where type is ONE of: feat, fix, docs, refactor, perf, test, chore, build, ci, style, revert; scope is the area (e.g. loop, agentics, readme, release); subject is imperative, <=72 chars, no trailing period. RULE 2: then a blank line, then a THOROUGH human-readable body (wrapped ~72 cols) describing WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B26 durable behaviours), agentic pipeline changes, Makefile / docker-compose / Containerfile changes, OpenSpec specs merged, and any test/behaviour fixes. Be specific. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
 	MSG=$$(hermes -z "$$PROMPT" 2>/dev/null); \
 	if [ -z "$$MSG" ]; then echo "COMMIT: Hermes returned no message -- aborting (no empty commit)."; git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; fi; \
 	FIRST=$$(printf '%s' "$$MSG" | head -1); \
