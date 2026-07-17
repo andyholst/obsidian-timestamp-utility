@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-17
+goal: "B30: no-revert rule for PR fixes — corrections land as new normal
+  commits, never git revert/reset/squash."

@@ -9,6 +9,8 @@ This wiki documents work done on OpenSpec changes for the **obsidian-timestamp-u
 - Weekly summaries live in `weekly-summaries/`.
 
 ## Change Entries
+- [2026-07-17-pr-review-no-squash](2026-07-17-pr-review-no-squash.md) — Summary
+- [2026-07-17-uuid-modal-agentic-generation](2026-07-17-uuid-modal-agentic-generation.md) — Summary
 - [2026-07-16-loop-harness-secret-scan](2026-07-16-loop-harness-secret-scan.md) — Summary
 - [2026-07-16-secret-scan-show-findings](2026-07-16-secret-scan-show-findings.md) — Summary
 - [2026-07-16-replace-trufflehog-with-gitleaks](2026-07-16-replace-trufflehog-with-gitleaks.md) — Summary

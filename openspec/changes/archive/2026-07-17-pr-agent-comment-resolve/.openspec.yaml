@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-07-17
+goal: "B29: gh two-way PR interaction — post a PR comment per fix, commit
+  normally when loop-harness is green, push normally (no squash)."
