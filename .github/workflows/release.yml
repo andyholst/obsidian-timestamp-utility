@@ -37,6 +37,9 @@ jobs:
       - name: Install Make
         run: sudo apt-get update && sudo apt-get install -y make
 
+      - name: Install npm dependencies (needed for `npm run build` -> dist/main.js)
+        run: npm ci
+
       - name: Set Version
         id: set_version
         run: |
