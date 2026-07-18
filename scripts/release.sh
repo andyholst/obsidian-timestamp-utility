@@ -47,6 +47,10 @@ CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 if [ "${GITHUB_REF:-}" != "" ]; then
   case "$GITHUB_REF" in
     refs/heads/main) CURRENT_BRANCH="main" ;;
+    # On a merged-PR event (pull_request: closed + merged), GITHUB_REF is the PR
+    # merge ref (refs/pull/<n>/merge), NOT refs/heads/main. The workflow only runs
+    # this job when the PR was actually merged, so treat /merge as publishable.
+    refs/pull/*/merge) CURRENT_BRANCH="main" ;;
   esac
 fi
 
@@ -59,16 +63,22 @@ if [ "$CURRENT_BRANCH" != "main" ] && [ "$DRY_RUN" != "1" ]; then
 fi
 
 # --- build the plugin (main.ts -> dist/main.js) ---
-if [ ! -f dist/main.js ] || [ "$DRY_RUN" != "1" ]; then
-  echo "release.sh: building plugin (npm run build)..."
-  npm run build >/dev/null 2>&1 || { echo "Error: npm run build failed." >&2; exit 1; }
+# `make release` already runs `build-app` (docker) as a prerequisite, which produces
+# dist/main.js. Only rebuild here if it is genuinely missing. Build failures must NOT
+# block release-notes generation (notes come from CHANGELOG, not the build).
+if [ ! -f dist/main.js ]; then
+  echo "release.sh: dist/main.js missing — attempting npm run build..." >&2
+  if ! npm run build 2>&1; then
+    echo "release.sh: WARNING npm run build failed; continuing with notes/zip using existing dist if any." >&2
+  fi
 fi
 if [ ! -f dist/main.js ]; then
-  echo "Error: dist/main.js missing after build." >&2
+  echo "Error: dist/main.js missing and build failed." >&2
   exit 1
 fi
 
 # --- generate release notes from the matching CHANGELOG section ---
+# (Done unconditionally — this is the artifact the publish step requires.)
 CHANGELOG_FILE="$PROJECT_ROOT/CHANGELOG.md"
 RELEASE_NOTES_FILE="$PROJECT_ROOT/release_notes.md"
 
