@@ -21,4 +21,4 @@
 - [x] 8.1 Add `loop-release-tests` stage (11-stage order) to Makefile + run-loop-harness.sh + AGENTS.md + hermes skill + docs; update B8 sync docs; `check-docs-sync` PASS.
 - [x] 8.2 New `tests/test_readme_sync.py` (5 scenarios: version/tag/CHANGELOG/commands/links sync) — caught + fixed stale README version 0.4.11 -> 0.4.15; wired into `loop-release-tests`.
 - [x] 8.3 Run the FULL `loop-harness` (all 11 stages incl release + README tests) GREEN.
-- [ ] 9.1 (Delivery) `make phase7-archive` the change, commit on `wt/fix-release-pipeline`, promote to `feat/`, push, open PR for review.
+- [x] 9.1 (Delivery) `make phase7-archive` the change, commit on `wt/fix-release-pipeline`, promote to `feat/`, push, open PR for review.
