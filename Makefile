@@ -98,7 +98,7 @@ DOCKER_SOCK := $(shell \
         collect-tests collect-executed generate-requirements \
         stop-containers \
         clean clean-cache clean-logs clean-oci \
-        loop-harness loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-verify loop-tasks \
+        loop-harness loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-release-dryrun loop-release-tests loop-verify loop-tasks \
         wt-create openspec-flow openspec-redeliver \
         squash-commits \
         squash-commits bump-version release-notes tag-release loop-release check-released release bump-local release-prep \
@@ -158,9 +158,14 @@ bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchore
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py") || echo "bump-from-changelog skipped"
 	@$(MAKE) changelog-format
 
-release: clean ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
+# `release` depends on `build-app` (the containers/npm node image builds dist/main.js via
+# rollup, which has the rollup plugins installed — this is what was missing in CI when
+# release.sh tried to build inline). release.sh is PACKAGING-ONLY: it assumes dist/main.js
+# exists and assembles notes + zip. DRY_RUN=1 still skips the GitHub publish, but the
+# artifacts are always built + packaged.
+release: build-app ## Create release + ZIP (build-app first, then scripts/release.sh packages notes + zip)
 	@if [ -z "$(TAG)" ]; then TAG=$$(node -p "require('./package.json').version"); fi; \
-	 echo "=== release: building artifacts via scripts/release.sh (TAG=$$TAG) ==="; \
+	 echo "=== release: packaging artifacts via scripts/release.sh (TAG=$$TAG) ==="; \
 	 TAG="$$TAG" REPO_NAME="$(REPO_NAME)" DRY_RUN="$(DRY_RUN)" bash scripts/release.sh
 	@echo "Release zip: $(REPO_NAME)-$(TAG).zip"
 
@@ -293,16 +298,16 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #        7. secret-scan-tests  (loop-secret-scan-tests) -- secret-scanner pytest suite, containerized (B9), real gitleaks, fail-closed
 #           (the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop)
 #        8. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
-#      B8 durable-behaviour range: B1-B32 (the loop's "laws of physics"; see AGENTS.md). The
+#      B8 durable-behaviour range: B1-B34 (the loop's "laws of physics"; see AGENTS.md). The
 #      Canonical stage order (B8 source of truth):
-#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-release-tests -> loop-secret-scan-tests -> check-docs-sync
-#      Durable behaviours span B1-B32 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B32 range.
+#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-release-dryrun -> loop-release-tests -> loop-secret-scan-tests -> check-docs-sync
+#      Durable behaviours span B1-B34 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B34 range.
 #      `make check-docs-sync` is the FINAL loop stage (enforced, not advisory) so doc/loop drift
 #      fails the whole run (B8 enforced).
 #      Each stage fails the whole run if it fails (no silent green). No git commit/push
 #      (B4/B14). Optional post-check: `make loop-verify CHANGE=<name>` runs openspec
 #      validate + status for the active change.
-check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B32). Runs INSIDE unit-test-agents (no host python3).
+check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B34). Runs INSIDE unit-test-agents (no host python3).
 	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — in container ==="
 	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py")
 
@@ -342,13 +347,25 @@ loop-release-tests: b9-perms ## Loop gate 6.5: release-pipeline + README-sync dr
 	@echo "=== LOOP-HARNESS [6.5] release-pipeline + README-sync dry-run tests ==="
 	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e DRY_RUN=1 -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && DRY_RUN=1 python -m pytest tests/test_release_pipeline_dryrun.py tests/test_readme_sync.py tests/test_release_notes_bump.py -v")
 
+loop-release-dryrun: ## Loop gate 6.7: RELEASE PACKAGING dry-run, hermetic, NO publish (B33). Builds the plugin via build-app (containers/npm node image, rollup + plugins installed), runs jest (test-app), then runs scripts/release.sh in DRY_RUN=1 and ASSERTS the produced zip contains the compiled main.js. Never calls the GitHub release API. This is the gate that proves a real release would ship a usable plugin (the 0.4.16 defect).
+	@echo "=== LOOP-HARNESS [6.7] release-packaging dry-run (build-app -> test-app -> release.sh DRY_RUN=1 -> assert main.js in zip) ==="
+	@$(MAKE) build-app
+	@$(MAKE) test-app
+	@echo "=== release dry-run: packaging via scripts/release.sh (DRY_RUN=1) ==="
+	@$(call docker_run, docker compose -f docker-compose-files/tools.yaml run --rm app bash -c "set -e; export REPO_NAME=obsidian-timestamp-utility; export TAG=\$$(node -p \"require('./package.json').version\"); export DRY_RUN=1; bash scripts/release.sh; \\
+	  echo '--- asserting zip contains main.js ---'; \\
+	  unzip -l \"\$${REPO_NAME}-\$${TAG}.zip\" | grep -q 'main.js' || { echo 'FAIL: zip missing main.js'; exit 1; }; \\
+	  echo 'OK: zip contains main.js'; \\
+	  test -s release/main.js && echo 'OK: release/main.js non-empty'")
+	@echo "=== LOOP-HARNESS [6.7] release-packaging dry-run GREEN (no GitHub call) ==="
+
 loop-harness: ## Full loop-harness: SINGLE source of truth = scripts/run-loop-harness.sh.
 	@# This target delegates to the script so the per-stage timeouts + docker-kill
 	@# logic are ALWAYS applied (never a bare `make` chain that can hang forever).
 	@# The script calls back into these same `loop-*` targets, so what runs is
 	@# identical whether you invoke `make loop-harness` or the script directly.
 	@bash scripts/run-loop-harness.sh
-	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> release-tests -> secret-scan-tests -> check-docs-sync) ==="
+	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> release-dryrun -> release-tests -> secret-scan-tests -> check-docs-sync) ==="
 
 loop-trigger: ## B20 mandatory pre-flight: run the loop gate (scripts/run-loop-harness.sh) before claiming done
 	@bash scripts/run-loop-harness.sh

@@ -24,7 +24,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   walk), (3) **diagnose & correct by fixing the SOURCE OF TRUTH not the symptom** (edit the spec,
   restore, re-run — never hand-edit generated TS, B11; each pass a *different* tweak), and
   (4) **terminate** (bounded ~5 attempts, then escalate to fixing the Python floor B13). Durable
-  invariants B1–B32 are the loop's "laws of physics" that never regress on any pass.
+  invariants B1–B34 are the loop's "laws of physics" that never regress on any pass.
 - **How they fit:** the harness is the **floor** (nothing worse can be written); the loop is the
   **ratchet** (each pass only moves toward green, invariants never slip). Full write-up:
   `docs/openspec-engineering-loop-harness.md` §0.
@@ -203,7 +203,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   `docs/openspec-engineering-loop-harness.md` (B8). The reusable directive is the Hermes skill
   `request-to-openspec` (loaded at request entry).
 
-## Durable agent behaviours (B1–B32) — MUST always hold, never regress
+## Durable agent behaviours (B1–B34) — MUST always hold, never regress
 
 These are standing rules for the agent (also in `AGENTS.md`). They are enforced by
 `make phase7-archive` and the persistent harness
@@ -279,7 +279,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   stage) also includes `Makefile`, `docs/openspec-engineering-loop-harness.md`, and
   `scripts/run-loop-harness.sh` — all MUST agree on the 11-stage order (loop-collect → loop-ts-floor
   → loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B32 range; a drift
+  loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B34 range; a drift
   there fails the loop.
 - **(B9) Rootless nerdctl bind-mount permissions (READ + WRITE).** Execution is docker compose
   with **rootless nerdctl**, which remaps the container uid (1000) to the host **`other`** class.
@@ -444,7 +444,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
  `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not skip) — fix
  root resolution, never add an OLLAMA skip guard. (Closed the gap where `test_greetings_contract_unit.py` + `test_slim_refactor_invariants_unit.py` failed post-archive, and where `test_ticket20/ticket22/greetings` e2e errored on `FileNotFoundError: 'openspec'` due to `/app` root resolution.)
     - **(B20) NEVER declare a change "done" without running the loop gate first — hard pre-flight.** Before claiming any OpenSpec change complete (or "harness green/aligned/fixed"), run the gate and report real output:
-      1. **Preferred:** `bash scripts/run-loop-harness.sh` (wrapper over `make loop-harness`) — all stages: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. Also `make loop-trigger`.
+      1. **Preferred:** `bash scripts/run-loop-harness.sh` (wrapper over `make loop-harness`) — all stages: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-dryrun` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. Also `make loop-trigger`.
       2. **If full `make loop-harness` can't finish** (live Ollama absent for `loop-e2e`/`loop-unit-real`, or npm build times out), STILL run the hermetic gates `make loop-collect` + `make loop-ts-floor` + `make loop-unit` (no external dep) — they MUST be green before any "done".
       3. **Report honestly:** actual per-stage PASS/SKIP/FAIL with the failing stage named. Never say "done/green" if `loop-unit`/`loop-collect` is red; fix the root cause and re-run. Rationale: the agent previously finished work (incl. AGENTS.md/skill edits) WITHOUT running the gate, leaving `make loop-unit` red. B20 makes the gate mandatory so regressions are caught before "done". (B4/B14: no git commit/push from the gate.)
     - **(B21) HITL is OPT-IN and loop-excluded — never a blocking prompt in automation.** `HITLNode`
@@ -599,6 +599,24 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       diff DURING review (B28a/B30b); once approved, owner wants tidy single-commit history for merge.
       (B31 = concurrent make-always-background / PR #58; this is B32.) B8: mirror in AGENTS.md +
       harness doc.
+    - **(B33) RELEASE PACKAGING IS A HERMETIC, NO-PUBLISH DOCKER+MAKE LOOP GATE.** The release
+      artifact set MUST be verified on every loop run WITHOUT calling the GitHub release API. The
+      gate `make loop-release-dryrun` runs through docker + make: builds the plugin (`make
+      build-app`, the `containers/npm` node image where rollup + its plugins are installed), runs
+      the plugin jest tests (`make test-app`), then runs `scripts/release.sh` in `DRY_RUN=1` and
+      ASSERTS the produced `<REPO_NAME>-<TAG>.zip` contains the compiled `main.js` (and
+      `release/main.js` is non-empty). The loop MUST NOT go green while that gate fails — it is the
+      regression guard for the 0.4.16 defect (a published release whose zip shipped without the
+      compiled plugin). `scripts/release.sh` is PACKAGING-ONLY (assumes `dist/main.js` built by
+      `make build-app`; must NOT rebuild inline); `make release` depends on `build-app`. No GitHub
+      API call in the loop gate (B14). B8: mirror in AGENTS.md + harness doc.
+    - **(B34) NO MERGE / NO FORCE-PUSH UNTIL THE HUMAN APPROVES VIA A PR COMMENT.** A PR opened by
+      the agent MUST NOT be merged, squashed, or force-pushed until the human has EXPLICITLY
+      approved it through a comment on that PR (e.g. "approved" / "lgtm" / "merge it"). The agent
+      opens/redelivers the PR, then WAITS for the approval comment; it must not auto-merge on
+      "green" alone (overrides the older auto-promote-on-green behaviour). The human holds the
+      merge decision. B32's `loop-final APPROVED=1` is still the only sanctioned finalisation and
+      still requires an explicit human approval phrase first. B8: mirror in AGENTS.md + harness doc.
     ## Plan-B merge refactor (integrator-merge-refactor)
 
 - **Imports:** inject new `import` lines at the top (after the last existing top-level import).

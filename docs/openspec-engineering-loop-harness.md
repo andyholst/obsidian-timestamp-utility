@@ -8,7 +8,7 @@
 > 2. **Harness engineering** — the Python "agentics" pipeline (`agents/agentics/`) and
 >    the deterministic merge floor that writes your `src/main.ts` / `src/__tests__/main.test.ts`.
 > 3. **Loop engineering** — the bounded self‑correcting build→test→fix loop and the
->    durable behaviours **B1–B32** that the loop must always honour.
+>    durable behaviours **B1–B34** that the loop must always honour.
 >
 > It also documents the **file structure**, every file that creates the harness's
 > behaviour, and a **how‑to‑use** walkthrough for authoring a new feature.
@@ -21,7 +21,7 @@ at repo root, the previous `docs/openspec-loop-harness-guide.md`) are historical
 ## 0. Fundamentals — what "harness" and "loop" engineering mean
 
 Before the technical detail, understand the two disciplines this whole system is built on.
-Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B32) is just a concrete
+Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B34) is just a concrete
 implementation of these two ideas. If you internalise this section, the rest of the document
 reads as "here is *how* we do harness + loop engineering in this repo."
 
@@ -91,7 +91,7 @@ A well‑engineered loop has four parts:
    a loop with no escalation hides real defects.
 
 The loop is also where **durability** lives: the invariants that must hold on *every* pass
-(B1–B32) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
+(B1–B34) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
 gate (B4/B14), the delivery step that moves verified code out of the worktree onto the branch
 (B12). These are the loop's "laws of physics": conditions that never regress no matter how many
 times you go round.
@@ -105,7 +105,7 @@ gate is green, then stop."
 | Discipline | Job | Answers the question | In this repo |
 |-----------|-----|----------------------|--------------|
 | **Harness engineering** | *Constrain* the generator into a verifiable shape | "How do I make one generation trustworthy?" | OpenSpec contract as source of truth + `CodeIntegratorAgent` deterministic merge floor + omission guard + B9 perms + git‑HEAD restore |
-| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B32 + delivery step B12 |
+| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B34 + delivery step B12 |
 
 The harness is the **floor** (nothing worse than this can be written); the loop is the **ratchet**
 (each pass can only move toward green, and the invariants never slip back). The rest of this
@@ -148,7 +148,7 @@ Three non‑negotiable principles:
 
 ```
 obsidian-timestamp-utility/
-├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B32 summary
+├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B34 summary
 ├── Makefile                          # ALL execution entry points (docker compose only, no Dagger)
 ├── docker-compose-files/
 │   ├── agents.yaml                   # agentics / unit‑test‑agents / integration‑test‑agents services
@@ -584,7 +584,7 @@ reviewer engagement, corrections land as normal commits, never squashed).
 
 ---
 
-## 6. Durable behaviours B1–B32 (must always hold, never regress)
+## 6. Durable behaviours B1–B34 (must always hold, never regress)
 
 | ID | Behaviour |
 |----|-----------|
@@ -604,7 +604,7 @@ reviewer engagement, corrections land as normal commits, never squashed).
 | **B14** | Commit/push gating for *new* code (human‑only, behaviour‑scoped). Code is committed ONLY if NEW; pushed ONLY if that new code is part of a behaviour. Floor/integrator Python fixes MAY be committed (and pushed only when part of a committed behaviour) **once**: `build-app`=0, `test-app`=0, passing‑test count **>** previous run, and all OpenSpec checks clean. Rule of thumb: commit only if new AND build works AND tests pass > last run AND OpenSpec clean; push only if that commit is the behaviour landing. **Never squash/rebase/force‑push.** |
 | **B15** | **GitHub issue → local OpenSpec change via the OpenSpec CLI (seed‑then‑generate).** When a change is sourced from a GitHub issue, the agentic code MUST turn it into a local OpenSpec change by **shelling out to `openspec new change ticket<N>`** (the same CLI step a human runs) — never hand‑writing the directory, never a raw `Path.write_text` for the directory shape. `fetch_issue_agent.py` calls `openspec_loader.create_change_from_issue(url, title, body)` after the fetch; that scaffolds via the CLI, fills `proposal.md`/`specs/<cap>/spec.md`/`tasks.md` from the issue, and re‑points generation to `openspec:ticket<N>` so the rest of the loop runs offline. The change name is derived deterministically from the issue URL (`.../issues/20` → `ticket20`), so re‑runs are idempotent. The seeded `openspec/changes/ticket<N>/` is a RUNTIME artifact and MUST NOT be committed (extends B4); `ticket20`/`ticket22` e2e tests generate + clean it up in `finally`. Keeps B10 honest: the exact `openspec new change` a human runs is the one the pipeline runs. |
 | **B16** | **Task‑completion discipline — tick as you verify, never leave open tasks, archive gate fails closed.** `make phase7-archive` runs `openspec_loader.assert_no_open_tasks` BEFORE `openspec archive` and refuses (non‑zero exit, no spec merge) if any `- [ ]` task remains. A change is "done" only when all tasks are ticked AND verified AND archived. `make loop-tasks` lists open/done per change so the backlog is never invisible. |
-| **B17** | **Integration suite is a mandatory loop phase; no dead tests; live tests skip cleanly.** `make loop-harness` runs TEN loop stages plus a FINAL B8 doc-sync gate: a collection guard (gate 0), a strict TS test/command floor (gate 0.5), followed by six gates (1–6): `loop-collect` (hermetic collection guard) → `loop-ts-floor` (STRICT TS test/command floor — FAIL if the current branch's `describe`/leaf `it`/`test`/jest-collected/`addCommand` counts drop below `origin/main`) → `loop-unit` (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks) → `loop-e2e` (B1/B3 e2e) → `loop-integration` (broad suite) → `loop-build-app` → `loop-test-app` → `loop-release-tests` (release-pipeline dry-run tests from the root `tests/` folder, `DRY_RUN=1`, no GitHub calls) → `loop-secret-scan-tests` (secret-scanner pytest suite, containerized, real gitleaks, fail-closed; the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop), then `check-docs-sync` (FINAL B8 gate — FAIL if any sync doc drifts on stage order / `loop-ts-floor` / B-range). No dead duplicates; live tests `skipif` cleanly on `OLLAMA_HOST`. |
+| **B17** | **Integration suite is a mandatory loop phase; no dead tests; live tests skip cleanly.** `make loop-harness` runs TEN loop stages plus a FINAL B8 doc-sync gate: a collection guard (gate 0), a strict TS test/command floor (gate 0.5), followed by six gates (1–6): `loop-collect` (hermetic collection guard) → `loop-ts-floor` (STRICT TS test/command floor — FAIL if the current branch's `describe`/leaf `it`/`test`/jest-collected/`addCommand` counts drop below `origin/main`) → `loop-unit` (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks) → `loop-e2e` (B1/B3 e2e) → `loop-integration` (broad suite) → `loop-build-app` → `loop-test-app` → `loop-release-dryrun` (release-packaging dry-run: builds the plugin via `make build-app`, runs jest via `make test-app`, then runs `scripts/release.sh` DRY_RUN=1 and asserts the zip contains `main.js` — hermetic, no GitHub publish; the 0.4.16 regression guard, B33) → `loop-release-tests` (release-pipeline dry-run tests from the root `tests/` folder, `DRY_RUN=1`, no GitHub calls) → `loop-secret-scan-tests` (secret-scanner pytest suite, containerized, real gitleaks, fail-closed; the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop), then `check-docs-sync` (FINAL B8 gate — FAIL if any sync doc drifts on stage order / `loop-ts-floor` / B-range). No dead duplicates; live tests `skipif` cleanly on `OLLAMA_HOST`. |
 | **B18** | **Run the agents' REAL unit tests, not only the mocked ones.** The loop MUST execute BOTH the hermetic mocked unit run (`loop-unit` → `test-agents-unit-mock`) AND the real, non‑mocked agent unit run (`loop-unit-real` → `test-agents-unit`, live Ollama) as gates 1 and 2. Reporting "agent tests green" after ONLY the mocked run is INCOMPLETE. `test-agents-unit` MUST be run when Ollama is reachable and its result reported alongside — not instead of — the mocked run. If Ollama is unreachable, `loop-unit-real` SKIPS (must not error) but the agent MUST state the real unit gate did not run. |
 | **B20** | **NEVER declare a change "done" without running the loop gate first — hard pre-flight.** Before claiming any OpenSpec change complete (or "harness green/aligned/fixed"), run the gate and report real output. Preferred: `bash scripts/run-loop-harness.sh` (wrapper over `make loop-harness`, also `make loop-trigger`) — all ten stages. **HOW TO RUN: long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the REAL HOST (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live Ollama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will say `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it.** The host provides rootless `nerdctl` AND a live Ollama (host-networked, so `127.0.0.1:11434` reaches it — B19), so `loop-unit-real` and `loop-e2e` are EXPECTED to RUN, not skip. Only STILL run the hermetic gates `make loop-collect` + `make loop-ts-floor` + `make loop-unit` (no external dep) when a stage truly cannot finish in the session; they MUST be green before any "done". Report honestly (PASS/SKIP/FAIL, failing stage named); never claim green if `loop-unit`/`loop-collect` is red; **never claim "can't run from here" — the host runs `make` for you.** Fix root cause and re-run. (B4/B14: no git commit/push from the gate.) |
 | **B26** | **AGENT MAY COMMIT AND PUSH ITS OWN CHANGES on a non‑main branch when the LOOP GATE IS GREEN and the PRE‑COMMIT HOOK PASSES.** Permitted to `git commit` (and `git merge`/`git cherry‑pick`, and `git push` to its OWN feature/PR branch) its OWN work‑in‑progress so the remote stays synced. Bounded by: (1) branch guard — current branch MUST NOT be `main`/`origin/main`/protected; (2) hook guard — `git-hooks/pre-commit` (gitleaks + trailing‑whitespace) MUST pass; the agent commits only via the normal `git commit` path, NEVER `--no-verify`; (3) loop‑gate guard — push ONLY after the OpenSpec/loop gate is GREEN for the change (build‑app=0 + test‑app pass, and/or `check-docs-sync` PASS for doc‑only changes), never push red work; (4) still forbidden (human‑only): `git push` to main (B14), `make squash-commits`, `git rebase -i` squash/fixup, `git reset --soft` collapse (B25). Adds commit/merge/**push‑to‑own‑branch** latitude on feature branches; does NOT lift no‑push‑to‑main/no‑squash/no‑force. |
@@ -621,6 +621,8 @@ reviewer engagement, corrections land as normal commits, never squashed).
 ---
 
 | **B32** | **`loop-final` — REVIEW‑APPROVED SQUASH + CHANGELOG + FORCE‑PUSH.** The ONE sanctioned exit from B28a/B30b (B31 = the concurrent `make-always-background` change / PR #58). The default (no approval) STANDS: the agent never squashes/force‑pushes an open PR on its own. Once a human REVIEWS + EXPLICITLY APPROVES the PR (a phrase such as "PR looks great" / "looks good" / "approved to finalize"), the agent runs `make loop-final BRANCH=<feat/...> APPROVED=1`, which: (1) **B32a Human‑approval gate:** fails closed unless `APPROVED=1` — the agent sets it ONLY in direct response to a human approval phrase, never in automation. (2) **B32b Fresh green loop‑harness first:** runs a FRESH `make loop-harness` and ABORTS (no squash, no force‑push) if any stage is not green — history is NEVER rewritten on a red gate (B30c still holds). (3) **B32c Squash + changelog on green:** `squash-commits ALLOW_SQUASH=1` (the B30d sanctioned override) → `changelog` → `bump-from-changelog` → `changelog-format`, regenerating the CHANGELOG from the single squashed typed commit. (4) **B32d `--force-with-lease` feature branch only:** refuses `main`/`origin/main`; force is `--force-with-lease` only. (5) **B32e B30a stays absolute:** `git revert` is still never allowed — `loop-final` is a forward finalisation, not a revert. Rationale: the reviewer needs a stable incremental diff DURING review (B28a/B30b); once approved, the owner wants tidy single‑commit history for merge, and `loop-final` is the human‑gated, gate‑verified bridge between those states. |
+| **B33** | **RELEASE PACKAGING IS A HERMETIC, NO-PUBLISH DOCKER+MAKE LOOP GATE.** The release artifact set MUST be verified on every loop run WITHOUT calling the GitHub release API. The gate `make loop-release-dryrun` runs through docker + make: builds the plugin (`make build-app`, the `containers/npm` node image where rollup + its plugins are installed), runs the plugin jest tests (`make test-app`), then runs `scripts/release.sh` in `DRY_RUN=1` and ASSERTS the produced `<REPO_NAME>-<TAG>.zip` contains the compiled `main.js` (and `release/main.js` is non-empty). The loop MUST NOT go green while that gate fails — it is the regression guard for the 0.4.16 defect (a published release whose zip shipped without the compiled plugin). `scripts/release.sh` is PACKAGING-ONLY (assumes `dist/main.js` built by `make build-app`; must NOT rebuild inline); `make release` depends on `build-app` so the plugin is always compiled before packaging. No GitHub API call in the loop gate (B14). The `release.yml` CI workflow still publishes on merge to main; this gate only proves, locally and hermetically, that the packaging would be valid. |
+| **B34** | **NO MERGE / NO FORCE-PUSH UNTIL THE HUMAN APPROVES VIA A PR COMMENT.** A PR opened by the agent MUST NOT be merged, squashed, or force-pushed until the human has EXPLICITLY approved it through a comment on that PR (e.g. "approved" / "lgtm" / "merge it"). The agent opens/redelivers the PR, then WAITS for the approval comment; it must not auto-merge on "green" alone (this overrides the older auto-promote-on-green behaviour — B27 auto-delivery still opens the PR, but the MERGE waits for human approval). The human holds the merge decision. B32 `loop-final APPROVED=1` is still the only sanctioned finalisation and still requires an explicit human approval phrase first. |
 ---
 
 ## 7. How to use it (authoring a new feature)
@@ -784,7 +786,7 @@ This file, `AGENTS.md`, and `hermes/skills/openspec-loop-harness.md` are the **s
 truth**. When you change a behaviour, constraint, command, or pitfall in **any one** of them,
 mirror it in the **other two** before considering the change done:
 
-- Repo authority: `AGENTS.md` (phase flow + B1–B32 summary).
+- Repo authority: `AGENTS.md` (phase flow + B1–B34 summary).
 - Skill mirror: `hermes/skills/openspec-loop-harness.md` (operator‑level detail + pitfalls).
 - This guide: `docs/openspec-engineering-loop-harness.md` (human‑readable technical reference).
 

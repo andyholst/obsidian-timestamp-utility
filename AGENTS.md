@@ -69,7 +69,7 @@ every spec requirement/scenario); (3) **diagnose & correct by fixing the SOURCE 
 symptom** — edit the OpenSpec spec/contract, restore the generated files to a clean baseline, and
 re-run; NEVER hand-edit generated TS (B11), and each pass must try a *different* correction; and
 (4) **terminate** — a bounded ~5 attempts with a clear escalation (fix the Python floor as a last
-resort, B13). The durable behaviours B1–B32 are the loop's "laws of physics" — invariants that
+resort, B13). The durable behaviours B1–B34 are the loop's "laws of physics" — invariants that
 never regress on any pass (permanent e2e B1–B6, no-commit/no-push gate B4/B14, delivery step B12).
 
 **How they fit:** the harness is the **floor** (nothing worse than the contract can ever be
@@ -402,7 +402,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
  coordinate `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not
  skip) — root resolution is the actual bug to fix, not a skip guard.
   - **(B20) NEVER declare a change "done" without running the loop gate first — this is a hard pre-flight, not optional.** Before reporting any OpenSpec change as complete (or before claiming "the harness is green / aligned / fixed"), the agent MUST execute the loop gate and report its real output:
-      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
+      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-dryrun` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
          **HOW TO RUN (never make excuses):** long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the **REAL HOST** (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live Ollama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will print `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it. **Never say "can't run from here" / "environment absent" — the host runs `make` for you.** Drive verification through `make` with REAL output, always.
       2. **If the full `make loop-harness` cannot complete in the session** (e.g. an explicit
          timeout, or a stage is deliberately disabled via env), the agent MUST STILL run the
@@ -665,7 +665,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   - **(B31) MAKE-THROUGH-DOCKER IS ALWAYS A BACKGROUND PROCESS — NEVER THE FOREGROUND SANDBOX.** Every Makefile target that invokes a container runtime (any `docker`, `nerdctl`, or `*compose*` binary via `$(call docker_run, …)`) MUST be executed through the Hermes `terminal(background=true)` channel, which runs on the **real host** that owns the docker/nerdctl daemon and the live Ollama. The foreground sandbox (`/workspace`) has NO container runtime and MUST NOT be used for these targets. This is mandatory for ANY such target — not merely the long-running ones (run-agentics, build-app, test-app, loop-harness, loop-e2e, deliver-change, phase7-archive, release-flow) but also short ones (loop-collect, loop-ts-floor, loop-unit, test-agents-unit, test-agents-integration, verify-agentics-after-run).
     1. **The host is the only supported docker path.** The foreground sandbox returns `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has the daemon. The agent MUST route the target through `terminal(background=true)` and MUST NOT report "can't run from here" / "environment absent".
     2. **No silent foreground runs.** A `make <docker-backed-target>` issued from the foreground terminal is re-dispatched to the background host; the agent never lets it fail on a missing daemon in the sandbox.
-    3. **B8 sync.** This behaviour is recorded in the B8 doc-sync set (AGENTS.md, `hermes/skills/openspec-loop-harness.md`, `docs/openspec-engineering-loop-harness.md`, `Makefile`, `scripts/run-loop-harness.sh`) with the B-range string `B1–B31` so `check-docs-sync` stays green.
+    3. **B8 sync.** This behaviour is recorded in the B8 doc-sync set (AGENTS.md, `hermes/skills/openspec-loop-harness.md`, `docs/openspec-engineering-loop-harness.md`, `Makefile`, `scripts/run-loop-harness.sh`) with the B-range string `B1–B34` so `check-docs-sync` stays green.
      B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and `docs/openspec-engineering-loop-harness.md` (B8).
      B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
      `docs/openspec-engineering-loop-harness.md`.
@@ -693,6 +693,31 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
      once they have approved, the owner wants tidy single-commit history for merge. `loop-final` is
      the human-gated, gate-verified bridge between those two states. (B31 is the concurrent
      `make-always-background` change / PR #58; this behaviour is B32.)
+     B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
+     `docs/openspec-engineering-loop-harness.md`.
+  - **(B33) RELEASE PACKAGING IS A HERMETIC, NO-PUBLISH DOCKER+MAKE LOOP GATE.** The release
+     artifact set MUST be verified on every loop run WITHOUT calling the GitHub release API. The
+     gate `make loop-release-dryrun` runs through docker + make: it builds the plugin (`make
+     build-app`, the `containers/npm` node image where rollup + its plugins are installed),
+     runs the plugin jest tests (`make test-app`), then runs `scripts/release.sh` in `DRY_RUN=1`
+     and ASSERTS the produced `<REPO_NAME>-<TAG>.zip` contains the compiled `main.js` (and that
+     `release/main.js` is non-empty). The loop MUST NOT go green while that gate fails. This is
+     the regression guard for the 0.4.16 defect (a published release whose zip shipped without
+     the compiled plugin). `scripts/release.sh` is PACKAGING-ONLY — it assumes `dist/main.js`
+     already exists (built by `make build-app`) and must NOT rebuild inline; `make release`
+     depends on `build-app` so the plugin is always compiled before packaging. No GitHub API
+     call happens in the loop gate (B14). The `release.yml` CI workflow still publishes on merge
+     to main; this gate only proves, locally and hermetically, that the packaging would be valid.
+     B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
+     `docs/openspec-engineering-loop-harness.md`.
+  - **(B34) NO MERGE / NO FORCE-PUSH UNTIL THE HUMAN APPROVES VIA A PR COMMENT.** A PR opened by
+     the agent (delivery of an OpenSpec change) MUST NOT be merged, squashed, or force-pushed by
+     the agent until the human has EXPLICITLY approved it through a comment on that PR (e.g.
+     "approved", "lgtm", "merge it"). The agent opens/redelivers the PR, then WAITS for the
+     approval comment; it must not auto-merge on "green" alone (this overrides the older
+     auto-promote-on-green behaviour). This is the standing review gate: the human holds the
+     merge decision. B32's `loop-final APPROVED=1` is the ONLY sanctioned finalisation and still
+     requires an explicit human approval phrase first.
      B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
      `docs/openspec-engineering-loop-harness.md`.
   - **(B7.1) The deterministic floor runs in EVERY mode (incl. fast).** `route_hitl` in
@@ -790,8 +815,8 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   stage order, the `loop-ts-floor` guard, or the B-behaviour range:
   1. **`Makefile`** — the executable gates + canonical stage-order comment; `make loop-harness`
      runs `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e`
-           → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync` (final).
-  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B32 durable behaviours.
+           → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-dryrun` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync` (final).
+  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B34 durable behaviours.
   3. **`hermes/skills/openspec-loop-harness.md`** — the loadable skill mirror of AGENTS.md.
   4. **`docs/openspec-engineering-loop-harness.md`** — the human-readable technical reference
      (named by B8 itself as authoritative; MUST be kept in the sync set, not treated as a 4th
@@ -804,7 +829,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   Before claiming "the loop is green / aligned", run `make check-docs-sync` (the final loop stage)
   and confirm it PASSES: all sync docs agree on the 11-stage order (loop-collect → loop-ts-floor →
   loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B32 behaviours, and
+  loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B34 behaviours, and
   the live-test skip rule (`OLLAMA_HOST` only, not `GITHUB_TOKEN`). A change is NOT done while any
   of the sync docs disagree.
   - **(B17a) ROOT `tests/` FOLDER IS PART OF THE LOOP.** Beyond `agents/agentics/tests/` (unit /

@@ -7,8 +7,8 @@ FROM python:3.10-slim AS base
 # Install Node.js 22.x and npm
 RUN apt-get update && apt-get install -y curl && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs git && \
-    node --version && npm --version && \
+    apt-get install -y nodejs git zip unzip && \
+    node --version && npm --version && zip --version && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install TypeScript globally for use by agents that require it

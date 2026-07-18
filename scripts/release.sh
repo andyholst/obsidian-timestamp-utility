@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Build a GitHub-release-ready artifact set in ./release from the current repo state.
+# Package a GitHub-release-ready artifact set in ./release from the CURRENT repo state.
 #
-# This is the single source of truth for what `make release` ships. It:
+# This script is PACKAGING-ONLY. The compiled plugin (dist/main.js) is produced by
+# `make build-app` (the containers/npm node image, which has rollup + its plugins
+# installed), NOT here — see the `release` Makefile target, which depends on `build-app`.
+# Keeping the build out of this script removes the CI failure mode where rollup /
+# @rollup/plugin-typescript were missing (npm ci skipped devDeps / npx had no network).
+#
+# This script:
 #   1. Resolves the repo root (works from anywhere, incl. inside a docker worktree).
 #   2. Reads the current version from package.json (TAG overrides if given).
-#   3. Builds the plugin (npm run build -> dist/main.js) — unless DRY_RUN and a build exists.
+#   3. Requires dist/main.js to already exist (built by `make build-app`); if absent,
+#      it aborts so a broken release is caught (never ships an empty zip).
 #   4. Generates release/release_notes.md from the FIRST "## <version>" section of
 #      CHANGELOG.md that matches the current version (verbatim, non-empty).
 #   5. Copies main.js, manifest.json, README.md, CHANGELOG.md, release_notes.md into release/.
@@ -71,6 +78,13 @@ if [ "$CURRENT_BRANCH" != "main" ] && [ "$DRY_RUN" != "1" ]; then
   exit 0
 fi
 
+# --- compiled plugin MUST already exist (built by `make build-app`) ---
+if [ ! -f dist/main.js ]; then
+  echo "Error: dist/main.js missing — run 'make build-app' first (the plugin must be compiled before packaging)." >&2
+  exit 1
+fi
+echo "release.sh: dist/main.js present ($(wc -c < dist/main.js 2>/dev/null || echo 0) bytes)"
+
 # --- generate release notes from the matching CHANGELOG section (ALWAYS, first) ---
 # Notes come from CHANGELOG.md, NOT from the build, so this must run unconditionally
 # and never be blocked by a build failure. The publish guard only requires this file.
@@ -109,51 +123,7 @@ mkdir -p "$PROJECT_ROOT/release"
 printf '%s\n' "$RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
 echo "release.sh: wrote $RELEASE_NOTES_FILE ($(wc -c < "$RELEASE_NOTES_FILE") bytes)"
 
-# --- build the plugin (main.ts -> dist/main.js) for the zip asset ---
-# Locate the rollup binary by walking UP from PROJECT_ROOT for a node_modules/.bin/rollup
-# (in a git worktree, node_modules lives in the main worktree, not the linked one; in CI
-# it is in the checked-out repo). Preferring the bin by path avoids the
-# "rollup: not found" failure that `npm run build` hit when rollup isn't on $PATH. Fall
-# back to `npx rollup` then `npm run build`. The build is REQUIRED (the zip must ship the
-# compiled plugin); if it fails we abort so a broken release is caught.
-find_rollup() {
-  # prints the rollup bin path or empty; walks up from $1
-  local dir="$1"
-  while [ -n "$dir" ]; do
-    if [ -x "$dir/node_modules/.bin/rollup" ]; then
-      printf '%s\n' "$dir/node_modules/.bin/rollup"
-      return 0
-    fi
-    [ "$dir" = "/" ] && break
-    dir="$(dirname "$dir")"
-  done
-  return 1
-}
-ROLLUP_BIN="$(find_rollup "$PROJECT_ROOT" || true)"
-
-BUILD_OK=0
-if [ -n "$ROLLUP_BIN" ]; then
-  echo "release.sh: building plugin via $ROLLUP_BIN -c..." >&2
-  if "$ROLLUP_BIN" -c 2>&1; then BUILD_OK=1; fi
-elif command -v npx >/dev/null 2>&1; then
-  echo "release.sh: building plugin via npx rollup -c..." >&2
-  if npx --no-install rollup -c 2>&1 || npx -y rollup -c 2>&1; then BUILD_OK=1; fi
-elif command -v npm >/dev/null 2>&1; then
-  echo "release.sh: building plugin via npm run build..." >&2
-  if npm run build 2>&1; then BUILD_OK=1; fi
-fi
-if [ "$BUILD_OK" != "1" ]; then
-  echo "Error: plugin build failed (rollup/npm unavailable or errored)." >&2
-  exit 1
-fi
-echo "release.sh: build OK ($(wc -c < dist/main.js 2>/dev/null || echo 0) bytes)" >&2
-
-if [ ! -f dist/main.js ]; then
-  echo "Error: dist/main.js missing after build." >&2
-  exit 1
-fi
-
-# Assemble release files (main.js is now required; see build step above).
+# --- assemble release files (main.js is already built by `make build-app`) ---
 mkdir -p "$PROJECT_ROOT/release"
 cp dist/main.js           "$PROJECT_ROOT/release/main.js"
 cp manifest.json          "$PROJECT_ROOT/release/manifest.json"
