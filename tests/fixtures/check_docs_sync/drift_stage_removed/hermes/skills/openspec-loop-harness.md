@@ -24,7 +24,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   walk), (3) **diagnose & correct by fixing the SOURCE OF TRUTH not the symptom** (edit the spec,
   restore, re-run — never hand-edit generated TS, B11; each pass a *different* tweak), and
   (4) **terminate** (bounded ~5 attempts, then escalate to fixing the Python floor B13). Durable
-  invariants B1–B30 are the loop's "laws of physics" that never regress on any pass.
+  invariants B1–B32 are the loop's "laws of physics" that never regress on any pass.
 - **How they fit:** the harness is the **floor** (nothing worse can be written); the loop is the
   **ratchet** (each pass only moves toward green, invariants never slip). Full write-up:
   `docs/openspec-engineering-loop-harness.md` §0.
@@ -203,7 +203,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   `docs/openspec-engineering-loop-harness.md` (B8). The reusable directive is the Hermes skill
   `request-to-openspec` (loaded at request entry).
 
-## Durable agent behaviours (B1–B30) — MUST always hold, never regress
+## Durable agent behaviours (B1–B32) — MUST always hold, never regress
 
 These are standing rules for the agent (also in `AGENTS.md`). They are enforced by
 `make phase7-archive` and the persistent harness
@@ -277,7 +277,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   stage) also includes `Makefile`, `docs/openspec-engineering-loop-harness.md`, and
   `scripts/run-loop-harness.sh` — all MUST agree on the 10-stage order (loop-collect → loop-ts-floor
   → loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B30 range; a drift
+  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B32 range; a drift
   there fails the loop.
 - **(B9) Rootless nerdctl bind-mount permissions (READ + WRITE).** Execution is docker compose
   with **rootless nerdctl**, which remaps the container uid (1000) to the host **`other`** class.
@@ -388,7 +388,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       collection guard — fail fast on dangling imports, rule 4 below) → `loop-ts-floor` (STRICT TS
       test/command floor — FAIL if the current branch's `describe`/leaf `it`/`test`/jest-collected/
       `addCommand` counts drop below `origin/main`; the silent feature/test-removal guard) → `loop-unit`
-      (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks) 
+      (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks)
       (the 3 standing B1/B3 e2e gates) → `loop-integration` (broad agentic integration suite) →
       `loop-build-app` → `loop-test-app`. Each stage fails the whole run (no silent green). Rules for the
       integration tests:
@@ -583,6 +583,20 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
     - **(B29c) Never self-resolve/approve:** the agent posts the fix comment and leaves the thread
       for the human participant; it does NOT resolve the reviewer's thread or approve its own PR.
       B8: mirror in AGENTS.md + harness doc.
+    - **(B32) `loop-final` — REVIEW-APPROVED SQUASH + CHANGELOG + FORCE-PUSH.** The ONE sanctioned
+      exit from B28a/B30b. Default (no approval) STANDS: agent never squashes/force-pushes an open PR
+      on its own. Once a human REVIEWS + APPROVES the PR (phrase like "PR looks great" / "looks good"
+      / "approved to finalize"), the agent runs `make loop-final BRANCH=<feat/...> APPROVED=1`, which:
+      (1) **B32a** fails closed unless `APPROVED=1` (agent sets it ONLY on a human approval phrase,
+      never in automation); (2) **B32b** runs a FRESH `make loop-harness` FIRST and aborts if not
+      green — history is never rewritten on a red gate (B30c still holds); (3) **B32c** on green,
+      `squash-commits ALLOW_SQUASH=1` (B30d sanctioned override) → `changelog` → `bump-from-changelog`
+      → `changelog-format`, regenerating the CHANGELOG from the single squashed typed commit;
+      (4) **B32d** `git push --force-with-lease` the feature branch ONLY (refuses main/origin/main);
+      (5) **B32e** B30a stays absolute — no `git revert`, ever. Rationale: reviewer needs a stable
+      diff DURING review (B28a/B30b); once approved, owner wants tidy single-commit history for merge.
+      (B31 = concurrent make-always-background / PR #58; this is B32.) B8: mirror in AGENTS.md +
+      harness doc.
     ## Plan-B merge refactor (integrator-merge-refactor)
 
 - **Imports:** inject new `import` lines at the top (after the last existing top-level import).
