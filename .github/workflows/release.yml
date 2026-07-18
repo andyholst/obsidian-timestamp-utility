@@ -6,6 +6,11 @@ on:
       - main
     types:
       - closed
+  # Also fire on direct pushes to main (e.g. the merge commit of a release fix),
+  # so the fixed release.sh is used even when no new PR close event re-triggers.
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
