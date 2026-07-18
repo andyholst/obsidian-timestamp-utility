@@ -12,8 +12,13 @@ permissions:
 
 jobs:
   build-and-release:
+    # Only release when a PR was actually merged into main.
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    env:
+      REPO_NAME: obsidian-timestamp-utility
+      # Set DRY_RUN=1 here (or via workflow_dispatch input) to build artifacts without publishing.
+      DRY_RUN: ${{ vars.RELEASE_DRY_RUN || '0' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -39,7 +44,8 @@ jobs:
           git config user.name "Andy Holst"
           git config user.email "andy.holst@protonmail.com"
 
-      - name: Tag the release
+      - name: Tag the release (local + push)
+        if: ${{ env.DRY_RUN != '1' }}
         run: |
           git tag -f "${{ env.TAG }}"
           git push origin "${{ env.TAG }}" --force
@@ -47,60 +53,42 @@ jobs:
       - name: Make scripts executable
         run: find . -name '*.sh' -exec chmod +x {} \;
 
-      - name: Build and release
-        run: make release
+      - name: Build and assemble release artifacts
+        # make release calls scripts/release.sh, which generates release/release_notes.md
+        # (from the current version's CHANGELOG section) and the downloadable zip.
+        run: make release REPO_NAME=${{ env.REPO_NAME }} TAG=${{ env.TAG }} DRY_RUN=${{ env.DRY_RUN }}
         env:
-          REPO_NAME: obsidian-timestamp-utility
           TAG: ${{ env.TAG }}
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Guard — release notes must exist
+        run: |
+          if [ ! -f release/release_notes.md ]; then
+            echo "::error::release/release_notes.md missing — release body would be empty. Aborting."
+            exit 1
+          fi
+          echo "release_notes.md size: $(wc -c < release/release_notes.md) bytes"
+
+      - name: Create GitHub Release and upload assets
+        if: ${{ env.DRY_RUN != '1' }}
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
-          release_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
+          body_path: release/release_notes.md
           draft: false
           prerelease: false
-          body_path: ./release/release_notes.md
-
-      - name: Upload main.js
-        uses: actions/upload-release-asset@v1
+          files: |
+            release/main.js
+            release/manifest.json
+            release/README.md
+            release/CHANGELOG.md
+            ${{ env.REPO_NAME }}-${{ env.TAG }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/main.js
-          asset_name: main.js
-          asset_content_type: application/javascript
 
-      - name: Upload manifest.json
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/manifest.json
-          asset_name: manifest.json
-          asset_content_type: application/json
-
-      - name: Upload README.md
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/README.md
-          asset_name: README.md
-          asset_content_type: text/markdown
-
-      - name: Upload CHANGELOG.md
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./release/CHANGELOG.md
-          asset_name: CHANGELOG.md
-          asset_content_type: text/markdown
+      - name: Dry-run summary (no publish)
+        if: ${{ env.DRY_RUN == '1' }}
+        run: |
+          echo "DRY_RUN=1 — artifacts built locally, NO GitHub release created."
+          ls -la release/
+          ls -la ${{ env.REPO_NAME }}-${{ env.TAG }}.zip

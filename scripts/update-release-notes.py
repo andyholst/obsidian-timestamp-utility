@@ -76,6 +76,11 @@ def main() -> int:
     if MARK in txt:
         before, rest = txt.split(MARK, 1)
         after = rest.split(MARK, 1)[1] if MARK in rest else ""
+        # Idempotent: strip leading blank lines so re-runs don't accumulate whitespace
+        # between the closing marker and the following content.
+        after = after.lstrip("\n")
+        if after and not after.startswith("\n"):
+            after = "\n" + after
         txt = before + block + after
     else:
         txt = txt.rstrip() + "\n\n" + block

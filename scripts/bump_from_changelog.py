@@ -72,15 +72,24 @@ def released_max(repo):
 
 def released_keys(repo):
     """Set of version keys present in the COMMITTED (git HEAD) CHANGELOG.md -- released/curated
-    sections that must never be overwritten/duplicated by the changelog step."""
+    sections that must never be overwritten/duplicated by the changelog step.
+
+    Only REAL semver sections count as released; working headings like `## Unreleased` /
+    `## Unreleased Latest` are excluded so the bump relabels the working section correctly.
+    """
     try:
         raw = subprocess.check_output(
             ['git', '-C', repo, 'show', 'HEAD:CHANGELOG.md'], stderr=subprocess.DEVNULL,
         ).decode()
     except Exception:
         raw = ''
-    return {re.sub(r'\s*Latest$', '', re.sub(r'^v', '', h)).strip()
-            for h in re.findall(r'(?m)^## (.*)$', raw)}
+    keys = set()
+    for h in re.findall(r'(?m)^## (.*)$', raw):
+        h = re.sub(r'\s*Latest$', '', h).strip()
+        h = re.sub(r'^v', '', h)
+        if re.match(r'^\d+\.\d+\.\d+$', h):  # only real semver sections are "released"
+            keys.add(h)
+    return keys
 
 
 def min_app_version(repo):

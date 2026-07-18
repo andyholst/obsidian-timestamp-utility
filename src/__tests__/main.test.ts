@@ -4,7 +4,7 @@ import * as obsidian from 'obsidian';
 const mockManifest: obsidian.PluginManifest = {
     id: 'obsidian-timestamp-utility',
     name: 'Timestamp Utility',
-    version: '0.4.15',
+    version: '0.4.16',
     minAppVersion: '0.15.0',
     description: 'Insert timestamps and rename files with timestamp prefixes.',
     author: 'Your Name',

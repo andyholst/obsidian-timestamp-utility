@@ -388,7 +388,7 @@ For those interested in contributing:
 <!-- RELEASE_NOTES -->
 ## Release / Changelog
 
-Current plugin version: **0.4.11** (tag `v0.4.11`).
+Current plugin version: **0.4.16** (tag `v0.4.16`).
 
 The changelog is SECTIONED by commit type (git_chglog, `chglog/config.yml`):
 - 🚀 New Features (`feat`)
@@ -402,4 +402,3 @@ The full, per-version, categorized history lives in [CHANGELOG.md](CHANGELOG.md)
 release commit is written with a Conventional `type(scope):` prefix so it lands in the correct
 section and decides the version bump (feat/fix/perf -> minor, refactor/docs/chore -> patch).
 <!-- RELEASE_NOTES -->
-

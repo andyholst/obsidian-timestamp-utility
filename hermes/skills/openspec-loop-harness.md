@@ -277,9 +277,9 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   `AGENTS.md`, `skill_view openspec-loop-harness` first. Never leave the two files describing
   different behaviour. The full B8 sync set (enforced by `make check-docs-sync`, the FINAL loop
   stage) also includes `Makefile`, `docs/openspec-engineering-loop-harness.md`, and
-  `scripts/run-loop-harness.sh` — all MUST agree on the 10-stage order (loop-collect → loop-ts-floor
+  `scripts/run-loop-harness.sh` — all MUST agree on the 11-stage order (loop-collect → loop-ts-floor
   → loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B32 range; a drift
+  loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B32 range; a drift
   there fails the loop.
 - **(B9) Rootless nerdctl bind-mount permissions (READ + WRITE).** Execution is docker compose
   with **rootless nerdctl**, which remaps the container uid (1000) to the host **`other`** class.
@@ -444,7 +444,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
  `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not skip) — fix
  root resolution, never add an OLLAMA skip guard. (Closed the gap where `test_greetings_contract_unit.py` + `test_slim_refactor_invariants_unit.py` failed post-archive, and where `test_ticket20/ticket22/greetings` e2e errored on `FileNotFoundError: 'openspec'` due to `/app` root resolution.)
     - **(B20) NEVER declare a change "done" without running the loop gate first — hard pre-flight.** Before claiming any OpenSpec change complete (or "harness green/aligned/fixed"), run the gate and report real output:
-      1. **Preferred:** `bash scripts/run-loop-harness.sh` (wrapper over `make loop-harness`) — all stages: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync`. Also `make loop-trigger`.
+      1. **Preferred:** `bash scripts/run-loop-harness.sh` (wrapper over `make loop-harness`) — all stages: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. Also `make loop-trigger`.
       2. **If full `make loop-harness` can't finish** (live Ollama absent for `loop-e2e`/`loop-unit-real`, or npm build times out), STILL run the hermetic gates `make loop-collect` + `make loop-ts-floor` + `make loop-unit` (no external dep) — they MUST be green before any "done".
       3. **Report honestly:** actual per-stage PASS/SKIP/FAIL with the failing stage named. Never say "done/green" if `loop-unit`/`loop-collect` is red; fix the root cause and re-run. Rationale: the agent previously finished work (incl. AGENTS.md/skill edits) WITHOUT running the gate, leaving `make loop-unit` red. B20 makes the gate mandatory so regressions are caught before "done". (B4/B14: no git commit/push from the gate.)
     - **(B21) HITL is OPT-IN and loop-excluded — never a blocking prompt in automation.** `HITLNode`

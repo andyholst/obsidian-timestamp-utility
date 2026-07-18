@@ -11,7 +11,7 @@
 # B8 durable-behaviour range: B1–B32 (the loop's "laws of physics"; see AGENTS.md). The
 # final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
 # Canonical stage order (B8 source of truth):
-#   loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync
+#   loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-release-tests -> loop-secret-scan-tests -> check-docs-sync
 #
 # Ollama is expected to be running on the host (bound to 127.0.0.1:11434) and is
 # reachable from the containers via network_mode: host (see docker-compose-files/agents.yaml).
@@ -55,7 +55,7 @@ declare -A STAGE_TIMEOUT=(
   [check-docs-sync]=120
 )
 
-STAGES=(loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-secret-scan-tests check-docs-sync)
+STAGES=(loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-release-tests loop-secret-scan-tests check-docs-sync)
 HERMETIC=(loop-collect loop-ts-floor loop-unit)
 
 summary=()

@@ -1,0 +1,24 @@
+# Tasks: fix-release-pipeline
+
+- [x] 1.1 Reproduce the defect: confirm `release/release_notes.md` is NOT produced by `make release` (orphaned `release.sh` never called).
+- [x] 2.1 Rewrite `scripts/release.sh` to repo-root paths via `git rev-parse --show-toplevel` (no hard-coded `/app`).
+- [x] 2.2 Extract release notes from the `## <version>` section of CHANGELOG.md matching package.json version (non-empty).
+- [x] 2.3 Add main-branch guard (skip publish-prep off `main` unless `DRY_RUN=1`).
+- [x] 2.4 Add `DRY_RUN=1` handling (produce artifacts, no GitHub call).
+- [x] 2.5 Copy main.js + manifest.json + README.md + CHANGELOG.md + release_notes.md into release/ and zip as `<REPO>-<TAG>.zip`.
+- [x] 3.1 Wire `scripts/release.sh` into the `release` Makefile target.
+- [x] 3.2 Pass TAG / REPO_NAME / DRY_RUN through to `release.sh`.
+- [x] 4.1 Rewrite `.github/workflows/release.yml` to `softprops/action-gh-release` (maintained).
+- [x] 4.2 Set `body_path: release/release_notes.md` with a fail-closed guard if missing.
+- [x] 4.3 Upload ALL assets incl the zip artifact.
+- [x] 4.4 Publish only on `main` (or `DRY_RUN=1`).
+- [x] 5.1 Write `tests/test_release_pipeline_dryrun.py` (7 scenarios, no GitHub).
+- [x] 5.2 Run it: 7 passed.
+- [x] 6.1 `make build-app` + `make test-app` green.
+- [x] 6.2 Hermetic loop gate green (`loop-collect` clean, `loop-ts-floor` PASS, `loop-unit` 525 passed).
+- [x] 7.1 Walk `specs/release-automation/spec.md` Requirements/Scenarios — all hold.
+- [x] 7.2 `openspec validate fix-release-pipeline` passes.
+- [x] 8.1 Add `loop-release-tests` stage (11-stage order) to Makefile + run-loop-harness.sh + AGENTS.md + hermes skill + docs; update B8 sync docs; `check-docs-sync` PASS.
+- [x] 8.2 New `tests/test_readme_sync.py` (5 scenarios: version/tag/CHANGELOG/commands/links sync) — caught + fixed stale README version 0.4.11 -> 0.4.15; wired into `loop-release-tests`.
+- [x] 8.3 Run the FULL `loop-harness` (all 11 stages incl release + README tests) GREEN.
+- [ ] 9.1 (Delivery) `make phase7-archive` the change, commit on `wt/fix-release-pipeline`, promote to `feat/`, push, open PR for review.
