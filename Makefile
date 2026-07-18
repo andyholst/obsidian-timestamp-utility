@@ -158,7 +158,7 @@ bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchore
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py") || echo "bump-from-changelog skipped"
 	@$(MAKE) changelog-format
 
-release: clean build-app ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
+release: clean ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
 	@if [ -z "$(TAG)" ]; then TAG=$$(node -p "require('./package.json').version"); fi; \
 	 echo "=== release: building artifacts via scripts/release.sh (TAG=$$TAG) ==="; \
 	 TAG="$$TAG" REPO_NAME="$(REPO_NAME)" DRY_RUN="$(DRY_RUN)" bash scripts/release.sh

@@ -42,7 +42,16 @@ if [ -z "$TAG" ]; then
   exit 1
 fi
 
+# Resolve current branch. In CI GITHUB_REF is authoritative; otherwise use git.
+# If git is unavailable (e.g. a copied test repo) and no GITHUB_REF is set, default
+# to "main" when DRY_RUN=1 (a dry run must always produce artifacts) and to "unknown"
+# otherwise (the main-branch guard then skips publish-prep safely).
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+if [ "$CURRENT_BRANCH" = "unknown" ] && [ -z "${GITHUB_REF:-}" ]; then
+  if [ "$DRY_RUN" = "1" ]; then
+    CURRENT_BRANCH="main"
+  fi
+fi
 # GITHUB_REF is e.g. refs/heads/main when the workflow runs on main
 if [ "${GITHUB_REF:-}" != "" ]; then
   case "$GITHUB_REF" in
@@ -100,26 +109,57 @@ mkdir -p "$PROJECT_ROOT/release"
 printf '%s\n' "$RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
 echo "release.sh: wrote $RELEASE_NOTES_FILE ($(wc -c < "$RELEASE_NOTES_FILE") bytes)"
 
-# --- build the plugin (main.ts -> dist/main.js) for the zip asset (best-effort) ---
-if [ -d node_modules ] && command -v npm >/dev/null 2>&1; then
+# --- build the plugin (main.ts -> dist/main.js) for the zip asset ---
+# Locate the rollup binary by walking UP from PROJECT_ROOT for a node_modules/.bin/rollup
+# (in a git worktree, node_modules lives in the main worktree, not the linked one; in CI
+# it is in the checked-out repo). Preferring the bin by path avoids the
+# "rollup: not found" failure that `npm run build` hit when rollup isn't on $PATH. Fall
+# back to `npx rollup` then `npm run build`. The build is REQUIRED (the zip must ship the
+# compiled plugin); if it fails we abort so a broken release is caught.
+find_rollup() {
+  # prints the rollup bin path or empty; walks up from $1
+  local dir="$1"
+  while [ -n "$dir" ]; do
+    if [ -x "$dir/node_modules/.bin/rollup" ]; then
+      printf '%s\n' "$dir/node_modules/.bin/rollup"
+      return 0
+    fi
+    [ "$dir" = "/" ] && break
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+ROLLUP_BIN="$(find_rollup "$PROJECT_ROOT" || true)"
+
+BUILD_OK=0
+if [ -n "$ROLLUP_BIN" ]; then
+  echo "release.sh: building plugin via $ROLLUP_BIN -c..." >&2
+  if "$ROLLUP_BIN" -c 2>&1; then BUILD_OK=1; fi
+elif command -v npx >/dev/null 2>&1; then
+  echo "release.sh: building plugin via npx rollup -c..." >&2
+  if npx --no-install rollup -c 2>&1 || npx -y rollup -c 2>&1; then BUILD_OK=1; fi
+elif command -v npm >/dev/null 2>&1; then
   echo "release.sh: building plugin via npm run build..." >&2
-  npm run build 2>&1 || echo "release.sh: WARNING npm run build failed; zip may lack main.js." >&2
-else
-  echo "release.sh: node_modules/npm unavailable — skipping npm build." >&2
+  if npm run build 2>&1; then BUILD_OK=1; fi
+fi
+if [ "$BUILD_OK" != "1" ]; then
+  echo "Error: plugin build failed (rollup/npm unavailable or errored)." >&2
+  exit 1
+fi
+echo "release.sh: build OK ($(wc -c < dist/main.js 2>/dev/null || echo 0) bytes)" >&2
+
+if [ ! -f dist/main.js ]; then
+  echo "Error: dist/main.js missing after build." >&2
+  exit 1
 fi
 
-# Assemble release files. main.js is optional (build may have failed); the publish
-# guard only requires release_notes.md, which is already written above.
+# Assemble release files (main.js is now required; see build step above).
 mkdir -p "$PROJECT_ROOT/release"
-cp manifest.json            "$PROJECT_ROOT/release/manifest.json"
-cp README.md                "$PROJECT_ROOT/release/README.md" 2>/dev/null || true
-cp CHANGELOG.md             "$PROJECT_ROOT/release/CHANGELOG.md"
-cp "$RELEASE_NOTES_FILE"    "$PROJECT_ROOT/release/release_notes.md"
-if [ -f dist/main.js ]; then
-  cp dist/main.js           "$PROJECT_ROOT/release/main.js"
-else
-  echo "release.sh: WARNING dist/main.js absent — release/ will omit main.js." >&2
-fi
+cp dist/main.js           "$PROJECT_ROOT/release/main.js"
+cp manifest.json          "$PROJECT_ROOT/release/manifest.json"
+cp README.md              "$PROJECT_ROOT/release/README.md" 2>/dev/null || true
+cp CHANGELOG.md           "$PROJECT_ROOT/release/CHANGELOG.md"
+cp "$RELEASE_NOTES_FILE"  "$PROJECT_ROOT/release/release_notes.md"
 
 # --- zip (all members at root, consistent layout) ---
 cd "$PROJECT_ROOT/release"
