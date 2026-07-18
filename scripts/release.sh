@@ -63,17 +63,18 @@ if [ "$CURRENT_BRANCH" != "main" ] && [ "$DRY_RUN" != "1" ]; then
 fi
 
 # --- build the plugin (main.ts -> dist/main.js) ---
-# `make release` already runs `build-app` (docker) as a prerequisite, which produces
-# dist/main.js. Only rebuild here if it is genuinely missing. Build failures must NOT
-# block release-notes generation (notes come from CHANGELOG, not the build).
-if [ ! -f dist/main.js ]; then
-  echo "release.sh: dist/main.js missing — attempting npm run build..." >&2
-  if ! npm run build 2>&1; then
-    echo "release.sh: WARNING npm run build failed; continuing with notes/zip using existing dist if any." >&2
-  fi
+# `make release` runs `build-app` (docker) first, but the docker mount can leave
+# dist/main.js absent in CI. To be robust, always build via npm run build here when
+# node_modules is present (the release.yml workflow runs `npm ci` beforehand). Notes
+# generation (below) does NOT depend on the build succeeding.
+if [ -d node_modules ] && command -v npm >/dev/null 2>&1; then
+  echo "release.sh: building plugin via npm run build..." >&2
+  npm run build 2>&1 || echo "release.sh: WARNING npm run build failed." >&2
+else
+  echo "release.sh: node_modules/npm unavailable — skipping npm build." >&2
 fi
 if [ ! -f dist/main.js ]; then
-  echo "Error: dist/main.js missing and build failed." >&2
+  echo "Error: dist/main.js missing after build." >&2
   exit 1
 fi
 
