@@ -17,8 +17,12 @@ permissions:
 
 jobs:
   build-and-release:
-    # Only release when a PR was actually merged into main.
-    if: github.event.pull_request.merged == true
+    # Release when a PR was merged into main (pull_request closed+merged) OR on a
+    # direct push to main (the merge commit itself). The checkout below uses ref: main,
+    # so on a push event it tests the post-merge main (which contains the fix).
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     env:
       REPO_NAME: obsidian-timestamp-utility
