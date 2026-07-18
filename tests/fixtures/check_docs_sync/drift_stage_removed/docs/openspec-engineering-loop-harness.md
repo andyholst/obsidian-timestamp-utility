@@ -8,7 +8,7 @@
 > 2. **Harness engineering** — the Python "agentics" pipeline (`agents/agentics/`) and
 >    the deterministic merge floor that writes your `src/main.ts` / `src/__tests__/main.test.ts`.
 > 3. **Loop engineering** — the bounded self‑correcting build→test→fix loop and the
->    durable behaviours **B1–B30** that the loop must always honour.
+>    durable behaviours **B1–B32** that the loop must always honour.
 >
 > It also documents the **file structure**, every file that creates the harness's
 > behaviour, and a **how‑to‑use** walkthrough for authoring a new feature.
@@ -21,7 +21,7 @@ at repo root, the previous `docs/openspec-loop-harness-guide.md`) are historical
 ## 0. Fundamentals — what "harness" and "loop" engineering mean
 
 Before the technical detail, understand the two disciplines this whole system is built on.
-Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B30) is just a concrete
+Everything below (OpenSpec, the Python pipeline, the Makefile, B1–B32) is just a concrete
 implementation of these two ideas. If you internalise this section, the rest of the document
 reads as "here is *how* we do harness + loop engineering in this repo."
 
@@ -91,7 +91,7 @@ A well‑engineered loop has four parts:
    a loop with no escalation hides real defects.
 
 The loop is also where **durability** lives: the invariants that must hold on *every* pass
-(B1–B30) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
+(B1–B32) — a permanent regression e2e that outlives every feature (B1–B6), the no‑commit/no‑push
 gate (B4/B14), the delivery step that moves verified code out of the worktree onto the branch
 (B12). These are the loop's "laws of physics": conditions that never regress no matter how many
 times you go round.
@@ -105,7 +105,7 @@ gate is green, then stop."
 | Discipline | Job | Answers the question | In this repo |
 |-----------|-----|----------------------|--------------|
 | **Harness engineering** | *Constrain* the generator into a verifiable shape | "How do I make one generation trustworthy?" | OpenSpec contract as source of truth + `CodeIntegratorAgent` deterministic merge floor + omission guard + B9 perms + git‑HEAD restore |
-| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B30 + delivery step B12 |
+| **Loop engineering** | *Correct* the generator across attempts until an objective gate passes | "How do I make the system converge on correct, and know when to stop?" | `make build-app`/`make test-app` gate + spec‑first self‑correct loop (bounded ~5) + durable behaviours B1–B32 + delivery step B12 |
 
 The harness is the **floor** (nothing worse than this can be written); the loop is the **ratchet**
 (each pass can only move toward green, and the invariants never slip back). The rest of this
@@ -148,7 +148,7 @@ Three non‑negotiable principles:
 
 ```
 obsidian-timestamp-utility/
-├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B30 summary
+├── AGENTS.md                         # Repo‑level authority: phase flow + B1–B32 summary
 ├── Makefile                          # ALL execution entry points (docker compose only, no Dagger)
 ├── docker-compose-files/
 │   ├── agents.yaml                   # agentics / unit‑test‑agents / integration‑test‑agents services
@@ -583,7 +583,7 @@ reviewer engagement, corrections land as normal commits, never squashed).
 
 ---
 
-## 6. Durable behaviours B1–B30 (must always hold, never regress)
+## 6. Durable behaviours B1–B32 (must always hold, never regress)
 
 | ID | Behaviour |
 |----|-----------|
@@ -616,6 +616,9 @@ reviewer engagement, corrections land as normal commits, never squashed).
 
 | **B29** | **TWO‑WAY PR INTERACTION — COMMENT THE FIX + COMMIT ON GREEN GATE.** Extends B28 so a human reviewer can resolve threads. (1) **B29a Comment the fix:** after applying a code fix for a PR comment/review thread, post a PR comment (`make pr-comment BRANCH=<b> BODY=<text>` → `scripts/pr_comment.sh` → `gh pr comment`) summarizing the fix and linking the fixing sha (e.g. `Fixed in <sha>: <summary> — resolves <comment>`). (2) **B29b Commit on green gate (no squash):** when resolving an open PR's comments, run `make loop-harness` (B20 pre‑flight); when GREEN commit the fix(es) as **NORMAL (non‑squashed) Conventional commits** and push the PR branch normally (no `--force`, no squash). B28a still forbids squashing an engaged PR. (3) **B29c Never self‑resolve/approve:** the agent posts the fix comment and leaves the thread for the human participant; it does NOT resolve the reviewer's thread or approve its own PR. |
 | **B30** | **NEVER REVERT — SQUASH ONLY PRE‑PR.** Standing git‑history rule (user correction). (1) **B30a No revert ever:** the agent MUST NOT run `git revert`/`reset`/`rebase -i` (squash/fixup) or any history‑rewriting command on ANY branch, especially a PR branch — corrections are ALWAYS a NEW forward NORMAL (non‑squashed) commit, never an undo. (2) **B30b Squash pre‑PR only:** `squash-commits`/`loop-finish`/`openspec-redeliver` may squash ONLY while the branch is local + not yet an open PR; the Makefile `squash-commits` guard now refuses (fail‑closed) when `gh pr view` shows an open PR for the branch OR the branch tracks a pushed remote (once pushed, squash would rewrite public history — extends B28a from "engaged" to "any open/pushed PR"). (3) **B30c Red gate → forward fix:** a RED `loop-harness` after push is fixed with a new NORMAL forward commit (+ B29a PR comment if resolving a review thread) — never a revert/rewrite. (4) **B30d Explicit override:** `make squash-commits ALLOW_SQUASH=1` lets the human deliberately bypass the guard (loud WARNING printed); OFF by default, never bypasses B30a. |
+---
+
+| **B32** | **`loop-final` — REVIEW‑APPROVED SQUASH + CHANGELOG + FORCE‑PUSH.** The ONE sanctioned exit from B28a/B30b (B31 = the concurrent `make-always-background` change / PR #58). The default (no approval) STANDS: the agent never squashes/force‑pushes an open PR on its own. Once a human REVIEWS + EXPLICITLY APPROVES the PR (a phrase such as "PR looks great" / "looks good" / "approved to finalize"), the agent runs `make loop-final BRANCH=<feat/...> APPROVED=1`, which: (1) **B32a Human‑approval gate:** fails closed unless `APPROVED=1` — the agent sets it ONLY in direct response to a human approval phrase, never in automation. (2) **B32b Fresh green loop‑harness first:** runs a FRESH `make loop-harness` and ABORTS (no squash, no force‑push) if any stage is not green — history is NEVER rewritten on a red gate (B30c still holds). (3) **B32c Squash + changelog on green:** `squash-commits ALLOW_SQUASH=1` (the B30d sanctioned override) → `changelog` → `bump-from-changelog` → `changelog-format`, regenerating the CHANGELOG from the single squashed typed commit. (4) **B32d `--force-with-lease` feature branch only:** refuses `main`/`origin/main`; force is `--force-with-lease` only. (5) **B32e B30a stays absolute:** `git revert` is still never allowed — `loop-final` is a forward finalisation, not a revert. Rationale: the reviewer needs a stable incremental diff DURING review (B28a/B30b); once approved, the owner wants tidy single‑commit history for merge, and `loop-final` is the human‑gated, gate‑verified bridge between those states. |
 ---
 
 ## 7. How to use it (authoring a new feature)
@@ -779,7 +782,7 @@ This file, `AGENTS.md`, and `hermes/skills/openspec-loop-harness.md` are the **s
 truth**. When you change a behaviour, constraint, command, or pitfall in **any one** of them,
 mirror it in the **other two** before considering the change done:
 
-- Repo authority: `AGENTS.md` (phase flow + B1–B30 summary).
+- Repo authority: `AGENTS.md` (phase flow + B1–B32 summary).
 - Skill mirror: `hermes/skills/openspec-loop-harness.md` (operator‑level detail + pitfalls).
 - This guide: `docs/openspec-engineering-loop-harness.md` (human‑readable technical reference).
 

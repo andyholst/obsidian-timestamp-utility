@@ -102,7 +102,7 @@ DOCKER_SOCK := $(shell \
         wt-create openspec-flow openspec-redeliver \
         squash-commits \
         squash-commits bump-version release-notes tag-release loop-release check-released release bump-local release-prep \
-        lint-commits install-git-hooks release-flow
+        lint-commits install-git-hooks release-flow loop-final
 
 .DEFAULT_GOAL := help
 
@@ -294,17 +294,16 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #        7. secret-scan-tests  (loop-secret-scan-tests) -- secret-scanner pytest suite, containerized (B9), real gitleaks, fail-closed
 #           (the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop)
 #        8. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
-#      B8 durable-behaviour range: B1-B30 (the loop's "laws of physics"; see AGENTS.md). The
-#      final check-docs-sync stage FAILS if any sync doc drifts on stage order / loop-ts-floor / B-range.
+#      B8 durable-behaviour range: B1-B32 (the loop's "laws of physics"; see AGENTS.md). The
 #      Canonical stage order (B8 source of truth):
 #        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync
-#      Durable behaviours span B1-B30 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B30 range.
+#      Durable behaviours span B1-B32 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B32 range.
 #      `make check-docs-sync` is the FINAL loop stage (enforced, not advisory) so doc/loop drift
 #      fails the whole run (B8 enforced).
 #      Each stage fails the whole run if it fails (no silent green). No git commit/push
 #      (B4/B14). Optional post-check: `make loop-verify CHANGE=<name>` runs openspec
 #      validate + status for the active change.
-check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B30). Runs INSIDE unit-test-agents (no host python3).
+check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B32). Runs INSIDE unit-test-agents (no host python3).
 	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — in container ==="
 	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py")
 
@@ -625,7 +624,7 @@ squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed 
 	echo "COMMIT: $$AHEAD commits squashed. Changed files vs main:"; echo "$$FILES"; \
 	echo "COMMIT: asking Hermes (profile=project-manager) for a THOROUGH, TYPED Conventional message..."; \
 	hermes profile use project-manager >/dev/null 2>&1 || true; \
-	PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch being squashed into a single commit. RULE 1 (mandatory): the FIRST line is EXACTLY 'type(scope): subject' where type is ONE of: feat, fix, docs, refactor, perf, test, chore, build, ci, style, revert; scope is the area (e.g. loop, agentics, readme, release); subject is imperative, <=72 chars, no trailing period. RULE 2: then a blank line, then a THOROUGH human-readable body (wrapped ~72 cols) describing WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B30 durable behaviours), agentic pipeline changes, Makefile / docker-compose / Containerfile changes, OpenSpec specs merged, and any test/behaviour fixes. Be specific. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
+	PROMPT="You are writing ONE git commit message in Conventional Commits / Angular style for a branch being squashed into a single commit. RULE 1 (mandatory): the FIRST line is EXACTLY 'type(scope): subject' where type is ONE of: feat, fix, docs, refactor, perf, test, chore, build, ci, style, revert; scope is the area (e.g. loop, agentics, readme, release); subject is imperative, <=72 chars, no trailing period. RULE 2: then a blank line, then a THOROUGH human-readable body (wrapped ~72 cols) describing WHAT the changed code now does and WHY, grounded in the actual files below -- not meta commentary about the commit command. Cover substantive areas: the OpenSpec loop-harness engineering (deterministic code_integrator floor, B1-B31 durable behaviours), agentic pipeline changes, Makefile / docker-compose / Containerfile changes, OpenSpec specs merged, and any test/behaviour fixes. Be specific. Output ONLY the raw commit message (title + blank + body), no code fences, no preamble. CHANGED FILES vs main:$$(printf '\n%s' $$FILES) DIFF STAT vs main:$$(printf '\n%s' $$STAT)"; \
 	MSG=$$(hermes -z "$$PROMPT" 2>/dev/null); \
 	if [ -z "$$MSG" ]; then echo "COMMIT: Hermes returned no message -- aborting (no empty commit)."; git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; fi; \
 	FIRST=$$(printf '%s' "$$MSG" | head -1); \
@@ -640,6 +639,35 @@ squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed 
 		git reset --quit $$MAIN >/dev/null 2>&1 || true; exit 1; \
 	fi; \
 	git commit -m "$$MSG" && echo "COMMIT: created one TYPED Conventional commit (commitlint-passed, not pushed -- B14). Review with 'git show'."
+
+# ---- loop-final: review-approved squash + changelog + force-push (B32) ----
+#
+# B32 (loop-final-reviewed-squash): the ONLY sanctioned path that squashes + force-pushes an
+# already-open PR. It is gated on an EXPLICIT human approval and a FRESH green loop-harness:
+#   1. APPROVED=1 MUST be set (the agent sets it ONLY after a human approval phrase such as
+#      "PR looks great" / "looks good" / "approved to finalize"). Without it -> fail closed.
+#   2. BRANCH=<feat/...> MUST be given and MUST NOT be main/origin/main.
+#   3. A FRESH `make loop-harness` runs FIRST and MUST be green -- history is NEVER rewritten
+#      on a red gate.
+#   4. On green: squash-commits (via the B30d ALLOW_SQUASH=1 sanctioned override) -> changelog
+#      -> bump-from-changelog -> changelog-format.
+#   5. `git push --force-with-lease` the feature branch ONLY. B30a stays absolute (no git revert).
+loop-final: ## B32: review-approved finalisation of an OPEN PR: fresh loop-harness (green) -> squash -> changelog -> force-with-lease push the feature branch. Requires APPROVED=1 + BRANCH=<feat/...>. Refuses main.
+	@test "$$(echo $${APPROVED:-0})" = "1" || { echo "LOOP-FINAL: FAIL-CLOSED -- APPROVED=1 required (set ONLY after an explicit human PR approval). Aborting: no squash, no force-push."; exit 1; }
+	@test -n "$(BRANCH)" || { echo "LOOP-FINAL: ERROR -- BRANCH=<feat/...> required."; exit 1; }
+	@if [ "$(BRANCH)" = "main" ] || [ "$(BRANCH)" = "origin/main" ]; then echo "LOOP-FINAL: REFUSING to finalise/force-push main."; exit 1; fi
+	@CUR=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
+	if [ "$$CUR" != "$(BRANCH)" ]; then echo "LOOP-FINAL: ERROR -- checked-out branch '$$CUR' != BRANCH '$(BRANCH)'. Checkout the feature branch first."; exit 1; fi
+	@echo "=== LOOP-FINAL (B32): human-approved. Running FRESH loop-harness before any history rewrite ==="
+	@$(MAKE) loop-harness || { echo "LOOP-FINAL: loop-harness RED -- aborting. No squash, no force-push (B30c: forward fix a red gate, never rewrite)."; exit 1; }
+	@echo "=== LOOP-FINAL: loop-harness GREEN -- squashing (B30d sanctioned override) + regenerating changelog ==="
+	@$(MAKE) squash-commits ALLOW_SQUASH=1
+	@$(MAKE) changelog
+	@$(MAKE) bump-from-changelog
+	@$(MAKE) changelog-format
+	@echo "=== LOOP-FINAL: force-pushing $(BRANCH) with --force-with-lease (feature branch only; never main) ==="
+	@git push --force-with-lease origin $(BRANCH)
+	@echo "=== LOOP-FINAL COMPLETE (B32): squashed typed commit + regenerated CHANGELOG + force-with-lease push to $(BRANCH). B30a still absolute (no revert). ==="
 
 # ---- Commit linting gate (enhance-squash-commits) ----
 #

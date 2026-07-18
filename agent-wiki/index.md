@@ -9,6 +9,7 @@ This wiki documents work done on OpenSpec changes for the **obsidian-timestamp-u
 - Weekly summaries live in `weekly-summaries/`.
 
 ## Change Entries
+- [2026-07-18-make-always-background](2026-07-18-make-always-background.md) — Summary
 - [2026-07-17-pr-review-no-squash](2026-07-17-pr-review-no-squash.md) — Summary
 - [2026-07-17-uuid-modal-agentic-generation](2026-07-17-uuid-modal-agentic-generation.md) — Summary
 - [2026-07-16-loop-harness-secret-scan](2026-07-16-loop-harness-secret-scan.md) — Summary
