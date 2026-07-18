@@ -62,24 +62,9 @@ if [ "$CURRENT_BRANCH" != "main" ] && [ "$DRY_RUN" != "1" ]; then
   exit 0
 fi
 
-# --- build the plugin (main.ts -> dist/main.js) ---
-# `make release` runs `build-app` (docker) first, but the docker mount can leave
-# dist/main.js absent in CI. To be robust, always build via npm run build here when
-# node_modules is present (the release.yml workflow runs `npm ci` beforehand). Notes
-# generation (below) does NOT depend on the build succeeding.
-if [ -d node_modules ] && command -v npm >/dev/null 2>&1; then
-  echo "release.sh: building plugin via npm run build..." >&2
-  npm run build 2>&1 || echo "release.sh: WARNING npm run build failed." >&2
-else
-  echo "release.sh: node_modules/npm unavailable — skipping npm build." >&2
-fi
-if [ ! -f dist/main.js ]; then
-  echo "Error: dist/main.js missing after build." >&2
-  exit 1
-fi
-
-# --- generate release notes from the matching CHANGELOG section ---
-# (Done unconditionally — this is the artifact the publish step requires.)
+# --- generate release notes from the matching CHANGELOG section (ALWAYS, first) ---
+# Notes come from CHANGELOG.md, NOT from the build, so this must run unconditionally
+# and never be blocked by a build failure. The publish guard only requires this file.
 CHANGELOG_FILE="$PROJECT_ROOT/CHANGELOG.md"
 RELEASE_NOTES_FILE="$PROJECT_ROOT/release_notes.md"
 
@@ -88,13 +73,10 @@ if [ ! -f "$CHANGELOG_FILE" ]; then
   exit 1
 fi
 
-# Extract the first "## <version>" section whose version equals $TAG.
-# Prints from that heading up to (but not including) the next "## " heading.
 RELEASE_NOTES="$(python3 - "$CHANGELOG_FILE" "$TAG" <<'PY'
 import sys, re
 path, tag = sys.argv[1], sys.argv[2]
 text = open(path, encoding="utf-8").read()
-# find all "## x.y.z" headings with their positions
 heads = [(m.start(), m.group(1)) for m in re.finditer(r'^##\s+([0-9]+\.[0-9]+\.[0-9]+)\s*$', text, re.M)]
 if not heads:
     sys.exit("Error: no version sections in CHANGELOG.md")
@@ -116,13 +98,28 @@ fi
 
 mkdir -p "$PROJECT_ROOT/release"
 printf '%s\n' "$RELEASE_NOTES" > "$RELEASE_NOTES_FILE"
+echo "release.sh: wrote $RELEASE_NOTES_FILE ($(wc -c < "$RELEASE_NOTES_FILE") bytes)"
 
-# --- assemble release files ---
-cp dist/main.js              "$PROJECT_ROOT/release/main.js"
+# --- build the plugin (main.ts -> dist/main.js) for the zip asset (best-effort) ---
+if [ -d node_modules ] && command -v npm >/dev/null 2>&1; then
+  echo "release.sh: building plugin via npm run build..." >&2
+  npm run build 2>&1 || echo "release.sh: WARNING npm run build failed; zip may lack main.js." >&2
+else
+  echo "release.sh: node_modules/npm unavailable — skipping npm build." >&2
+fi
+
+# Assemble release files. main.js is optional (build may have failed); the publish
+# guard only requires release_notes.md, which is already written above.
+mkdir -p "$PROJECT_ROOT/release"
 cp manifest.json            "$PROJECT_ROOT/release/manifest.json"
 cp README.md                "$PROJECT_ROOT/release/README.md" 2>/dev/null || true
 cp CHANGELOG.md             "$PROJECT_ROOT/release/CHANGELOG.md"
 cp "$RELEASE_NOTES_FILE"    "$PROJECT_ROOT/release/release_notes.md"
+if [ -f dist/main.js ]; then
+  cp dist/main.js           "$PROJECT_ROOT/release/main.js"
+else
+  echo "release.sh: WARNING dist/main.js absent — release/ will omit main.js." >&2
+fi
 
 # --- zip (all members at root, consistent layout) ---
 cd "$PROJECT_ROOT/release"
