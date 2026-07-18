@@ -69,7 +69,7 @@ every spec requirement/scenario); (3) **diagnose & correct by fixing the SOURCE 
 symptom** — edit the OpenSpec spec/contract, restore the generated files to a clean baseline, and
 re-run; NEVER hand-edit generated TS (B11), and each pass must try a *different* correction; and
 (4) **terminate** — a bounded ~5 attempts with a clear escalation (fix the Python floor as a last
-resort, B13). The durable behaviours B1–B30 are the loop's "laws of physics" — invariants that
+resort, B13). The durable behaviours B1–B32 are the loop's "laws of physics" — invariants that
 never regress on any pass (permanent e2e B1–B6, no-commit/no-push gate B4/B14, delivery step B12).
 
 **How they fit:** the harness is the **floor** (nothing worse than the contract can ever be
@@ -664,8 +664,34 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
           It does NOT bypass B30a (revert is never allowed). Use only when the user explicitly asks.
      B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
      `docs/openspec-engineering-loop-harness.md`.
+  - **(B32) `loop-final` — REVIEW-APPROVED SQUASH + CHANGELOG + FORCE-PUSH (the sanctioned exit from
+     B28a/B30b).** B28a/B30b forbid the agent from squashing/force-pushing an open PR *on its own
+     initiative*; that default STANDS. B32 adds the ONE sanctioned exception: once a human has
+     REVIEWED the open PR and EXPLICITLY APPROVES it (an approval phrase such as "PR looks great",
+     "looks good", or "approved to finalize"), the agent MAY finalise it with `make loop-final
+     BRANCH=<feat/...> APPROVED=1`, which:
+       1. **(B32a) Human-approval gate.** Fails closed unless `APPROVED=1` is set. The agent sets it
+          ONLY in direct response to a human approval phrase — never in automation, never on its own.
+       2. **(B32b) Fresh green loop-harness BEFORE any rewrite.** `loop-final` runs a FRESH
+          `make loop-harness` FIRST and ABORTS (no squash, no force-push) if any stage is not green.
+          History is NEVER rewritten on a red gate (B30c still holds: a red pushed branch gets a
+          forward fix, not a rewrite).
+       3. **(B32c) Squash + changelog on green.** On green it runs `squash-commits` (via the B30d
+          `ALLOW_SQUASH=1` sanctioned override) → `changelog` → `bump-from-changelog` →
+          `changelog-format`, so the CHANGELOG is regenerated from the single squashed typed commit.
+       4. **(B32d) `--force-with-lease` to the feature branch ONLY.** The force-push targets the
+          feature branch and REFUSES `main`/`origin/main`. Force is `--force-with-lease` only.
+       5. **(B32e) B30a stays absolute.** `git revert` (and any "undo committed work" rewrite outside
+          this approved squash) is STILL never allowed. `loop-final` is a forward finalisation, not a
+          revert.
+     Rationale: while review is in progress the reviewer needs a stable incremental diff (B28a/B30b);
+     once they have approved, the owner wants tidy single-commit history for merge. `loop-final` is
+     the human-gated, gate-verified bridge between those two states. (B31 is the concurrent
+     `make-always-background` change / PR #58; this behaviour is B32.)
+     B8 sync: mirrored in `hermes/skills/openspec-loop-harness.md` and
+     `docs/openspec-engineering-loop-harness.md`.
   - **(B7.1) The deterministic floor runs in EVERY mode (incl. fast).** `route_hitl` in
-    `composable_workflows.py` previously returned `output_result` when `TEST_FAST_MODE=1` (set by
+     `composable_workflows.py` previously returned `output_result` when `TEST_FAST_MODE=1` (set by
     `tests/integration/conftest.py` to skip the npm-test phase), which bypassed `integration_testing`
     — the ONLY sub-graph containing `code_integrator`. That left the spec contract uninjected and the
     raw LLM output in `main.ts` (a B10/B11 violation). The greetings e2e exposed it: uuid passed only
@@ -760,7 +786,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   1. **`Makefile`** — the executable gates + canonical stage-order comment; `make loop-harness`
      runs `loop-collect` → `loop-unit` → `loop-ts-floor` → `loop-unit-real` → `loop-e2e`
            → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync` (final).
-  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B30 durable behaviours.
+  2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B32 durable behaviours.
   3. **`hermes/skills/openspec-loop-harness.md`** — the loadable skill mirror of AGENTS.md.
   4. **`docs/openspec-engineering-loop-harness.md`** — the human-readable technical reference
      (named by B8 itself as authoritative; MUST be kept in the sync set, not treated as a 4th
@@ -773,7 +799,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   Before claiming "the loop is green / aligned", run `make check-docs-sync` (the final loop stage)
   and confirm it PASSES: all sync docs agree on the 10-stage order (loop-collect → loop-ts-floor →
   loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B30 behaviours, and
+  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B32 behaviours, and
   the live-test skip rule (`OLLAMA_HOST` only, not `GITHUB_TOKEN`). A change is NOT done while any
   of the sync docs disagree.
 - The harness is the OpenSpec change: `proposal.md` defines *why*, `specs/**` defines *what must
