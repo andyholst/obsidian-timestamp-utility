@@ -9,3 +9,13 @@ services:
     - ../:/app
     working_dir: /app
     command: ["pip-compile", "docker-files/pip-requirements/requirements.in", "-o", "agents/agentics/requirements.txt"]
+
+# Rootless nerdctl CNI fix: unique default-network subnet (see agents.yaml note).
+# 10.87.0.0/24 is verified free on this host.
+networks:
+  default:
+    name: otu-pip-default
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.87.0.0/24

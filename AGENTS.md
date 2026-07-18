@@ -402,7 +402,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
  coordinate `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not
  skip) — root resolution is the actual bug to fix, not a skip guard.
   - **(B20) NEVER declare a change "done" without running the loop gate first — this is a hard pre-flight, not optional.** Before reporting any OpenSpec change as complete (or before claiming "the harness is green / aligned / fixed"), the agent MUST execute the loop gate and report its real output:
-      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
+      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
          **HOW TO RUN (never make excuses):** long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the **REAL HOST** (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live Ollama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will print `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it. **Never say "can't run from here" / "environment absent" — the host runs `make` for you.** Drive verification through `make` with REAL output, always.
       2. **If the full `make loop-harness` cannot complete in the session** (e.g. an explicit
          timeout, or a stage is deliberately disabled via env), the agent MUST STILL run the
@@ -790,7 +790,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   stage order, the `loop-ts-floor` guard, or the B-behaviour range:
   1. **`Makefile`** — the executable gates + canonical stage-order comment; `make loop-harness`
      runs `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real` → `loop-e2e`
-           → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync` (final).
+           → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync` (final).
   2. **`AGENTS.md`** — this file: the authoritative narrative + the B1–B32 durable behaviours.
   3. **`hermes/skills/openspec-loop-harness.md`** — the loadable skill mirror of AGENTS.md.
   4. **`docs/openspec-engineering-loop-harness.md`** — the human-readable technical reference
@@ -802,11 +802,18 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
      + the 3 standing e2e gates (`test_ticket20_*` / `test_ticket22_*` / `test_greetings_*`, all
      marked `@pytest.mark.e2e`) — the runtime proof the loop works.
   Before claiming "the loop is green / aligned", run `make check-docs-sync` (the final loop stage)
-  and confirm it PASSES: all sync docs agree on the 10-stage order (loop-collect → loop-ts-floor →
+  and confirm it PASSES: all sync docs agree on the 11-stage order (loop-collect → loop-ts-floor →
   loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B32 behaviours, and
+  loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B32 behaviours, and
   the live-test skip rule (`OLLAMA_HOST` only, not `GITHUB_TOKEN`). A change is NOT done while any
   of the sync docs disagree.
+  - **(B17a) ROOT `tests/` FOLDER IS PART OF THE LOOP.** Beyond `agents/agentics/tests/` (unit /
+    integration / e2e) and `tests/test_secret_scanner*.py`, the loop gate ALSO exercises the
+    repository-root `tests/` folder through the `loop-release-tests` stage (runs
+    `tests/test_release_pipeline_dryrun.py` and any `tests/test_*.py` dry-run harnesses inside the
+    `unit-test-agents` container, with `DRY_RUN=1` so no GitHub/network call is made). The
+    `check-docs-sync` gate and the canonical stage order MUST list `loop-release-tests` so the root
+    `tests/` folder is never silently excluded from the gate.
 - The harness is the OpenSpec change: `proposal.md` defines *why*, `specs/**` defines *what must
   hold*, `tasks.md` defines *the steps to run*. The agentic pipeline turns tasks into code+tests.
 - Verification is the gate that defines "done": `make build-app` + `make test-app` + spec walk-through.

@@ -158,11 +158,10 @@ bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchore
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py") || echo "bump-from-changelog skipped"
 	@$(MAKE) changelog-format
 
-release: clean build-app ## Create release + ZIP check
-	@if [ -z "$(TAG)" ]; then echo "Error: TAG could not be determined from package.json" >&2; exit 1; fi
-	@mkdir -p release
-	@cp -r dist manifest.json release/ 2>/dev/null || true
-	@cd release && zip -r ../$(REPO_NAME)-$(TAG).zip . >/dev/null
+release: clean build-app ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
+	@if [ -z "$(TAG)" ]; then TAG=$$(node -p "require('./package.json').version"); fi; \
+	 echo "=== release: building artifacts via scripts/release.sh (TAG=$$TAG) ==="; \
+	 TAG="$$TAG" REPO_NAME="$(REPO_NAME)" DRY_RUN="$(DRY_RUN)" bash scripts/release.sh
 	@echo "Release zip: $(REPO_NAME)-$(TAG).zip"
 
 lint-python: ## Run ruff linting on Python code via compose
@@ -296,7 +295,7 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #        8. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
 #      B8 durable-behaviour range: B1-B32 (the loop's "laws of physics"; see AGENTS.md). The
 #      Canonical stage order (B8 source of truth):
-#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync
+#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-release-tests -> loop-secret-scan-tests -> check-docs-sync
 #      Durable behaviours span B1-B32 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B32 range.
 #      `make check-docs-sync` is the FINAL loop stage (enforced, not advisory) so doc/loop drift
 #      fails the whole run (B8 enforced).
@@ -339,13 +338,17 @@ loop-test-app: ## Loop gate 6: run jest on the plugin
 	@echo "=== LOOP-HARNESS [6/6] test-app ==="
 	@$(MAKE) test-app
 
+loop-release-tests: b9-perms ## Loop gate 6.5: release-pipeline + README-sync dry-run tests (root tests/test_*.py). Proves the GitHub release body + zip are built correctly AND the README stays in sync with package.json/CHANGELOG/commands — WITHOUT calling GitHub. Runs INSIDE unit-test-agents.
+	@echo "=== LOOP-HARNESS [6.5] release-pipeline + README-sync dry-run tests ==="
+	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e DRY_RUN=1 -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && DRY_RUN=1 python -m pytest tests/test_release_pipeline_dryrun.py tests/test_readme_sync.py tests/test_release_notes_bump.py -v")
+
 loop-harness: ## Full loop-harness: SINGLE source of truth = scripts/run-loop-harness.sh.
 	@# This target delegates to the script so the per-stage timeouts + docker-kill
 	@# logic are ALWAYS applied (never a bare `make` chain that can hang forever).
 	@# The script calls back into these same `loop-*` targets, so what runs is
 	@# identical whether you invoke `make loop-harness` or the script directly.
 	@bash scripts/run-loop-harness.sh
-	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> secret-scan-tests -> check-docs-sync) ==="
+	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> release-tests -> secret-scan-tests -> check-docs-sync) ==="
 
 loop-trigger: ## B20 mandatory pre-flight: run the loop gate (scripts/run-loop-harness.sh) before claiming done
 	@bash scripts/run-loop-harness.sh

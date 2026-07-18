@@ -21,3 +21,13 @@ services:
       - GITLEAKS_BIN=/usr/local/bin/gitleaks
       - PYTHONPATH=/src/scripts
     network_mode: "host"
+
+# Rootless nerdctl CNI fix: unique default-network subnet (see agents.yaml note).
+# 10.86.0.0/24 is verified free on this host.
+networks:
+  default:
+    name: otu-gitleaks-tests-default
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.86.0.0/24

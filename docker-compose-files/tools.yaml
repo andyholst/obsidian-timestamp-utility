@@ -12,3 +12,13 @@ services:
     environment:
     - TAG=${TAG:-v0.1.0}
     - REPO_NAME=${REPO_NAME:-obsidian-timestamp-utility}
+
+# Rootless nerdctl CNI fix: unique default-network subnet (see agents.yaml note).
+# 10.88.0.0/24 is verified free on this host.
+networks:
+  default:
+    name: otu-tools-default
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.88.0.0/24

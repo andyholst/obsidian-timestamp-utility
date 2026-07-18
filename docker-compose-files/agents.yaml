@@ -62,7 +62,7 @@ services:
     # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:
       - host.docker.internal:host-gateway
-    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/unit/ -vv -s --tb=long $${TEST_FILTER}\""]
+    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/unit/ -vv -s --tb=long ${TEST_FILTER}\""]
     network_mode: host
 
   integration-test-agents:
@@ -100,6 +100,18 @@ services:
     # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:
       - host.docker.internal:host-gateway
-    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/integration/ -vv -s --tb=long $${TEST_FILTER}\""]
+    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/integration/ -vv -s --tb=long ${TEST_FILTER}\""]
     network_mode: host
 
+# Rootless nerdctl CNI fix: pin a UNIQUE default-network subnet per compose file so
+# `docker compose run` does not collide with other projects' 10.4.0.0/24 default bridge
+# (which caused "subnet 10.4.0.0/24 overlaps" and aborted the loop harness). Services here
+# use network_mode: host, but nerdctl still provisions the project default bridge, so the
+# unique subnet is required. 10.89.0.0/24 is verified free on this host.
+networks:
+  default:
+    name: otu-agents-default
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24

@@ -2,7 +2,64 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## 0.4.16
+### 🐞 Bug Fixes
+
+- **fix(release): repair bump-from-changelog and release dry-run flow**
+  - The release automation broke because the bump logic, the changelog
+  - merge, and the release workflow drifted out of sync and could wipe
+  - uncommitted fixes during verification. This change repairs the
+  - release pipeline end-to-end and locks the behaviour behind real tests.
+  - OpenSpec / loop-harness (B8 sync):
+  - AGENTS.md, docs/openspec-engineering-loop-harness.md, and
+  - hermes/skills/openspec-loop-harness.md are re-aligned on the
+  - 10-stage loop order and the B1-B31 durable behaviours so the
+  - final check-docs-sync gate stays green.
+  - Makefile and scripts/run-loop-harness.sh updated to keep the
+  - canonical stage list (loop-collect -> loop-ts-floor -> loop-unit
+  -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app
+  -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync).
+  - Release pipeline fixes:
+  - scripts/release.sh rewritten to follow the B22 local-only order:
+  - squash-commits (typed, commitlint-gated) -> bump-local (Obsidian
+  - way: package.json + manifest.json + versions.json) -> changelog
+  -> release-notes. No push, no squash once a PR is under review.
+  - scripts/bump_from_changelog.py corrected to derive the next version
+  - from the latest released tag (max of GitHub-released tags and
+  - committed package/versions at HEAD, plus one patch), ignoring
+  - stray local working tags, so a re-run is idempotent and never
+  - bumps an already-released version.
+  - scripts/update-release-notes.py fixed to merge deduped changelog
+  - entries against the committed git HEAD and refresh the README
+  - release-notes block deterministically.
+  - .github/workflows/release.yml adjusted to match the local
+  - prepare/staging split now that CI only cuts the GitHub release on
+  - merge to main.
+  - README.md + package-lock.json refreshed to reflect the bumped
+  - release surface.
+  - Tests / regression guards (B23 — fixes survive any tree reset):
+  - tests/test_release_pipeline_dryrun.py: full dry-run of the
+  - release pipeline that asserts no commit/push happens and the
+  - version advances by exactly one patch from a released baseline.
+  - tests/test_release_notes_bump.py: asserts bump + changelog merge
+  - produce the correct next version and dedup sections.
+  - tests/test_readme_sync.py: asserts README release-notes block
+  - matches the generated changelog.
+  - tests/fixtures/check_docs_sync/*: in_sync / in_sync_ascii /
+  - in_sync_en_dash / drift_b_range_low / drift_reorder /
+  - drift_stage_removed fixture sets proving check-docs-sync passes
+  - on valid docs and fails closed on every drift class, so the
+  - B8 sync can never regress silently.
+  - Archived as openspec/changes/archive/2026-07-18-fix-release-pipeline.
+
+### 🛠️ Maintenance
+
+- **chore(release): 0.4.15 — changelog + version bump (#60)**
+  - Adds the 0.4.15 changelog release section and bumps package.json/manifest.json/
+  - versions.json + the TS test version literal to 0.4.15. Release tag v0.4.15.
+
 ## 0.4.15
+
 ### ✨ New Features
 
 - **feat(loop): B26 — agent may commit/push own branch after loop gate is green; B12 worktree-PR delivery (#55)**
@@ -156,6 +213,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.14
 
 
+
 ### ✨ New Features
 
 - **feat(pr): enforce no-squash and no-revert governance on open PRs**
@@ -263,6 +321,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.13
 
 
+
 ### ✨ New Features
 
 - **feat(loop): add openspec intake gate, lint hook, docs-sync guards (#53)**
@@ -363,6 +422,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - xoxb-…) appear in tests; no real keys are committed.
 
 ## 0.4.12
+
 
 
 ### ✨ New Features
@@ -477,6 +537,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.11
 
 
+
 ### ✨ New Features
 
 - **feat(loop): add commitlint-gated squash-commits and release automation**
@@ -538,6 +599,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.9
 
 
+
 ### ✨ New Features
 
 - **add task command to convert reminders to calendar tasks**
@@ -557,6 +619,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.8
 
 
+
 ### ✨ New Features
 
 - **refactored Makefile to run containerd**
@@ -572,6 +635,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **updated README.md file based on the new containerd bash wrapper script.**
 
 ## 0.4.7
+
 
 
 ### ✨ New Features
@@ -601,6 +665,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.6
 
 
+
 ### ✨ New Features
 
 - **added Code Extractor Agent**
@@ -617,6 +682,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.5
 
 
+
 ### ✨ New Features
 
 - **implement clarify ticket agent**
@@ -625,6 +691,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **TicketClarityAgent will set better conditions to generate TS code and tests for other agents.**
 
 ## 0.4.4
+
 
 
 ### ✨ New Features
@@ -638,11 +705,13 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.3
 
 
+
 ### ⚡ Performance Improvements
 
 - **added test coverage of the Obsidian plugin code**
 
 ## 0.4.2
+
 
 
 ### ✨ New Features
@@ -673,6 +742,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.4.1
 
 
+
 ### ✨ New Features
 
 - **implemented Ticket interpreter Node**
@@ -683,6 +753,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **updated the README.md file how to run the agents and test them.**
 
 ## 0.4.0
+
 
 
 ### ✨ New Features
@@ -701,12 +772,14 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.3.1
 
 
+
 ### 🐞 Bug Fixes
 
 - **aligned with modern Obsidian plugin standards**
 - **replaced assume what file you edit code with actual file you edit on code.**
 
 ## 0.3.0
+
 
 
 ### ✨ New Features
@@ -721,6 +794,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.2.0
 
 
+
 ### ✨ New Features
 
 - **add rename file with timestamp & heading**
@@ -731,6 +805,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **updated README.md file how to use the new rename command with timestamp & title as filename**
 
 ## 0.1.8
+
 
 
 ### 🐞 Bug Fixes
@@ -744,12 +819,14 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.1.7
 
 
+
 ### 🐞 Bug Fixes
 
 - **fixed automatic release for pr merge**
 - **simplified the release.sh to generate release notes based on CHANGELOG.md file**
 
 ## 0.1.6
+
 
 
 ### 🐞 Bug Fixes
@@ -761,12 +838,14 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.1.5
 
 
+
 ### 🐞 Bug Fixes
 
 - **did a tag release for Obsidian plugin release**
 - **the release script should work as supposed to**
 
 ## 0.1.4
+
 
 
 ### 🐞 Bug Fixes
@@ -777,11 +856,13 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 ## 0.1.3
 
 
+
 ### 🐞 Bug Fixes
 
 - **fixed proper version tagging to comply with Obsidian plugin release policy**
 
 ## 0.1.2
+
 
 
 ### 🐞 Bug Fixes
@@ -790,6 +871,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **bumped the version of the Timestamp Utility to be released for the Obsidian community**
 
 ## 0.1.1
+
 
 
 ### ✨ New Features
@@ -821,6 +903,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **added missings versions.json file for Obsidian plugin**
 
 ## 0.1.0
+
 
 
 ### ✨ New Features

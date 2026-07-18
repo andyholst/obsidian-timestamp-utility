@@ -209,6 +209,8 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
 `make phase7-archive` and the persistent harness
 `agents/agentics/tests/integration/test_change_driven_ts_generation_e2e.py`.
 
+- **(B31) MAKE-THROUGH-DOCKER IS ALWAYS A BACKGROUND PROCESS — NEVER THE FOREGROUND SANDBOX.** Every Makefile target that invokes a container runtime (any `docker`, `nerdctl`, or `*compose*` via `$(call docker_run, …)`) MUST run through the Hermes `terminal(background=true)` channel on the REAL HOST that owns the docker/nerdctl daemon + live Ollama. The foreground sandbox (`/workspace`) has no container runtime and MUST NOT be used for these targets — mandatory for ANY such target, both the long-running ones (run-agentics, build-app, test-app, loop-harness, loop-e2e, deliver-change, phase7-archive, release-flow) and the short ones (loop-collect, loop-ts-floor, loop-unit, test-agents-unit, test-agents-integration, verify-agentics-after-run). The foreground sandbox prints `docker: command not found` — EXPECTED, not a blocker; the agent routes to the host and never reports "can't run from here".
+
 - **(B1) Persistent E2E test per generated-TS change.** Every change that makes the pipeline
   generate TS code+tests MUST keep a runnable e2e test that reads THAT change's `tasks.md` and
   asserts the generated Modal is wired+integrated. The standing harness is
@@ -275,9 +277,9 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   `AGENTS.md`, `skill_view openspec-loop-harness` first. Never leave the two files describing
   different behaviour. The full B8 sync set (enforced by `make check-docs-sync`, the FINAL loop
   stage) also includes `Makefile`, `docs/openspec-engineering-loop-harness.md`, and
-  `scripts/run-loop-harness.sh` — all MUST agree on the 10-stage order (loop-collect → loop-ts-floor
+  `scripts/run-loop-harness.sh` — all MUST agree on the 11-stage order (loop-collect → loop-ts-floor
   → loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
-  loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B31 range; a drift
+  loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B31 range; a drift
   there fails the loop.
 - **(B9) Rootless nerdctl bind-mount permissions (READ + WRITE).** Execution is docker compose
   with **rootless nerdctl**, which remaps the container uid (1000) to the host **`other`** class.
