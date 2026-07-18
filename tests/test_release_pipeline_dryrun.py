@@ -61,6 +61,21 @@ def _copy_repo(work):
         shutil.rmtree(work)
     shutil.copytree(REPO_ROOT, work, ignore=shutil.ignore_patterns(
         ".git", "node_modules", "dist", "release", "__pycache__"))
+    # node_modules may live in the main worktree / parent repo rather than a linked
+    # worktree. Walk up from REPO_ROOT to find it, then SYMLINK it (preserves npm's
+    # internal package symlinks, which rollup needs to resolve its plugins). Mirrors
+    # CI where `npm ci` produces a real node_modules in the checkout.
+    nm_src = None
+    d = REPO_ROOT
+    while d and d != os.path.dirname(d):
+        cand = os.path.join(d, "node_modules")
+        if os.path.isdir(cand):
+            nm_src = cand
+            break
+        d = os.path.dirname(d)
+    nm_dst = work / "node_modules"
+    if nm_src and not nm_dst.exists():
+        os.symlink(nm_src, nm_dst)
 
 
 @pytest.mark.release_dryrun
@@ -73,7 +88,7 @@ def test_S1_notes_match_current_version_section(tmp_path):
     sections = _changelog_sections(work / "CHANGELOG.md")
     assert version in sections, f"no CHANGELOG section for current version {version}"
 
-    res = _run(["make", "release", f"REPO_NAME={REPO_NAME}", f"TAG={version}", "DRY_RUN=1"],
+    res = _run(["bash", "scripts/release.sh"],
                cwd=str(work), env={"DRY_RUN": "1", "TAG": version, "REPO_NAME": REPO_NAME})
     assert res.returncode == 0, f"make release failed:\n{res.stdout}\n{res.stderr}"
 
@@ -95,7 +110,7 @@ def test_S2_notes_nonempty_prevents_empty_body(tmp_path):
     work = tmp_path / "repo"
     _copy_repo(work)
     version = _current_version(str(work))
-    res = _run(["make", "release", f"REPO_NAME={REPO_NAME}", f"TAG={version}", "DRY_RUN=1"],
+    res = _run(["bash", "scripts/release.sh"],
                cwd=str(work), env={"DRY_RUN": "1", "TAG": version, "REPO_NAME": REPO_NAME})
     assert res.returncode == 0
     notes = work / "release" / "release_notes.md"
@@ -111,7 +126,7 @@ def test_S3_main_js_built_and_copied(tmp_path):
     work = tmp_path / "repo"
     _copy_repo(work)
     version = _current_version(str(work))
-    res = _run(["make", "release", f"REPO_NAME={REPO_NAME}", f"TAG={version}", "DRY_RUN=1"],
+    res = _run(["bash", "scripts/release.sh"],
                cwd=str(work), env={"DRY_RUN": "1", "TAG": version, "REPO_NAME": REPO_NAME})
     assert res.returncode == 0
     main_js = work / "release" / "main.js"
@@ -127,7 +142,7 @@ def test_S4_zip_contains_expected_members(tmp_path):
     work = tmp_path / "repo"
     _copy_repo(work)
     version = _current_version(str(work))
-    res = _run(["make", "release", f"REPO_NAME={REPO_NAME}", f"TAG={version}", "DRY_RUN=1"],
+    res = _run(["bash", "scripts/release.sh"],
                cwd=str(work), env={"DRY_RUN": "1", "TAG": version, "REPO_NAME": REPO_NAME})
     assert res.returncode == 0
     zip_path = work / f"{REPO_NAME}-{version}.zip"
@@ -146,7 +161,7 @@ def test_S5_dry_run_produces_artifacts_no_github_call(tmp_path, monkeypatch):
     work = tmp_path / "repo"
     _copy_repo(work)
     version = _current_version(str(work))
-    res = _run(["make", "release", f"REPO_NAME={REPO_NAME}", f"TAG={version}", "DRY_RUN=1"],
+    res = _run(["bash", "scripts/release.sh"],
                cwd=str(work), env={"DRY_RUN": "1", "TAG": version, "REPO_NAME": REPO_NAME})
     assert res.returncode == 0
     assert (work / "release" / "release_notes.md").exists()
@@ -165,7 +180,7 @@ def test_S7_published_body_matches_changelog_section(tmp_path):
     work = tmp_path / "repo"
     _copy_repo(work)
     version = _current_version(str(work))
-    res = _run(["make", "release", f"REPO_NAME={REPO_NAME}", f"TAG={version}", "DRY_RUN=1"],
+    res = _run(["bash", "scripts/release.sh"],
                cwd=str(work), env={"DRY_RUN": "1", "TAG": version, "REPO_NAME": REPO_NAME})
     assert res.returncode == 0
     notes_path = work / "release" / "release_notes.md"
