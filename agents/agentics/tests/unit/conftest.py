@@ -277,11 +277,4 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     )
 
 
-@pytest.fixture
-def mock_mcp_client():
-    from unittest.mock import AsyncMock, Mock
 
-    client = Mock()
-    client.get_npm_packages = AsyncMock(return_value=[])
-    client.list_packages = AsyncMock(return_value=[])
-    return client

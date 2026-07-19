@@ -70,11 +70,6 @@ class TestComposableWorkflowsArchitecture:
         for agent_name in expected_agents:
             assert agent_name in workflows.composer.agents
 
-    def test_no_mcp_tool_registration(self, workflows):
-        """Verify ComposableWorkflows registers no external MCP tools."""
-        # With MCP removed, the composer should NOT carry MCP-style tool names.
-        assert not any("mcp" in name.lower() for name in workflows.composer.tools)
-
     def test_workflow_creation(self, workflows):
         """Test that individual workflows are created correctly."""
         # Test issue processing workflow
@@ -227,18 +222,6 @@ class TestComposableWorkflowsArchitecture:
         # The workflow should be composed of multiple agents
         # This is a structural test - the actual composition happens in AgentComposer
         assert hasattr(issue_workflow, "invoke")  # Should be a Runnable
-
-    def test_no_mcp_tool_integration_in_workflows(self, workflows):
-        """Verify no external MCP tools are passed into workflow configs."""
-        with patch.object(workflows.composer, "create_workflow") as mock_create:
-            mock_create.return_value = Mock()
-
-            workflows._create_issue_processing_workflow()
-
-            call_args = mock_create.call_args
-            config = call_args[0][1]  # Second argument is config
-            assert "test_tool" not in config.tool_names
-            assert not any("mcp" in n.lower() for n in config.tool_names)
 
 
 class TestParallelProcessingEnhancement:

@@ -84,7 +84,7 @@ class TestLangChainBestPractices:
         # Then: The app integrates services at the workflow level (no MCP)
         app = AgenticsApp()
         assert hasattr(app, "service_manager")
-        # Tool integration is achieved via service clients (ollama/github),
+        # Tool integration is achieved via service clients (llama/github),
         # not a global mcp_tools list.
         assert not hasattr(app, "mcp_tools")
 

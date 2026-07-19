@@ -60,7 +60,7 @@ async def test_composer_state_toolagent_tools_e2e(
     assert os.path.exists(input_file)
 
 
-@pytest.mark.parametrize("model", ["sorc/qwen3.5-claude-4.6-opus:9b", "sorc/qwen3.5-claude-4.6-opus:9b"])
+@pytest.mark.parametrize("model", ["sorc/qwen3.6-35b-a3b", "sorc/qwen3.6-35b-a3b"])
 @pytest.mark.integration
 def test_config_driven_variations(model, dummy_state):
     config = AgenticsConfig(llama_code_model=model)

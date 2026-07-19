@@ -63,3 +63,6 @@ worktrees/*
 !worktrees/.gitkeep
 agents/agentics/.venv312
 src/.agentic_backups
+
+# Agentics backup directories
+src/.agentics_backups

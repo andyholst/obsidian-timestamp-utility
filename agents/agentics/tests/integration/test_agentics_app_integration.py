@@ -76,9 +76,9 @@ class TestAgenticsAppIntegration:
             github_token=os.environ.get("GITHUB_TOKEN", "test_token"),
             llama_host=os.environ.get("LLAMA_HOST", "http://localhost:11434"),
             llama_reasoning_model=os.environ.get(
-                "LLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"
+                "LLAMA_REASONING_MODEL", "sorc/qwen3.6-35b-a3b"
             ),
-            llama_code_model=os.environ.get("LLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"),
+            llama_code_model=os.environ.get("LLAMA_CODE_MODEL", "sorc/qwen3.6-35b-a3b"),
         )
 
         app = AgenticsApp(config)

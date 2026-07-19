@@ -28,8 +28,8 @@ def mock_env_vars(monkeypatch):
     env_vars = {
         "GITHUB_TOKEN": "test_token",
         "LLAMA_HOST": "http://localhost:11434",
-        "LLAMA_REASONING_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
-        "LLAMA_CODE_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
+        "LLAMA_REASONING_MODEL": "sorc/qwen3.6-35b-a3b",
+        "LLAMA_CODE_MODEL": "sorc/qwen3.6-35b-a3b",
     }
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
@@ -86,8 +86,8 @@ class TestAgenticsConfig:
         config = AgenticsConfig()
         assert config.github_token == "test_token"
         assert config.llama_host == "http://localhost:11434"
-        assert config.llama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
-        assert config.llama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.llama_reasoning_model == "sorc/qwen3.6-35b-a3b"
+        assert config.llama_code_model == "sorc/qwen3.6-35b-a3b"
         assert config.circuit_breaker_failure_threshold == 3
         assert config.circuit_breaker_recovery_timeout == 30
         assert config.github_circuit_breaker_failure_threshold == 5
@@ -138,7 +138,7 @@ class TestAgenticsConfig:
         config = AgenticsConfig()
         llm_config = config.get_reasoning_llm_config()
         assert isinstance(llm_config, LLMConfig)
-        assert llm_config.model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert llm_config.model == "sorc/qwen3.6-35b-a3b"
         assert llm_config.base_url == "http://localhost:11434"
         assert llm_config.temperature == 0.7
         assert llm_config.num_ctx == 4096
@@ -148,7 +148,7 @@ class TestAgenticsConfig:
         config = AgenticsConfig()
         llm_config = config.get_code_llm_config()
         assert isinstance(llm_config, LLMConfig)
-        assert llm_config.model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert llm_config.model == "sorc/qwen3.6-35b-a3b"
         assert llm_config.base_url == "http://localhost:11434"
         assert llm_config.temperature == 0.7
         assert llm_config.num_ctx == 4096

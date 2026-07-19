@@ -364,7 +364,6 @@ async def test_full_workflow_agent_call_order():
                 "llm_reasoning_cb": mock_cb,
                 "llm_code_cb": mock_cb,
                 "github_cb": mock_cb,
-                "mcp_cb": mock_cb,
             },
         ),
     ):
