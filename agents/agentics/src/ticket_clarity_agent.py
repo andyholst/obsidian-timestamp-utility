@@ -13,7 +13,7 @@ from tenacity import (
 
 from .base_agent import BaseAgent
 from .state import State
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from github import Github, GithubException
 from .utils import safe_json_dumps, remove_thinking_tags, log_info, parse_json_response

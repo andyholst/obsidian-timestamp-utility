@@ -87,8 +87,8 @@ class IssueProcessingWorkflow(Workflow):
         )
 
         return ComposableWorkflows(
-            llm_reasoning=self.service_manager.ollama_reasoning._client,
-            llm_code=self.service_manager.ollama_code._client,
+            llm_reasoning=self.service_manager.llm_reasoning._client,
+            llm_code=self.service_manager.llm_code._client,
             github_client=github_client,
         )
 

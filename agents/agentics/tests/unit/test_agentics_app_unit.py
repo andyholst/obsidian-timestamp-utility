@@ -13,9 +13,9 @@ def mock_config():
     """Mock AgenticsConfig."""
     config = MagicMock(spec=AgenticsConfig)
     config.github_token = "test_token"
-    config.ollama_host = "http://localhost:11434"
-    config.ollama_reasoning_model = "test-reasoning"
-    config.ollama_code_model = "test-code"
+    config.llama_host = "http://localhost:11434"
+    config.llama_reasoning_model = "test-reasoning"
+    config.llama_code_model = "test-code"
     return config
 
 
@@ -25,8 +25,8 @@ def mock_service_manager():
     manager = MagicMock(spec=ServiceManager)
     manager.check_services_health = AsyncMock(
         return_value={
-            "ollama_reasoning": True,
-            "ollama_code": True,
+            "llm_reasoning": True,
+            "llm_code": True,
             "github": True,
         }
     )
@@ -121,7 +121,7 @@ class TestAgenticsApp:
 
         app = AgenticsApp(mock_config)
         app._initialized = True
-        # app._initialized is True, but composable_workflows stays None (no Ollama),
+        # app._initialized is True, but composable_workflows stays None (no LLM),
         # so the invalid URL still reaches the "workflow not initialized" branch.
         with pytest.raises(
             (ValidationError, AgenticsError)
@@ -217,8 +217,8 @@ class TestAgenticsApp:
         result = asyncio.run(app.get_service_health())
 
         assert result == {
-            "ollama_reasoning": True,
-            "ollama_code": True,
+            "llm_reasoning": True,
+            "llm_code": True,
             "github": True,
         }
         mock_service_manager.check_services_health.assert_called_once()

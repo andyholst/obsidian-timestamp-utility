@@ -5,14 +5,14 @@ from typing import Optional, Callable, Dict, Any
 from abc import ABC, abstractmethod
 
 from github import Github, Auth
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 from langchain.tools import Tool
 
 from .config import LLMConfig, get_config
 from .exceptions import (
     ServiceUnavailableError,
     GitHubError,
-    OllamaError,
+    LLMError,
     HealthCheckError,
 )
 from .circuit_breaker import get_circuit_breaker, get_health_monitor
@@ -38,18 +38,18 @@ class ServiceClient(ABC):
         pass
 
 
-class OllamaClient(ServiceClient):
-    """Client for Ollama LLM services."""
+class LLMClient(ServiceClient):
+    """Client for LLM services (llama.cpp / OpenAI-compatible API)."""
 
     def __init__(self, config: LLMConfig):
-        super().__init__("ollama")
+        super().__init__("llm")
         self.config = config
-        self._client: Optional[OllamaLLM] = None
+        self._client: Optional[ChatOpenAI] = None
 
     def _initialize_client(self) -> None:
-        """Initialize the Ollama client."""
+        """Initialize the LLM client."""
         try:
-            self._client = OllamaLLM(
+            self._client = ChatOpenAI(
                 model=self.config.model,
                 base_url=self.config.base_url,
                 temperature=self.config.temperature,
@@ -57,25 +57,20 @@ class OllamaClient(ServiceClient):
                 top_k=self.config.top_k,
                 min_p=self.config.min_p,
                 request_timeout=self.config.request_timeout,
-                extra_params={
-                    "presence_penalty": self.config.presence_penalty,
-                    "num_ctx": self.config.num_ctx,
-                    "num_predict": self.config.num_predict,
-                },
             )
         except Exception as e:
-            log_info(__name__, f"Failed to initialize Ollama client: {str(e)}")
+            log_info(__name__, f"Failed to initialize LLM client: {str(e)}")
             self._client = None
 
     @property
-    def client(self) -> Optional[OllamaLLM]:
-        """Lazily initialize and return the Ollama client."""
+    def client(self) -> Optional[ChatOpenAI]:
+        """Lazily initialize and return the LLM client."""
         if self._client is None:
             self._initialize_client()
         return self._client
 
     async def health_check(self) -> bool:
-        """Check if Ollama is healthy."""
+        """Check if LLM service is healthy."""
         # Use lazy client property to trigger initialization if needed
         client = self.client
         if not client:
@@ -86,20 +81,20 @@ class OllamaClient(ServiceClient):
             response = await asyncio.get_event_loop().run_in_executor(
                 None, client.invoke, "Hello"
             )
-            return bool(response and len(response.strip()) > 0)
+            return bool(response and len(str(response).strip()) > 0)
         except Exception:
             return False
 
     def is_available(self) -> bool:
-        """Check if Ollama client is available."""
+        """Check if LLM client is available."""
         return self.client is not None and self.health_monitor.is_service_healthy(
-            "ollama"
+            "llm"
         )
 
     def invoke(self, prompt: str) -> str:
         """Invoke the LLM with a prompt."""
         if not self.is_available():
-            raise OllamaError(f"Ollama service ({self.config.model}) is not available")
+            raise LLMError(f"LLM service ({self.config.model}) is not available")
 
         @self.circuit_breaker.call
         def _invoke():
@@ -183,8 +178,8 @@ class ServiceManager:
 
     def __init__(self, config):
         self.config = config
-        self.ollama_reasoning: Optional[OllamaClient] = None
-        self.ollama_code: Optional[OllamaClient] = None
+        self.llm_reasoning: Optional[LLMClient] = None
+        self.llm_code: Optional[LLMClient] = None
         self.github: Optional[GitHubClient] = None
         self.health_monitor = get_health_monitor()
 
@@ -192,25 +187,25 @@ class ServiceManager:
         """Initialize all service clients."""
         log_info(__name__, "Initializing service clients")
 
-        # Initialize Ollama clients
+        # Initialize LLM clients
         reasoning_config = self.config.get_reasoning_llm_config()
         code_config = self.config.get_code_llm_config()
 
-        self.ollama_reasoning = OllamaClient(reasoning_config)
-        self.ollama_code = OllamaClient(code_config)
+        self.llm_reasoning = LLMClient(reasoning_config)
+        self.llm_code = LLMClient(code_config)
 
         # Initialize GitHub client
         if self.config.github_token:
             self.github = GitHubClient(self.config.github_token)
 
         # Register health checks
-        if self.ollama_reasoning:
+        if self.llm_reasoning:
             self.health_monitor.register_service(
-                "ollama_reasoning", self.ollama_reasoning.health_check
+                "llm_reasoning", self.llm_reasoning.health_check
             )
-        if self.ollama_code:
+        if self.llm_code:
             self.health_monitor.register_service(
-                "ollama_code", self.ollama_code.health_check
+                "llm_code", self.llm_code.health_check
             )
         if self.github:
             self.health_monitor.register_service("github", self.github.health_check)
@@ -222,8 +217,8 @@ class ServiceManager:
         results = {}
 
         services_to_check = [
-            ("ollama_reasoning", self.ollama_reasoning),
-            ("ollama_code", self.ollama_code),
+            ("llm_reasoning", self.llm_reasoning),
+            ("llm_code", self.llm_code),
             ("github", self.github),
         ]
 

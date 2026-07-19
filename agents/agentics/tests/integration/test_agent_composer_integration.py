@@ -1,7 +1,7 @@
 import pytest
 from dataclasses import asdict
 from typing import List
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 
 from src.agent_composer import AgentComposer, WorkflowConfig
 from src.base_agent import BaseAgent
@@ -15,7 +15,7 @@ from src.state import State
 @pytest.mark.asyncio
 @pytest.mark.parametrize("case", ["base+base", "base+tool_agent"])
 async def test_sequential_multi_agent_workflow(
-    case: str, real_ollama_config, temp_project_dir, dummy_state
+    case: str, real_llama_config, temp_project_dir, dummy_state
 ):
     composer = AgentComposer()
 
@@ -49,9 +49,9 @@ async def test_sequential_multi_agent_workflow(
         config = WorkflowConfig(agent_names=["agent1", "agent2"], tool_names=[])
         expected_history = ["agent1", "agent2"]
     else:
-        llm = OllamaLLM(
-            model=real_ollama_config.ollama_code_model,
-            base_url=real_ollama_config.ollama_host,
+        llm = ChatOpenAI(
+            model=real_llama_config.llama_code_model,
+            base_url=real_llama_config.llama_host,
             temperature=0.1,
         )
         base_agent = TestBaseAgent("base")
@@ -77,7 +77,7 @@ async def test_sequential_multi_agent_workflow(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("num_tools", [1, 2, 3])
 async def test_tool_binding_in_workflow(
-    num_tools: int, real_ollama_config, temp_project_dir, dummy_state
+    num_tools: int, real_llama_config, temp_project_dir, dummy_state
 ):
     composer = AgentComposer()
 
@@ -119,7 +119,7 @@ async def test_tool_binding_in_workflow(
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_workflow_error_propagation_circuit_breaker(
-    real_ollama_config, temp_project_dir, dummy_state
+    real_llama_config, temp_project_dir, dummy_state
 ):
     composer = AgentComposer()
 

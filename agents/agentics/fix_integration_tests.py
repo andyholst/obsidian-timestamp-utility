@@ -171,10 +171,10 @@ fix_file("test_cross_validation_integration.py", [
             # Use real LLM for this test case
             from src.config import AgenticsConfig
             config = AgenticsConfig()
-            from langchain_ollama import OllamaLLM
-            llm = OllamaLLM(
-                model=config.ollama_code_model,
-                base_url=config.ollama_host,
+            from langchain_openai import ChatOpenAI
+            llm = ChatOpenAI(
+                model=config.llama_code_model,
+                base_url=config.llama_host,
                 temperature=0.1,
                 timeout=5.0,
             )
@@ -201,7 +201,7 @@ fix_file("test_cross_validation_integration.py", [
         """Test cross-validation with various scenarios."""
         name, success, score, recovery_attempts = test_case
         
-        # Use mock LLM for all test cases to avoid needing real Ollama
+        # Use mock LLM for all test cases to avoid needing real LLM server
         from unittest.mock import MagicMock
         from langchain_core.runnables import RunnableLambda
         from langchain_core.messages import AIMessage

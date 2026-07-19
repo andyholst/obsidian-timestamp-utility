@@ -25,13 +25,13 @@ class TestPhase3ErrorRecoveryIntegration:
 
         # Register healthy services for deterministic retry success
         health_monitor = get_health_monitor()
-        health_monitor.register_service("ollama_code", lambda: True)
+        health_monitor.register_service("llm_code", lambda: True)
         health_monitor.register_service("typescript_compiler", lambda: True)
 
         # Prepare failed state as dict (State TypedDict)
         failed_state: State = dict(dummy_state.__dict__)
         failed_state["failed_agent"] = AgentType.CODE_GENERATOR.value
-        failed_state["error_context"] = {"service": "ollama_code"}
+        failed_state["error_context"] = {"service": "llm_code"}
         failed_state["original_error"] = Exception(
             "LLMError"
         )  # Triggers recovery strategies

@@ -61,3 +61,5 @@ parse.err
 # their own feat/<name> branches). Keep only the placeholder.
 worktrees/*
 !worktrees/.gitkeep
+agents/agentics/.venv312
+src/.agentic_backups

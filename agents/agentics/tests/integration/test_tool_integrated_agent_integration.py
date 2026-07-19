@@ -4,7 +4,7 @@ import tempfile
 import shutil
 from typing import Dict, Any, List
 from langchain.tools import BaseTool
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableLambda
 from src.tool_integrated_agent import ToolIntegratedAgent
 from src.tools import read_file_tool, write_file_tool, list_files_tool, npm_search_tool

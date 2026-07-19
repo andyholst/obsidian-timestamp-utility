@@ -16,18 +16,18 @@ HOST_UID  := $(shell id -u)
 HOST_GID  := $(shell id -g)
 export HOST_UID HOST_GID
 
-# Ollama (local LLM that generates the TS code + TS tests)
-OLLAMA_MODEL      ?= sorc/qwen3.5-claude-4.6-opus:9b
-OLLAMA_CODE_MODEL ?= sorc/qwen3.5-claude-4.6-opus:9b
-OLLAMA_HOST       ?= http://localhost:11434
+# Llama (local LLM that generates the TS code + TS tests)
+LLAMA_MODEL        ?= qwen3.6-35b-a3b
+LLAMA_CODE_MODEL ?= sorc/qwen3.5-claude-4.6-opus:9b
+LLAMA_HOST       ?= http://localhost:11434
 
 ISSUE_URL         ?= https://github.com/andyholst/obsidian-timestamp-utility/issues/20
 TEST_FILTER       ?=
 INTEGRATION_TEST_FILTER ?=
-OLLAMA_TIMEOUT    ?= 300
+LLAMA_TIMEOUT      ?= 300
 TYPE              ?=
 CHANGE            ?= uuid-modal-agentic-generation
-export TEST_FILTER INTEGRATION_TEST_FILTER OLLAMA_TIMEOUT TYPE OLLAMA_HOST CHANGE
+export TEST_FILTER INTEGRATION_TEST_FILTER LLAMA_TIMEOUT TYPE LLAMA_HOST CHANGE
 
 # HERMES_BIN: the project-manager Hermes CLI that record-work.py invokes for prose drafting.
 # DEFAULT IS EMPTY on purpose: hermes is a HOST-ONLY CLI (a venv under ~/.hermes with hardcoded
@@ -93,12 +93,12 @@ DOCKER_SOCK := $(shell \
         test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast test-agents-e2e \
         test-agents test-agents-real verify-agentics-after-run \
         run-agentics phase7-archive b9-perms record-work record-work-prompt squash-commits openspec-new \
-        check-deps check-github check-issue-url check-ollama check-secrets \
+        check-deps check-github check-issue-url check-llama check-secrets \
         fix-perms create-logs \
         collect-tests collect-executed generate-requirements \
         stop-containers \
         clean clean-cache clean-logs clean-oci \
-        loop-harness loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-release-dryrun loop-release-tests loop-verify loop-tasks \
+        loop-harness loop-collect loop-ts-floor loop-unit loop-unit-real loop-e2e loop-integration loop-build-app loop-test-app loop-verify loop-tasks \
         wt-create openspec-flow openspec-redeliver \
         squash-commits \
         squash-commits bump-version release-notes tag-release loop-release check-released release bump-local release-prep \
@@ -158,14 +158,9 @@ bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchore
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py") || echo "bump-from-changelog skipped"
 	@$(MAKE) changelog-format
 
-# `release` depends on `build-app` (the containers/npm node image builds dist/main.js via
-# rollup, which has the rollup plugins installed — this is what was missing in CI when
-# release.sh tried to build inline). release.sh is PACKAGING-ONLY: it assumes dist/main.js
-# exists and assembles notes + zip. DRY_RUN=1 still skips the GitHub publish, but the
-# artifacts are always built + packaged.
-release: build-app ## Create release + ZIP (build-app first, then scripts/release.sh packages notes + zip)
+release: clean ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
 	@if [ -z "$(TAG)" ]; then TAG=$$(node -p "require('./package.json').version"); fi; \
-	 echo "=== release: packaging artifacts via scripts/release.sh (TAG=$$TAG) ==="; \
+	 echo "=== release: building artifacts via scripts/release.sh (TAG=$$TAG) ==="; \
 	 TAG="$$TAG" REPO_NAME="$(REPO_NAME)" DRY_RUN="$(DRY_RUN)" bash scripts/release.sh
 	@echo "Release zip: $(REPO_NAME)-$(TAG).zip"
 
@@ -188,15 +183,15 @@ format: ## Format Python code with ruff via compose
 
 # ---- Agentic (Python) tests via containers/agents ----
 
-test-agents-unit: ## Unit tests for agents (Ollama)
+test-agents-unit: ## Unit tests for agents (Llama)
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents)
 	@echo "=== Unit test results ==="
 
-test-agents-unit-mock: ## Mocked unit tests (fast, no Ollama)
+test-agents-unit-mock: ## Mocked unit tests (fast, no Llama)
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e TEST_FILTER=$(TEST_FILTER) unit-test-agents python -m pytest tests/unit/ -q)
 	@echo "=== Mock unit test output above ==="
 
-test-agents-integration: ## Full integration tests (needs GITHUB_TOKEN + Ollama)
+test-agents-integration: ## Full integration tests (needs GITHUB_TOKEN + Llama)
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e "TEST_FILTER=$(INTEGRATION_TEST_FILTER)" integration-test-agents)
 	@echo "=== Integration test results ==="
 
@@ -207,7 +202,7 @@ test-agents-e2e: INTEGRATION_TEST_FILTER = -m e2e ## End-to-end tests only
 test-agents-e2e: test-agents-integration
 
 test-agents: lint-python test-agents-unit-mock test-agents-integration ## All agent tests
-test-agents-real: lint-python test-agents-unit test-agents-integration ## Agent tests on REAL logic (no mocks for units; real Ollama/GitHub calls)
+test-agents-real: lint-python test-agents-unit test-agents-integration ## Agent tests on REAL logic (no mocks for units; real Llama/GitHub calls)
 
 test-check-docs-sync: b9-perms ## Hermetic unit tests for scripts/check-docs-sync.py (edge-case fixtures, run INSIDE the unit-test-agents container — no host python3)
 	@echo "=== TEST-CHECK-DOCS-SYNC: pytest tests/test_check_docs_sync.py (in container) ==="
@@ -222,7 +217,7 @@ regen-doc-sync-fixtures: b9-perms ## Regenerate the doc-sync .md fixtures from t
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
 # Collection guard (audit-mcp-slim-refactor-integrity 4.2): fail fast if any test file has a
 # dangling import / collection error — a slim-refactor that orphans a symbol must surface here
-# instead of reporting a cached "green". Runs hermetic (no Ollama) and is non-zero on any error.
+# instead of reporting a cached "green". Runs hermetic (no Llama) and is non-zero on any error.
 test-agents-collect: ## CI guard: pytest --collect-only for unit + integration; fails on any collection error
 	@echo "=== Collection guard: unit ==="
 	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents python -m pytest tests/unit/ --collect-only -q)
@@ -236,10 +231,10 @@ verify-agentics-after-run: ## After run-agentics: re-run agentic suite to prove 
 	@echo "=== Agentic suite green after run-agentics ==="
 test: test-app test-agents ## All tests (app + agents)
 
-# ---- Agentic code generation (OpenSpec-driven, local, Ollama) ----
+# ---- Agentic code generation (OpenSpec-driven, local, Llama) ----
 
 run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<name>); no GitHub fetch, no MCP
-	@echo "Running agentics with Ollama model: $(OLLAMA_MODEL)"
+	@echo "Running agentics with Llama model: $(LLAMA_MODEL)"
 	@echo "OpenSpec change: $(CHANGE)"
 	@test -n "$(CHANGE)" || { echo "ERROR: set CHANGE=<openspec-change-name> (e.g. make run-agentics CHANGE=uuid-modal-agentic-generation)"; exit 1; }
 	@# ---- BACK UP BEFORE GENERATING (timestamped safety net) ----
@@ -252,7 +247,7 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 			echo "WARN: $$f not present, nothing to back up"; \
 		fi; \
 	done
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e CHANGE=$(CHANGE) -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e OLLAMA_HOST=$(OLLAMA_HOST) -e OLLAMA_REASONING_MODEL=$(OLLAMA_MODEL) -e OLLAMA_CODE_MODEL=$(OLLAMA_CODE_MODEL) -e PROJECT_ROOT=/project agentics python -m prod.agentics openspec:$(CHANGE))
+	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e CHANGE=$(CHANGE) -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e LLAMA_HOST=$(LLAMA_HOST) -e LLAMA_REASONING_MODEL=$(LLAMA_MODEL) -e LLAMA_CODE_MODEL=$(LLAMA_CODE_MODEL) -e PROJECT_ROOT=/project agentics python -m prod.agentics openspec:$(CHANGE))
 	@echo "=== Agentics run complete ==="
 	@ls -la src/main.ts src/__tests__/main.test.ts 2>/dev/null || echo "Note: generated files may be in a different location"
 	@# ---- OMISSION GUARD (contract-aware, per bug 6.2): a shrink is only a genuine ----
@@ -289,8 +284,8 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #      + ts-test-floor):
 #        0. collect guard     (loop-collect)   -- hermetic collection guard (fail fast on dangling imports), audit-mcp-slim-refactor-integrity 4.2
 #        0.5 ts-floor         (loop-ts-floor)   -- STRICT TS test/command floor vs origin/main: FAIL if describe/leaf/jest-collected/addCommand drop (silent feature/test removal guard)
-#        1. unit tests        (loop-unit)       -- Fast/Unit gate FIRST (hermetic, no Ollama)
-#        2. unit-real tests   (loop-unit-real)  -- REAL agent unit tests (live Ollama, no mocks)
+#        1. unit tests        (loop-unit)       -- Fast/Unit gate FIRST (hermetic, no Llama)
+#        2. unit-real tests   (loop-unit-real)  -- REAL agent unit tests (live Llama, no mocks)
 #        3. e2e tests         (loop-e2e)        -- the 3 standing e2e gates (ticket20+ticket22+greetings), B1/B3
 #        4. integration tests (loop-integration) -- broad agentic integration suite (B17)
 #        5. build-app         (loop-build-app)  -- tsc/rollup of the plugin, must exit 0
@@ -298,16 +293,16 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #        7. secret-scan-tests  (loop-secret-scan-tests) -- secret-scanner pytest suite, containerized (B9), real gitleaks, fail-closed
 #           (the actual gitleaks tree-scan lives in the pre-commit hook + CI, not the loop)
 #        8. doc-sync          (check-docs-sync) -- FINAL B8 gate: FAIL if any sync doc drifts (stage order / loop-ts-floor / B-range)
-#      B8 durable-behaviour range: B1-B34 (the loop's "laws of physics"; see AGENTS.md). The
+#      B8 durable-behaviour range: B1-B32 (the loop's "laws of physics"; see AGENTS.md). The
 #      Canonical stage order (B8 source of truth):
-#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-release-dryrun -> loop-release-tests -> loop-secret-scan-tests -> check-docs-sync
-#      Durable behaviours span B1-B34 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B34 range.
+#        loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-release-tests -> loop-secret-scan-tests -> check-docs-sync
+#      Durable behaviours span B1-B32 (the loop's "laws of physics"); this doc-sync gate FAILS if any sync doc drifts on that order / loop-ts-floor / the B1-B32 range.
 #      `make check-docs-sync` is the FINAL loop stage (enforced, not advisory) so doc/loop drift
 #      fails the whole run (B8 enforced).
 #      Each stage fails the whole run if it fails (no silent green). No git commit/push
 #      (B4/B14). Optional post-check: `make loop-verify CHANGE=<name>` runs openspec
 #      validate + status for the active change.
-check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B34). Runs INSIDE unit-test-agents (no host python3).
+check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B32). Runs INSIDE unit-test-agents (no host python3).
 	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — in container ==="
 	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py")
 
@@ -319,12 +314,12 @@ loop-ts-floor: ## Loop gate 0.5: STRICT TS test/command floor — FAIL if curren
 	@echo "=== LOOP-HARNESS [ts-floor] strict TS test/command surface floor vs origin/main ==="
 	@bash scripts/ts_test_floor.sh
 
-loop-unit: ## Loop gate 1: hermetic unit tests (fast, no Ollama/GitHub)
+loop-unit: ## Loop gate 1: hermetic unit tests (fast, no Llama/GitHub)
 	@echo "=== LOOP-HARNESS [1/6] unit tests (mocked, hermetic) ==="
 	@$(MAKE) test-agents-unit-mock
 
-loop-unit-real: ## Loop gate 2: REAL agent unit tests (live Ollama, no mocks)
-	@echo "=== LOOP-HARNESS [2/6] real agent unit tests (Ollama) ==="
+loop-unit-real: ## Loop gate 2: REAL agent unit tests (live Llama, no mocks)
+	@echo "=== LOOP-HARNESS [2/6] real agent unit tests (Llama) ==="
 	@$(MAKE) test-agents-unit
 
 loop-e2e: ## Loop gate 3: standing e2e gates (ticket20 + ticket22 + greetings)
@@ -347,25 +342,13 @@ loop-release-tests: b9-perms ## Loop gate 6.5: release-pipeline + README-sync dr
 	@echo "=== LOOP-HARNESS [6.5] release-pipeline + README-sync dry-run tests ==="
 	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e DRY_RUN=1 -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && DRY_RUN=1 python -m pytest tests/test_release_pipeline_dryrun.py tests/test_readme_sync.py tests/test_release_notes_bump.py -v")
 
-loop-release-dryrun: ## Loop gate 6.7: RELEASE PACKAGING dry-run, hermetic, NO publish (B33). Builds the plugin via build-app (containers/npm node image, rollup + plugins installed), runs jest (test-app), then runs scripts/release.sh in DRY_RUN=1 and ASSERTS the produced zip contains the compiled main.js. Never calls the GitHub release API. This is the gate that proves a real release would ship a usable plugin (the 0.4.16 defect).
-	@echo "=== LOOP-HARNESS [6.7] release-packaging dry-run (build-app -> test-app -> release.sh DRY_RUN=1 -> assert main.js in zip) ==="
-	@$(MAKE) build-app
-	@$(MAKE) test-app
-	@echo "=== release dry-run: packaging via scripts/release.sh (DRY_RUN=1) ==="
-	@$(call docker_run, docker compose -f docker-compose-files/tools.yaml run --rm app bash -c "set -e; export REPO_NAME=obsidian-timestamp-utility; export TAG=\$$(node -p \"require('./package.json').version\"); export DRY_RUN=1; bash scripts/release.sh; \\
-	  echo '--- asserting zip contains main.js ---'; \\
-	  unzip -l \"\$${REPO_NAME}-\$${TAG}.zip\" | grep -q 'main.js' || { echo 'FAIL: zip missing main.js'; exit 1; }; \\
-	  echo 'OK: zip contains main.js'; \\
-	  test -s release/main.js && echo 'OK: release/main.js non-empty'")
-	@echo "=== LOOP-HARNESS [6.7] release-packaging dry-run GREEN (no GitHub call) ==="
-
 loop-harness: ## Full loop-harness: SINGLE source of truth = scripts/run-loop-harness.sh.
 	@# This target delegates to the script so the per-stage timeouts + docker-kill
 	@# logic are ALWAYS applied (never a bare `make` chain that can hang forever).
 	@# The script calls back into these same `loop-*` targets, so what runs is
 	@# identical whether you invoke `make loop-harness` or the script directly.
 	@bash scripts/run-loop-harness.sh
-	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> release-dryrun -> release-tests -> secret-scan-tests -> check-docs-sync) ==="
+	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> release-tests -> secret-scan-tests -> check-docs-sync) ==="
 
 loop-trigger: ## B20 mandatory pre-flight: run the loop gate (scripts/run-loop-harness.sh) before claiming done
 	@bash scripts/run-loop-harness.sh
@@ -851,7 +834,7 @@ release-flow: ## Canonical local release flow: squash (typed, commitlint-gated) 
 
 # ---- Checks ----
 
-check-deps: check-ollama check-issue-url ## Verify external dependencies
+check-deps: check-llama check-issue-url ## Verify external dependencies
 check-github: ## Validate GitHub token (only needed for integration tests)
 	@if [ -z "$(GITHUB_TOKEN)" ]; then echo "Error: GITHUB_TOKEN is required for integration tests" >&2; exit 1; fi
 	@echo "GITHUB_TOKEN present."
@@ -859,10 +842,10 @@ check-github: ## Validate GitHub token (only needed for integration tests)
 check-issue-url: ## Validate ISSUE_URL for agentics
 	@if [ -z "$(ISSUE_URL)" ] || ! echo "$(ISSUE_URL)" | grep -q '^https'; then echo "Error: Valid ISSUE_URL (https://...) is required" >&2; exit 1; fi
 
-check-ollama: ## Check Ollama availability
-	@code=$$(curl -s -o /dev/null -w '%{http_code}' $(OLLAMA_HOST)/api/tags || echo 000); \
-	if [ "$$code" != "200" ]; then echo "Error: Ollama not reachable at $(OLLAMA_HOST)"; exit 1; fi
-	@echo "Ollama reachable at $(OLLAMA_HOST)."
+check-llama: ## Check Llama availability
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' $(LLAMA_HOST)/api/tags || echo 000); \
+	if [ "$$code" != "200" ]; then echo "Error: Llama not reachable at $(LLAMA_HOST)"; exit 1; fi
+	@echo "Llama reachable at $(LLAMA_HOST)."
 
 check-secrets: loop-secret-scan  ## [ALIAS] Deprecated name -> loop-secret-scan (containerized gitleaks loop gate).
 	@true
@@ -871,8 +854,8 @@ check-secrets: loop-secret-scan  ## [ALIAS] Deprecated name -> loop-secret-scan 
 # remaps the container uid to the host 'other' class and fails with
 # "Permission denied: '/project/src/main.ts'". This target ENFORCES that rule so it
 # is never a forgotten manual pre-step.
-b9-perms: ## B9: ensure repo is world-readable + write-targets world-writable (rootless nerdctl)
-	@echo "B9: applying rootless nerdctl read/write permission floor..."
+b9-perms: ## B9: ensure repo is world-readable + write-targets world-writable (rootless docker)
+	@echo "B9: applying read/write permission floor..."
 	@chmod -R a+rX . 2>/dev/null || true
 	@for d in src backups openspec results agent-wiki tests; do \
 		if [ -d "$$d" ]; then chmod -R a+rwX "$$d" 2>/dev/null || true; fi; \
@@ -929,8 +912,8 @@ clean-logs: ## Remove all logs
 	find . -name "logs" -type d -exec rm -rf {} + 2>/dev/null || true
 	find . \( -name "*.logs" -o -name "*.log" \) -delete 2>/dev/null || true
 
-clean-oci: ## Fast OCI nuke (nerdctl prune best practice)
-	nerdctl system prune -a -f --volumes || true
+clean-oci: ## Fast OCI nuke (docker prune best practice)
+	docker system prune -a -f --volumes || true
 	@echo "OCI pruned."
 
 # ---- Secret scanning (gitleaks) — HOOK/CI SCAN + LOOP TESTS, CONTAINER-ONLY (B9) ----

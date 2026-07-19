@@ -217,15 +217,15 @@ def test_full_workflow_empty_ticket():
         self.health_monitor = MagicMock()
         self.health_monitor.is_service_healthy = lambda name: True
 
-    mock_ollama = MagicMock()
-    mock_ollama.invoke.return_value = "mock response"
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = "mock response"
     with (
         patch.object(GitHubClient, "__init__", mock_github_init),
         patch.object(GitHubClient, "health_check", return_value=True),
         patch.object(GitHubClient, "get_repo", return_value=mock_repo),
         patch.object(GitHubClient, "get_user", return_value=MagicMock(login="mock_user")),
-        patch("src.services.OllamaClient._initialize_client", return_value=None),
-        patch("src.services.OllamaClient.client", mock_ollama),
+        patch("src.services.LLMClient._initialize_client", return_value=None),
+        patch("src.services.LLMClient.client", mock_llm),
     ):
         from src.agentics import AgenticsApp
 
@@ -256,8 +256,8 @@ def test_aaa_full_workflow_github_error():
         self.health_monitor = MagicMock()
         self.health_monitor.is_service_healthy = lambda name: True
 
-    mock_ollama = MagicMock()
-    mock_ollama.invoke.return_value = "mock response"
+    mock_llm = MagicMock()
+    mock_llm.invoke.return_value = "mock response"
     from src.agentics import AgenticsApp
 
     app = AgenticsApp()
@@ -266,8 +266,8 @@ def test_aaa_full_workflow_github_error():
         patch.object(GitHubClient, "__init__", mock_github_init),
         patch.object(GitHubClient, "_initialize_client", lambda self: None),
         patch.object(GitHubClient, "health_check", return_value=True),
-        patch("src.services.OllamaClient._initialize_client", return_value=None),
-        patch("src.services.OllamaClient.client", mock_ollama),
+        patch("src.services.LLMClient._initialize_client", return_value=None),
+        patch("src.services.LLMClient.client", mock_llm),
     ):
         app.initialize()
         # Workflow returns error dict instead of raising for graceful error handling
@@ -361,8 +361,8 @@ async def test_full_workflow_agent_call_order():
         patch(
             "src.circuit_breaker.circuit_breakers",
             {
-                "ollama_reasoning_cb": mock_cb,
-                "ollama_code_cb": mock_cb,
+                "llm_reasoning_cb": mock_cb,
+                "llm_code_cb": mock_cb,
                 "github_cb": mock_cb,
                 "mcp_cb": mock_cb,
             },

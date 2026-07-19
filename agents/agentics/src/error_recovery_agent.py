@@ -40,14 +40,14 @@ class FixesModel(BaseModel):
 
 
 _AGENT_SERVICES = {
-    AgentType.CODE_GENERATOR: ["ollama_code", "typescript_compiler"],
-    AgentType.TEST_GENERATOR: ["ollama_code", "typescript_compiler"],
+    AgentType.CODE_GENERATOR: ["llm_code", "typescript_compiler"],
+    AgentType.TEST_GENERATOR: ["llm_code", "typescript_compiler"],
     AgentType.CODE_INTEGRATOR: ["file_system", "typescript_compiler"],
-    AgentType.CODE_REVIEWER: ["ollama_reasoning"],
-    AgentType.DEPENDENCY_ANALYZER: ["ollama_reasoning"],
+    AgentType.CODE_REVIEWER: ["llm_reasoning"],
+    AgentType.DEPENDENCY_ANALYZER: ["llm_reasoning"],
     AgentType.FETCH_ISSUE: ["github"],
-    AgentType.TICKET_CLARITY: ["ollama_reasoning"],
-    AgentType.IMPLEMENTATION_PLANNER: ["ollama_reasoning"],
+    AgentType.TICKET_CLARITY: ["llm_reasoning"],
+    AgentType.IMPLEMENTATION_PLANNER: ["llm_reasoning"],
 }
 
 _AGENT_MAX_RETRIES = {
@@ -79,7 +79,7 @@ class ErrorRecoveryAgent(Runnable[CodeGenerationState, CodeGenerationState]):
         self.health_monitor = get_health_monitor()
 
         self.circuit_breakers = {}
-        for service in ["ollama_reasoning", "ollama_code", "github", "typescript_compiler", "file_system"]:
+        for service in ["llm_reasoning", "llm_code", "github", "typescript_compiler", "file_system"]:
             self.circuit_breakers[service] = get_circuit_breaker(service)
 
         self.recovery_strategies = {}

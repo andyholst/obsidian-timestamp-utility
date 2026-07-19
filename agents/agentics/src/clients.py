@@ -3,25 +3,25 @@ import time
 from .monitoring import structured_log
 import logging
 from github import Github, Auth
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 
 # Environment variables
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_REASONING_MODEL = os.getenv("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
-OLLAMA_CODE_MODEL = os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+LLAMA_HOST = os.getenv("LLAMA_HOST", os.getenv("LLAMA_HOST", "http://localhost:11434"))
+LLAMA_REASONING_MODEL = os.getenv("LLAMA_REASONING_MODEL", os.getenv("LLAMA_REASONING_MODEL", "qwen3.6-35b-a3b"))
+LLAMA_CODE_MODEL = os.getenv("LLAMA_CODE_MODEL", os.getenv("LLAMA_CODE_MODEL", "qwen3.6-35b-a3b"))
 
 monitor = structured_log(__name__)
 
 # GitHub client will be initialized lazily
 github = None
 
-# Initialize Ollama LLM clients
-monitor.info("Initializing Ollama LLM clients")
+# Initialize LLM clients
+monitor.info("Initializing LLM clients")
 
 
-class TimedOllamaLLM(OllamaLLM):
-    """Wrapper for OllamaLLM that adds timing logs"""
+class TimedChatOpenAI(ChatOpenAI):
+    """Wrapper for ChatOpenAI that adds timing logs"""
 
     def __init__(self, *args, model_name="", **kwargs):
         super().__init__(*args, **kwargs)
@@ -67,9 +67,9 @@ class TimedOllamaLLM(OllamaLLM):
             raise
 
 
-llm_reasoning = TimedOllamaLLM(
-    model=OLLAMA_REASONING_MODEL,
-    base_url=OLLAMA_HOST,
+llm_reasoning = TimedChatOpenAI(
+    model=LLAMA_REASONING_MODEL,
+    base_url=LLAMA_HOST,
     temperature=0.7,  # Lowered to reduce hallucinations
     top_p=0.7,  # Adjusted for more focused output
     top_k=20,
@@ -77,9 +77,9 @@ llm_reasoning = TimedOllamaLLM(
     model_name="reasoning",
     extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
 )
-llm_code = TimedOllamaLLM(
-    model=OLLAMA_CODE_MODEL,
-    base_url=OLLAMA_HOST,
+llm_code = TimedChatOpenAI(
+    model=LLAMA_CODE_MODEL,
+    base_url=LLAMA_HOST,
     temperature=0.7,  # Lowered to reduce hallucinations
     top_p=0.7,  # Adjusted for more focused output
     top_k=20,
@@ -87,4 +87,4 @@ llm_code = TimedOllamaLLM(
     model_name="code",
     extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
 )
-monitor.info("Ollama LLM clients initialized successfully")
+monitor.info("LLM clients initialized successfully")

@@ -17,8 +17,8 @@ os.environ.setdefault("TEST_ULTRA_FAST_MODE", "1")
 os.environ.setdefault("PYTEST_TIMEOUT", "1800")
 
 # Use sorc/qwen3.5-claude-4.6-opus:9b for both reasoning and code generation
-os.environ.setdefault("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
-os.environ.setdefault("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+os.environ.setdefault("LLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+os.environ.setdefault("LLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
 
 # Load .env file from project root so GITHUB_TOKEN and other env vars are available
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
@@ -131,7 +131,7 @@ Pytest configuration and fixtures for integration tests.
 
 These integration tests use real services and require proper environment setup:
 - GITHUB_TOKEN: GitHub API token for repository access
-- OLLAMA_HOST: Ollama server URL (default: http://localhost:11434)
+- LLAMA_HOST: Llama server URL (default: http://localhost:11434)
 - TEST_ISSUE_URL: Base URL for test repository issues
 """
 
@@ -143,7 +143,7 @@ import subprocess
 @pytest.fixture(scope="session", autouse=True)
 def validate_integration_test_environment():
     """Validate that required environment variables are set for integration tests."""
-    required_vars = ["GITHUB_TOKEN", "OLLAMA_HOST", "TEST_ISSUE_URL"]
+    required_vars = ["GITHUB_TOKEN", "LLAMA_HOST", "TEST_ISSUE_URL"]
 
     missing_vars = []
     for var in required_vars:
@@ -285,7 +285,7 @@ def integration_config():
     """Provide integration test configuration."""
     return {
         "github_token": os.getenv("GITHUB_TOKEN"),
-        "ollama_host": os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+        "llama_host": os.getenv("LLAMA_HOST", "http://localhost:11434"),
         "test_issue_url": os.getenv("TEST_ISSUE_URL"),
         "test_repo_owner": os.getenv("TEST_REPO_OWNER", "test-owner"),
         "test_repo_name": os.getenv("TEST_REPO_NAME", "test-repo"),
@@ -346,7 +346,7 @@ from langchain_core.messages import AIMessage
 from src.models import CodeSpec, TestSpecification
 from src.state import CodeGenerationState
 from src.config import AgenticsConfig
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 
 import json
 import logging
@@ -427,21 +427,21 @@ def dummy_llm_tool():
 
 
 @pytest.fixture(scope="session")
-def real_ollama_config():
-    """Real AgenticsConfig with OLLAMA_HOST, fail if not set or unhealthy."""
-    if not os.getenv("OLLAMA_HOST"):
-        pytest.skip("OLLAMA_HOST environment variable not set")
+def real_llama_config():
+    """Real AgenticsConfig with LLAMA_HOST, fail if not set or unhealthy."""
+    if not os.getenv("LLAMA_HOST"):
+        pytest.skip("LLAMA_HOST environment variable not set")
     config = AgenticsConfig()
     try:
-        llm = OllamaLLM(
-            model=config.ollama_code_model,
-            base_url=config.ollama_host,
+        llm = ChatOpenAI(
+            model=config.llama_code_model,
+            base_url=config.llama_host,
             temperature=0.1,
             timeout=5.0,
         )
         llm.invoke("healthy")
     except Exception:
-        pytest.skip("Ollama server or code model unhealthy")
+        pytest.skip("Llama server or code model unhealthy")
     return config
 
 

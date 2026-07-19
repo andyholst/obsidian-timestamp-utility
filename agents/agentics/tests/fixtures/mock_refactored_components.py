@@ -56,8 +56,8 @@ def create_mock_config():
 def patch_environment_variables():
     """Context manager to patch environment variables."""
     env_vars = {
-        "OLLAMA_BASE_URL": "http://localhost:11434",
-        "OLLAMA_MODEL": "llama3.2:3b",
+        "LLAMA_BASE_URL": "http://localhost:11434",
+        "LLAMA_MODEL": "llama3.2:3b",
         "GITHUB_TOKEN": "mock_github_token_12345",
     }
     return patch.dict("os.environ", env_vars)
@@ -66,10 +66,10 @@ def patch_environment_variables():
 # ===== SERVICE CLIENT MOCKS =====
 
 
-def create_mock_ollama_client():
-    """Create mock Ollama client with realistic responses."""
-    mock_client = MagicMock(spec=OllamaClient)
-    mock_client.name = "ollama"
+def create_mock_llm_client():
+    """Create mock LLM client with realistic responses."""
+    mock_client = MagicMock(spec=LLMClient)
+    mock_client.name = "llm"
     mock_client.is_available.return_value = True
     mock_client.invoke.return_value = "Mock LLM response for testing"
     mock_client.health_check = AsyncMock(return_value=True)
@@ -99,13 +99,13 @@ def create_mock_github_client():
 def create_mock_service_manager():
     """Create mock service manager with all clients."""
     mock_manager = MagicMock(spec=ServiceManager)
-    mock_manager.ollama_reasoning = create_mock_ollama_client()
-    mock_manager.ollama_code = create_mock_ollama_client()
+    mock_manager.llm_reasoning = create_mock_llm_client()
+    mock_manager.llm_code = create_mock_llm_client()
     mock_manager.github = create_mock_github_client()
     mock_manager.check_services_health = AsyncMock(
         return_value={
-            "ollama_reasoning": True,
-            "ollama_code": True,
+            "llm_reasoning": True,
+            "llm_code": True,
             "github": True,
         }
     )
@@ -247,8 +247,8 @@ def create_mock_composable_workflows():
     mock_workflows.composer = create_mock_agent_composer()
 
     # Mock service clients
-    mock_workflows.llm_reasoning = create_mock_ollama_client()
-    mock_workflows.llm_code = create_mock_ollama_client()
+    mock_workflows.llm_reasoning = create_mock_llm_client()
+    mock_workflows.llm_code = create_mock_llm_client()
     mock_workflows.github_client = create_mock_github_client()
 
     # Mock processing method

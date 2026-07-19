@@ -7,7 +7,7 @@ services:
     tty: false
     volumes:
     - ../:/app
-    - /home/asimov/repository/git/projects/obsidian-timestamp-utility/node_modules:/app/node_modules
+    - ../node_modules:/app/node_modules
     working_dir: /app
     environment:
     - TAG=${TAG:-v0.1.0}

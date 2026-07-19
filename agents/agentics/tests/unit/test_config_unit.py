@@ -27,9 +27,9 @@ def mock_env_vars(monkeypatch):
     """Fixture to mock environment variables."""
     env_vars = {
         "GITHUB_TOKEN": "test_token",
-        "OLLAMA_HOST": "http://localhost:11434",
-        "OLLAMA_REASONING_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
-        "OLLAMA_CODE_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
+        "LLAMA_HOST": "http://localhost:11434",
+        "LLAMA_REASONING_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
+        "LLAMA_CODE_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
     }
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
@@ -85,9 +85,9 @@ class TestAgenticsConfig:
         """Test AgenticsConfig creation with valid environment variables."""
         config = AgenticsConfig()
         assert config.github_token == "test_token"
-        assert config.ollama_host == "http://localhost:11434"
-        assert config.ollama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
-        assert config.ollama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.llama_host == "http://localhost:11434"
+        assert config.llama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.llama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
         assert config.circuit_breaker_failure_threshold == 3
         assert config.circuit_breaker_recovery_timeout == 30
         assert config.github_circuit_breaker_failure_threshold == 5
@@ -99,15 +99,15 @@ class TestAgenticsConfig:
         """Test AgenticsConfig with default values when env vars not set."""
         # Clear env vars
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        monkeypatch.delenv("OLLAMA_HOST", raising=False)
-        monkeypatch.delenv("OLLAMA_REASONING_MODEL", raising=False)
-        monkeypatch.delenv("OLLAMA_CODE_MODEL", raising=False)
+        monkeypatch.delenv("LLAMA_HOST", raising=False)
+        monkeypatch.delenv("LLAMA_REASONING_MODEL", raising=False)
+        monkeypatch.delenv("LLAMA_CODE_MODEL", raising=False)
 
         config = AgenticsConfig()
         assert config.github_token is None  # Will be validated
-        assert config.ollama_host == "http://localhost:11434"
-        assert config.ollama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
-        assert config.ollama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.llama_host == "http://localhost:11434"
+        assert config.llama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.llama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
 
     def test_agentics_config_github_token_validation_error(self, monkeypatch):
         """Test ConfigValidationError for missing github_token."""
@@ -117,21 +117,21 @@ class TestAgenticsConfig:
         ):
             init_config(None)
 
-    def test_agentics_config_ollama_host_validation_error(self, monkeypatch):
-        """Test ConfigValidationError for invalid ollama_host."""
+    def test_agentics_config_llama_host_validation_error(self, monkeypatch):
+        """Test ConfigValidationError for invalid llama_host."""
         monkeypatch.setenv("GITHUB_TOKEN", "test_token")
-        monkeypatch.setenv("OLLAMA_HOST", "invalid-host")
+        monkeypatch.setenv("LLAMA_HOST", "invalid-host")
         with pytest.raises(
-            ConfigValidationError, match="OLLAMA_HOST must be a valid HTTP/HTTPS URL"
+            ConfigValidationError, match="LLAMA_HOST must be a valid HTTP/HTTPS URL"
         ):
             AgenticsConfig()
 
-    def test_agentics_config_valid_ollama_host_https(self, monkeypatch):
-        """Test valid HTTPS ollama_host."""
+    def test_agentics_config_valid_llama_host_https(self, monkeypatch):
+        """Test valid HTTPS llama_host."""
         monkeypatch.setenv("GITHUB_TOKEN", "test_token")
-        monkeypatch.setenv("OLLAMA_HOST", "https://custom-host:8080")
+        monkeypatch.setenv("LLAMA_HOST", "https://custom-host:8080")
         config = AgenticsConfig()
-        assert config.ollama_host == "https://custom-host:8080"
+        assert config.llama_host == "https://custom-host:8080"
 
     def test_get_reasoning_llm_config(self, mock_env_vars):
         """Test get_reasoning_llm_config method."""

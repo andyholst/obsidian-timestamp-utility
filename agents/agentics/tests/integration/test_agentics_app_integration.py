@@ -2,7 +2,7 @@
 Enhanced Integration Tests for AgenticsApp and New Architecture Components.
 
 These tests validate the AgenticsApp class and new architecture components working together
-in realistic scenarios with real services (Ollama, GitHub, MCP) where available.
+in realistic scenarios with real services (LLM, GitHub, MCP) where available.
 
 Tests cover:
 1. AgenticsApp initialization with real services and configuration
@@ -20,14 +20,14 @@ import json
 from typing import Dict, Any, List
 from unittest.mock import patch, MagicMock
 
-# B17: live-service integration tests. They exercise AgenticsApp against REAL Ollama + GitHub.
-# Ollama is a required LOCAL service; skip cleanly when OLLAMA_HOST is absent. GitHub reads of the
+# B17: live-service integration tests. They exercise AgenticsApp against REAL LLM + GitHub.
+# LLM is a required LOCAL service; skip cleanly when LLAMA_HOST is absent. GitHub reads of the
 # PUBLIC repo work token-less (rate-limited only), so GITHUB_TOKEN is NOT required to skip.
-_REQUIRES_LIVE = not os.getenv("OLLAMA_HOST")
+_REQUIRES_LIVE = not os.getenv("LLAMA_HOST")
 pytestmark = [
     pytest.mark.skipif(
         _REQUIRES_LIVE,
-        reason="B17: live Ollama integration tests skipped without OLLAMA_HOST (GitHub public-read is token-less)",
+        reason="B17: live LLM integration tests skipped without LLAMA_HOST (GitHub public-read is token-less)",
     ),
     pytest.mark.slow,  # heavy full-pipeline tests (real multi-agent LLM runs) — excluded from fast loop gate
 ]
@@ -74,11 +74,11 @@ class TestAgenticsAppIntegration:
         # Use real AgenticsConfig with environment variables
         config = AgenticsConfig(
             github_token=os.environ.get("GITHUB_TOKEN", "test_token"),
-            ollama_host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
-            ollama_reasoning_model=os.environ.get(
-                "OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"
+            llama_host=os.environ.get("LLAMA_HOST", "http://localhost:11434"),
+            llama_reasoning_model=os.environ.get(
+                "LLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"
             ),
-            ollama_code_model=os.environ.get("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"),
+            llama_code_model=os.environ.get("LLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"),
         )
 
         app = AgenticsApp(config)
@@ -89,8 +89,8 @@ class TestAgenticsAppIntegration:
         assert app.service_manager is not None
         assert app.composable_workflows is not None
         # Assert real initialization - services should be initialized
-        assert app.service_manager.ollama_reasoning is not None
-        assert app.service_manager.ollama_code is not None
+        assert app.service_manager.llm_reasoning is not None
+        assert app.service_manager.llm_code is not None
         assert app.service_manager.github is not None
 
     @pytest.mark.integration
@@ -103,8 +103,8 @@ class TestAgenticsAppIntegration:
         assert agentics_app.composable_workflows is not None
 
         # Verify services are initialized
-        assert agentics_app.service_manager.ollama_reasoning is not None
-        assert agentics_app.service_manager.ollama_code is not None
+        assert agentics_app.service_manager.llm_reasoning is not None
+        assert agentics_app.service_manager.llm_code is not None
         assert agentics_app.service_manager.github is not None
 
         # Verify composable workflows are initialized
@@ -118,8 +118,8 @@ class TestAgenticsAppIntegration:
         # Verify service health checks passed during initialization
         health_status = await agentics_app.get_service_health()
         assert isinstance(health_status, dict)
-        assert "ollama_reasoning" in health_status
-        assert "ollama_code" in health_status
+        assert "llm_reasoning" in health_status
+        assert "llm_code" in health_status
         assert "github" in health_status
 
     @pytest.mark.integration
@@ -191,7 +191,7 @@ class TestAgenticsAppIntegration:
         health_status = await agentics_app.get_service_health()
 
         # Verify all expected services are checked
-        expected_services = ["ollama_reasoning", "ollama_code", "github"]
+        expected_services = ["llm_reasoning", "llm_code", "github"]
         for service in expected_services:
             assert service in health_status
             assert isinstance(health_status[service], bool)
@@ -209,7 +209,7 @@ class TestAgenticsAppIntegration:
     @pytest.mark.integration
     async def test_error_handling_and_recovery_with_real_services(self, agentics_app):
         """Test error handling and recovery with real services."""
-        svc_timeout = int(os.getenv("OLLAMA_TIMEOUT", "300"))
+        svc_timeout = int(os.getenv("LLAMA_TIMEOUT", "300"))
         # Test with invalid URL - ValidationError is raised before workflow
         with pytest.raises(ValidationError):
             await agentics_app.process_issue("https://invalid-url/issues/1")
@@ -240,41 +240,41 @@ class TestAgenticsAppIntegration:
         """Test configuration loading and validation in integration scenarios."""
         # Test with environment variables
         original_token = os.getenv("GITHUB_TOKEN")
-        original_host = os.getenv("OLLAMA_HOST")
+        original_host = os.getenv("LLAMA_HOST")
 
         try:
             # Test valid configuration
             config = AgenticsConfig()
             assert config.github_token is not None
-            assert config.ollama_host.startswith(("http://", "https://"))
+            assert config.llama_host.startswith(("http://", "https://"))
 
             # Test configuration validation
             with patch.dict(os.environ, {"GITHUB_TOKEN": ""}):
                 with pytest.raises(Exception):  # ConfigValidationError
                     init_config(AgenticsConfig())
 
-            with patch.dict(os.environ, {"OLLAMA_HOST": "invalid-url"}):
+            with patch.dict(os.environ, {"LLAMA_HOST": "invalid-url"}):
                 with pytest.raises(Exception):  # ConfigValidationError
                     AgenticsConfig()
 
             # Test app initialization with custom config
             custom_config = AgenticsConfig(
                 github_token=original_token,
-                ollama_host="http://localhost:11434",
-                ollama_reasoning_model="test-model",
-                ollama_code_model="test-code-model",
+                llama_host="http://localhost:11434",
+                llama_reasoning_model="test-model",
+                llama_code_model="test-code-model",
             )
 
             app = AgenticsApp(custom_config)
-            assert app.config.ollama_reasoning_model == "test-model"
-            assert app.config.ollama_code_model == "test-code-model"
+            assert app.config.llama_reasoning_model == "test-model"
+            assert app.config.llama_code_model == "test-code-model"
 
         finally:
             # Restore environment
             if original_token:
                 os.environ["GITHUB_TOKEN"] = original_token
             if original_host:
-                os.environ["OLLAMA_HOST"] = original_host
+                os.environ["LLAMA_HOST"] = original_host
 
     @pytest.mark.integration
     async def test_service_manager_health_checks_integration(self, agentics_app):
@@ -284,8 +284,8 @@ class TestAgenticsAppIntegration:
 
         # Verify structure
         assert isinstance(health_results, dict)
-        assert "ollama_reasoning" in health_results
-        assert "ollama_code" in health_results
+        assert "llm_reasoning" in health_results
+        assert "llm_code" in health_results
         assert "github" in health_results
         assert "github" in health_results
 
@@ -352,14 +352,14 @@ class TestAgenticsAppIntegration:
         from src.circuit_breaker import get_circuit_breaker
 
         # Test circuit breaker instances exist
-        ollama_cb = get_circuit_breaker("ollama_reasoning")
+        llm_cb = get_circuit_breaker("llm_reasoning")
         github_cb = get_circuit_breaker("github")
 
-        assert ollama_cb is not None
+        assert llm_cb is not None
         assert github_cb is not None
 
         # Circuit breakers should be in closed state initially
-        assert ollama_cb.state.name == "CLOSED"
+        assert llm_cb.state.name == "CLOSED"
         assert github_cb.state.name == "CLOSED"
 
     @pytest.mark.integration
@@ -390,9 +390,9 @@ class TestAgenticsAppIntegration:
         # Test with custom configuration
         custom_config = AgenticsConfig(
             github_token=os.getenv("GITHUB_TOKEN"),
-            ollama_host="http://localhost:11434",
-            ollama_reasoning_model="custom-reasoning-model",
-            ollama_code_model="custom-code-model",
+            llama_host="http://localhost:11434",
+            llama_reasoning_model="custom-reasoning-model",
+            llama_code_model="custom-code-model",
             circuit_breaker_failure_threshold=10,
             circuit_breaker_recovery_timeout=120,
         )
@@ -402,15 +402,15 @@ class TestAgenticsAppIntegration:
 
         try:
             # Verify custom config is used
-            assert app.config.ollama_reasoning_model == "custom-reasoning-model"
-            assert app.config.ollama_code_model == "custom-code-model"
+            assert app.config.llama_reasoning_model == "custom-reasoning-model"
+            assert app.config.llama_code_model == "custom-code-model"
             assert app.config.circuit_breaker_failure_threshold == 10
             assert app.config.circuit_breaker_recovery_timeout == 120
 
             # Verify the app's config matches what was passed
             # Note: service_manager may be shared global, so we only check app.config
-            assert app.config.ollama_reasoning_model == "custom-reasoning-model"
-            assert app.config.ollama_code_model == "custom-code-model"
+            assert app.config.llama_reasoning_model == "custom-reasoning-model"
+            assert app.config.llama_code_model == "custom-code-model"
 
         finally:
             await app.shutdown()

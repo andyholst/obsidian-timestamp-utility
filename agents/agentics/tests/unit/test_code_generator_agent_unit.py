@@ -1,7 +1,7 @@
 import pytest
 import os
 from unittest.mock import patch, MagicMock
-from langchain_ollama import OllamaLLM
+from langchain_openai import ChatOpenAI
 from src.code_generator_agent import CodeGeneratorAgent
 from src.config import AgenticsConfig
 from src.state import State

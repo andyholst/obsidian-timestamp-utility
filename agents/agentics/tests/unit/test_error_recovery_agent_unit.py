@@ -70,7 +70,7 @@ class TestErrorRecoveryAgent:
         """Create a valid failed state for testing"""
         return State(
             failed_agent="code_generator",
-            error_context={"service": "ollama_code", "attempt": 1},
+            error_context={"service": "llm_code", "attempt": 1},
             original_error=ValueError("LLM Error"),
             url="https://example.com",
             ticket_content="Test ticket",
@@ -83,7 +83,7 @@ class TestErrorRecoveryAgent:
         """Create an invalid failed state for testing"""
         return State(
             # Missing failed_agent
-            error_context={"service": "ollama_code"},
+            error_context={"service": "llm_code"},
             # Missing original_error
             url="https://example.com",
         )
@@ -101,8 +101,8 @@ class TestErrorRecoveryAgent:
 
         # Check circuit breakers were initialized for all services
         expected_services = [
-            "ollama_reasoning",
-            "ollama_code",
+            "llm_reasoning",
+            "llm_code",
             "github",
             "typescript_compiler",
             "file_system",
@@ -650,7 +650,7 @@ class TestErrorRecoveryAgent:
             }
 
             result = error_recovery_agent._handle_circuit_breaker_error(
-                AgentType.CODE_GENERATOR, valid_failed_state, {"service": "ollama_code"}
+                AgentType.CODE_GENERATOR, valid_failed_state, {"service": "llm_code"}
             )
 
             mock_degrade.assert_called_once()
@@ -670,7 +670,7 @@ class TestErrorRecoveryAgent:
 
             assert healthy == True
             mock_healthy.assert_has_calls(
-                [call("ollama_code"), call("typescript_compiler")]
+                [call("llm_code"), call("typescript_compiler")]
             )
 
     def test_check_service_health_for_agent_unhealthy(self, error_recovery_agent):
