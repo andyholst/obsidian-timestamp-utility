@@ -1,9 +1,12 @@
 import pytest
 import os
+from unittest.mock import MagicMock, patch
 from src.code_extractor_agent import CodeExtractorAgent
 from src.state import State
 from src.clients import llm_reasoning as llm
-from unittest.mock import patch
+
+# Use mock if llm_reasoning is None (lazy init not triggered)
+_llm = llm if llm is not None else MagicMock()
 
 
 @pytest.fixture
@@ -23,7 +26,7 @@ def temp_project_dir(tmp_path):
 
 def test_code_extractor_agent_relevant_files(temp_project_dir):
     # Given: A ticket mentioning specific files and project directory
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     agent.project_root = str(temp_project_dir)
     state = State(
         refined_ticket={
@@ -56,7 +59,7 @@ def test_code_extractor_agent_relevant_files(temp_project_dir):
 
 def test_code_extractor_agent_always_returns_main_files(temp_project_dir):
     # Given: Any ticket (even vague ones) and project directory
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     agent.project_root = str(temp_project_dir)
     state = State(
         refined_ticket={
@@ -87,7 +90,7 @@ def test_code_extractor_agent_always_returns_main_files(temp_project_dir):
 
 def test_code_extractor_agent_returns_main_files_even_if_not_exist(tmp_path):
     # Given: An empty project directory with no .ts files
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     agent.project_root = str(tmp_path)
     state = State(
         refined_ticket={
@@ -125,7 +128,7 @@ def test_code_extractor_agent_returns_main_files_even_if_not_exist(tmp_path):
 
 def test_code_extractor_agent_non_existent_files(temp_project_dir):
     # Given: A ticket mentioning non-existent files and project directory
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     agent.project_root = str(temp_project_dir)
     state = State(
         refined_ticket={
@@ -154,7 +157,7 @@ def test_code_extractor_agent_non_existent_files(temp_project_dir):
 
 def test_extract_identifiers():
     # Given: A ticket with identifiable terms
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     ticket = {
         "title": "Update main function",
         "description": "Modify the main function in TypeScript",
@@ -174,7 +177,7 @@ def test_extract_identifiers():
 
 def test_is_content_relevant():
     # Given: File content and identifiers
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     content = "function main() { console.log('Hello'); }"
     identifiers = ["main", "console"]
 
@@ -191,7 +194,7 @@ def test_is_content_relevant():
 
 def test_code_extractor_agent_stop_words_failure(temp_project_dir):
     # Given: A ticket and mocked stop words file loading failure
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     agent.project_root = str(temp_project_dir)
     state = State(
         refined_ticket={
@@ -217,7 +220,7 @@ def test_code_extractor_agent_always_returns_main_files_regardless_of_ticket(
     temp_project_dir,
 ):
     # Given: Any ticket content (even completely empty/vague) and project directory
-    agent = CodeExtractorAgent(llm)
+    agent = CodeExtractorAgent(_llm)
     agent.project_root = str(temp_project_dir)
     state = State(
         refined_ticket={

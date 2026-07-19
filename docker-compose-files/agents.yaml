@@ -4,7 +4,7 @@ services:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     build:
       context: ..
-      dockerfile: containers/agents/Dockerfile
+      dockerfile: agents/agentics/Dockerfile
       args:
         HOST_UID: ${HOST_UID:-1000}
         HOST_GID: ${HOST_GID:-1000}
@@ -37,7 +37,7 @@ services:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     build:
       context: ..
-      dockerfile: containers/agents/Dockerfile
+      dockerfile: agents/agentics/Dockerfile
       args:
         HOST_UID: ${HOST_UID:-1000}
         HOST_GID: ${HOST_GID:-1000}
@@ -70,7 +70,7 @@ services:
     user: root
     build:
       context: ..
-      dockerfile: containers/agents/Dockerfile
+      dockerfile: agents/agentics/Dockerfile
       args:
         HOST_UID: ${HOST_UID:-1000}
         HOST_GID: ${HOST_GID:-1000}

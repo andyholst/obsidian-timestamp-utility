@@ -23,7 +23,7 @@ ARG HOST_GID=1000
 ARG CACHE_BUST=1
 
 # Copy and install Python requirements
-COPY requirements.txt .
+COPY agents/agentics/requirements.txt .
 RUN echo "Cache bust: ${CACHE_BUST}" && pip install --no-cache-dir -r requirements.txt && \
     rm -rf ~/.cache/pip && \
     mkdir -p /tmp/.cache/huggingface && \

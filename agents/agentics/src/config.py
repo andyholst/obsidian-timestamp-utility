@@ -54,25 +54,6 @@ class AgenticsConfig(BaseModel):
         default_factory=lambda: os.getenv("LLAMA_CODE_MODEL", os.getenv("LLAMA_CODE_MODEL", "qwen3.6-35b-a3b"))
     )
 
-    # Backwards-compatible aliases (deprecated, read from llama_* or fall back to OLLAMA_*)
-    @property
-    def llama_host(self):
-        import warnings
-        warnings.warn("llama_host is deprecated, use llama_host", DeprecationWarning, stacklevel=2)
-        return self.llama_host
-
-    @property
-    def llama_reasoning_model(self):
-        import warnings
-        warnings.warn("llama_reasoning_model is deprecated, use llama_reasoning_model", DeprecationWarning, stacklevel=2)
-        return self.llama_reasoning_model
-
-    @property
-    def llama_code_model(self):
-        import warnings
-        warnings.warn("llama_code_model is deprecated, use llama_code_model", DeprecationWarning, stacklevel=2)
-        return self.llama_code_model
-
     # Circuit breaker configuration
     circuit_breaker_failure_threshold: int = 3
     circuit_breaker_recovery_timeout: int = 30
@@ -84,10 +65,10 @@ class AgenticsConfig(BaseModel):
     info_as_debug: bool = INFO_AS_DEBUG
 
     @model_validator(mode="after")
-    def validate_llama_host(cls, model):
-        if not model.llama_host.startswith(("http://", "https://")):
+    def validate_llama_host(self):
+        if not self.llama_host.startswith(("http://", "https://")):
             raise ConfigValidationError("LLAMA_HOST must be a valid HTTP/HTTPS URL")
-        return model
+        return self
 
     @field_validator("github_token")
     @classmethod

@@ -88,7 +88,7 @@ httpx==0.28.1
     #   langgraph-sdk
     #   langsmith
     #   mcp
-    #   ollama
+#   openai
 httpx-sse==0.4.3
     # via
     #   langchain-community
@@ -127,12 +127,12 @@ langchain-core==0.3.83
     #   -r requirements.in
     #   langchain
     #   langchain-community
-    #   langchain-ollama
+    #   langchain-openai
     #   langchain-text-splitters
     #   langgraph
     #   langgraph-checkpoint
     #   langgraph-prebuilt
-langchain-ollama==0.3.10
+langchain-openai==0.3.20
     # via -r requirements.in
 langchain-text-splitters==0.3.11
     # via langchain
@@ -214,8 +214,8 @@ nvidia-nvshmem-cu12==3.4.5
     # via torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
-ollama==0.6.1
-    # via langchain-ollama
+openai==1.68.2
+    # via langchain-openai
 orjson==3.11.7
     # via
     #   langgraph-sdk
@@ -253,7 +253,7 @@ pydantic==2.12.5
     #   langgraph
     #   langsmith
     #   mcp
-    #   ollama
+#   openai
     #   pydantic-settings
 pydantic-core==2.41.5
     # via pydantic

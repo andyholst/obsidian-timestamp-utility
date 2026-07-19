@@ -14,10 +14,18 @@ LLAMA_CODE_MODEL = os.getenv("LLAMA_CODE_MODEL", os.getenv("LLAMA_CODE_MODEL", "
 monitor = structured_log(__name__)
 
 # GitHub client will be initialized lazily
-github = None
+_github = None
 
-# Initialize LLM clients
-monitor.info("Initializing LLM clients")
+def get_github():
+    """Lazy initialization of GitHub client."""
+    global _github
+    if _github is None:
+        _github = Github(GITHUB_TOKEN)
+    return _github
+
+# LLM clients will be initialized lazily
+_llm_reasoning = None
+_llm_code = None
 
 
 class TimedChatOpenAI(ChatOpenAI):
@@ -67,24 +75,40 @@ class TimedChatOpenAI(ChatOpenAI):
             raise
 
 
-llm_reasoning = TimedChatOpenAI(
-    model=LLAMA_REASONING_MODEL,
-    base_url=LLAMA_HOST,
-    temperature=0.7,  # Lowered to reduce hallucinations
-    top_p=0.7,  # Adjusted for more focused output
-    top_k=20,
-    min_p=0,
-    model_name="reasoning",
-    extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
-)
-llm_code = TimedChatOpenAI(
-    model=LLAMA_CODE_MODEL,
-    base_url=LLAMA_HOST,
-    temperature=0.7,  # Lowered to reduce hallucinations
-    top_p=0.7,  # Adjusted for more focused output
-    top_k=20,
-    min_p=0,
-    model_name="code",
-    extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
-)
-monitor.info("LLM clients initialized successfully")
+def _create_llm(model, name):
+    """Create an LLM client instance."""
+    return TimedChatOpenAI(
+        model=model,
+        base_url=LLAMA_HOST,
+        temperature=0.7,  # Lowered to reduce hallucinations
+        top_p=0.7,  # Adjusted for more focused output
+        top_k=20,
+        min_p=0,
+        model_name=name,
+        extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
+    )
+
+
+def get_llm_reasoning():
+    """Lazy initialization of reasoning LLM."""
+    global _llm_reasoning
+    if _llm_reasoning is None:
+        monitor.info("Initializing reasoning LLM")
+        _llm_reasoning = _create_llm(LLAMA_REASONING_MODEL, "reasoning")
+        monitor.info("Reasoning LLM initialized successfully")
+    return _llm_reasoning
+
+
+def get_llm_code():
+    """Lazy initialization of code LLM."""
+    global _llm_code
+    if _llm_code is None:
+        monitor.info("Initializing code LLM")
+        _llm_code = _create_llm(LLAMA_CODE_MODEL, "code")
+        monitor.info("Code LLM initialized successfully")
+    return _llm_code
+
+
+# For backward compatibility - these will be None until accessed
+llm_reasoning = None
+llm_code = None

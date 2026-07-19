@@ -106,8 +106,8 @@ class TestAgenticsConfig:
         config = AgenticsConfig()
         assert config.github_token is None  # Will be validated
         assert config.llama_host == "http://localhost:11434"
-        assert config.llama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
-        assert config.llama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.llama_reasoning_model == "qwen3.6-35b-a3b"
+        assert config.llama_code_model == "qwen3.6-35b-a3b"
 
     def test_agentics_config_github_token_validation_error(self, monkeypatch):
         """Test ConfigValidationError for missing github_token."""
