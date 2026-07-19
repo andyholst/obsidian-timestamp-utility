@@ -26,6 +26,22 @@
 #
 set -u
 
+# Use homebrew bash on macOS (bash 5.3+ required for associative arrays)
+# Also add gtimeout to PATH since macOS doesn't have `timeout`
+if [[ "$(uname)" == "Darwin" ]]; then
+    if [[ -x /opt/homebrew/bin/bash ]]; then
+        # Add homebrew coreutils to PATH if not already there
+        if [[ -x /opt/homebrew/bin/gtimeout && "$PATH" != */opt/homebrew/opt/coreutils/libexec/gnubin* ]]; then
+            export PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"
+        fi
+        # Also add homebrew bin to PATH for bash itself
+        if [[ "$PATH" != */opt/homebrew/bin* ]]; then
+            export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+        fi
+        exec /opt/homebrew/bin/bash "$0" "$@"
+    fi
+fi
+
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 
 # Snapshot containers already running BEFORE the loop starts, so we only tear
@@ -127,7 +143,11 @@ run_stage() {
     done
   } &
   local hb_pid=$!
-  timeout "$cap" setsid script -qec "make $stage; echo \$? > $rc_file" /dev/null 2>&1 | tee -a "$log"
+  # macOS `script` doesn't support `-c` flag, so write command to temp file instead
+  local cmdfile="/tmp/loop_cmd_${stage}.$$"
+  printf '%s\n' "make $stage; echo \$? > $rc_file" > "$cmdfile"
+  timeout "$cap" setsid script -q "$cmdfile" /dev/null 2>&1 | tee -a "$log"
+  rm -f "$cmdfile" 2>/dev/null
   local rc
   rc="$(cat "$rc_file" 2>/dev/null || echo 1)"
   rm -f "$rc_file" 2>/dev/null

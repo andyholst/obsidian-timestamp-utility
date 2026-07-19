@@ -74,10 +74,7 @@ RECORD_WORK_CMD ?= cd /project && export PATH=/usr/local/sbin:/usr/local/bin:/us
 # "/bin/sh <tmpfile>" to `script` (no inline paths), so the typescript file is always the
 # explicit trailing `/dev/null`.
 define docker_run
-	@if [ -t 1 ]; then $(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1); else _drf=$$(mktemp); _dout=$$(mktemp); cat > "$$_drf" <<'DRF_EOF'
-$(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1)
-DRF_EOF
-script -qec "/bin/sh $$_drf; echo $$? > $$_drf.rc" /dev/null < /dev/null > "$$_dout" 2>&1; _rc=$$(cat $$_drf.rc 2>/dev/null || echo 0); cat "$$_dout"; rm -f "$$_drf" "$$_drf.rc" "$$_dout"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi; fi
+	@if [ -t 1 ]; then $(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1); else _drf=$$(mktemp); _dout=$$(mktemp); printf '%s\n' '$(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1)' > "$$_drf"; script -qec "/bin/sh $$_drf; echo \$? > $$_drf.rc" /dev/null < /dev/null > "$$_dout" 2>&1; _rc=$$(cat $$_drf.rc 2>/dev/null || echo 0); cat "$$_dout"; rm -f "$$_drf" "$$_drf.rc" "$$_dout"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi; fi
 endef
 
 DOCKER_SOCK := $(shell \
