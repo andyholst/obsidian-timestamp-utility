@@ -74,7 +74,14 @@ RECORD_WORK_CMD ?= cd /project && export PATH=/usr/local/sbin:/usr/local/bin:/us
 # "/bin/sh <tmpfile>" to `script` (no inline paths), so the typescript file is always the
 # explicit trailing `/dev/null`.
 define docker_run
-	@if [ -t 1 ]; then $(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1); else _drf=$$(mktemp); _dout=$$(mktemp); printf '%s\n' '$(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1)' > "$$_drf"; script -qec "/bin/sh $$_drf; echo \$? > $$_drf.rc" /dev/null < /dev/null > "$$_dout" 2>&1; _rc=$$(cat $$_drf.rc 2>/dev/null || echo 0); cat "$$_dout"; rm -f "$$_drf" "$$_drf.rc" "$$_dout"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi; fi
+	@if [ -t 1 ]; then $(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1); else \
+	_drf=$$(mktemp); _dout=$$(mktemp); \
+	_dcmd=$$(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1); \
+	echo "$$_dcmd" > "$$_drf"; \
+	script -q "$$_drf" < /dev/null > "$$_dout" 2>&1; \
+	_rc=$$(echo $$?); cat "$$_dout"; rm -f "$$_drf" "$$_dout"; \
+	if [ $$_rc -ne 0 ]; then exit $$_rc; fi; \
+	fi
 endef
 
 DOCKER_SOCK := $(shell \
@@ -954,8 +961,12 @@ secret-scan-image: ## Build the gitleaks secret-scanning container image (base, 
 loop-secret-scan: ## gitleaks secret scan of the repo, containerized (docker compose only).
 	@echo "LOOP-SECRET-SCAN: scanning repository with gitleaks (container)..."
 	@rm -f .gitleaks-report.json
-	@set +e; script -qec "docker compose -f $(GITLEAKS_COMPOSE) run --rm gitleaks" /dev/null >/dev/null 2>&1; RC=$$?; set -e; \
-	if [ $$RC -ne 0 ] && [ -s .gitleaks-report.json ]; then \
+	@set +e; \
+	_srf=$$(mktemp); _sout=$$(mktemp); \
+	echo "docker compose -f $(GITLEAKS_COMPOSE) run --rm gitleaks" > "$$_srf"; \
+	script -q "$$_srf" < /dev/null > "$$_sout" 2>&1; RC=$$(cat "$$_sout" 2>/dev/null | grep -oE '^[0-9]+$' | tail -1 || echo 0); cat "$$_sout"; rm -f "$$_srf" "$$_sout"; \
+	set -e; \
+	if [ "$$RC" -ne 0 ] && [ -s .gitleaks-report.json ]; then \
 		echo "LOOP-SECRET-SCAN: SECRETS DETECTED -- loop blocked."; \
 		echo "LOOP-SECRET-SCAN: findings (file | rule | line):"; \
 		python3 scripts/print_gitleaks_report.py .gitleaks-report.json || true; \
@@ -971,9 +982,12 @@ loop-secret-scan: ## gitleaks secret scan of the repo, containerized (docker com
 loop-secret-scan-tests: ## [LOOP] run secret-scanner pytest suite (containerized, real gitleaks).
 	@echo "LOOP-SECRET-SCAN-TESTS: building test image + running suite (container)..."
 	@$(MAKE) secret-scan-tests-image
-	@script -qec "docker compose -f $(GITLEAKS_TESTS_COMPOSE) run --rm gitleaks-tests" /dev/null \
-		|| { echo "LOOP-SECRET-SCAN-TESTS: tests FAILED -- loop blocked."; exit 1; }
-	@echo "LOOP-SECRET-SCAN-TESTS: all passed."
+	@_srf=$$(mktemp); _sout=$$(mktemp); \
+	echo "docker compose -f $(GITLEAKS_TESTS_COMPOSE) run --rm gitleaks-tests" > "$$_srf"; \
+	script -q "$$_srf" < /dev/null > "$$_sout" 2>&1; \
+	if [ $$? -ne 0 ]; then cat "$$_sout"; rm -f "$$_srf" "$$_sout"; echo "LOOP-SECRET-SCAN-TESTS: tests FAILED -- loop blocked."; exit 1; fi; \
+	rm -f "$$_srf" "$$_sout"; \
+	echo "LOOP-SECRET-SCAN-TESTS: all passed."
 
 # Non-scan helper: run the pytest suites that exercise the Python wrapper
 # (developer/hook guard + real-gitleaks integration). Does NOT scan via Makefile.

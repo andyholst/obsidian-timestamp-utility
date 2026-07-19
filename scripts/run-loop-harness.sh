@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 #
 # run-loop-harness.sh — mandatory loop-gate trigger (AGENTS.md behaviour B20).
 #
@@ -130,12 +130,21 @@ run_stage() {
   # Heartbeat: while make runs, every 15s print an elapsed note if the log has
   # been quiet (no new bytes) since the last tick -- so a long silent stage
   # still shows life instead of looking hung.
+  # Note: `stat -c%s` is GNU; macOS uses `stat -f%z`. We support both.
+  # Capture start time BEFORE the stage command runs (for accurate elapsed calc)
+  local start_epoch
+  start_epoch=$(date '+%s')
   {
     local hb=0 last=0 now=0
     while kill -0 "$$" 2>/dev/null && [[ -f "$log" ]]; do
       sleep 15
       hb=$((hb+1))
-      now=$(stat -c%s "$log" 2>/dev/null || echo 0)
+      # macOS-compatible file size check
+      if [[ "$(uname)" == "Darwin" ]]; then
+        now=$(stat -f%z "$log" 2>/dev/null || echo 0)
+      else
+        now=$(stat -c%s "$log" 2>/dev/null || echo 0)
+      fi
       if [[ "$now" -eq "$last" ]]; then
         printf "    ... %ds elapsed (stage quiet, still running)\n" "$((hb*15))"
       fi
@@ -143,10 +152,10 @@ run_stage() {
     done
   } &
   local hb_pid=$!
-  # macOS `script` doesn't support `-c` flag, so write command to temp file instead
+  # macOS `script` doesn't support `-c` flag, so write command to temp file and run it
   local cmdfile="/tmp/loop_cmd_${stage}.$$"
   printf '%s\n' "make $stage; echo \$? > $rc_file" > "$cmdfile"
-  timeout "$cap" setsid script -q "$cmdfile" /dev/null 2>&1 | tee -a "$log"
+  timeout "$cap" setsid script -q "$cmdfile" < /dev/null 2>&1 | tee -a "$log"
   rm -f "$cmdfile" 2>/dev/null
   local rc
   rc="$(cat "$rc_file" 2>/dev/null || echo 1)"
@@ -155,15 +164,26 @@ run_stage() {
 
   local end_ts
   end_ts="$(date '+%H:%M:%S')"
-  local elapsed
-  elapsed=$(($(date -d "$end_ts" '+%s') - $(date -d "$start_ts" '+%s')))
+  local end_epoch
+  end_epoch=$(date '+%s')
+  elapsed=$((end_epoch - start_epoch))
 
   # On timeout, forcibly remove any detached container the stage may have left.
   local svc
   svc="$(stage_service "$stage")"
   if [[ "$rc" -eq 124 && -n "$svc" ]]; then
     echo "  -> TIMEOUT (exceeded ${cap}s); killing detached '${svc}' container"
-    script -qec "docker compose -f docker-compose-files/agents.yaml kill '${svc}' 2>/dev/null; docker compose -f docker-compose-files/agents.yaml rm -f '${svc}' 2>/dev/null" /dev/null >/dev/null 2>&1 || true
+    # macOS `script` doesn't support `-c`, so write to temp file
+    local killfile="/tmp/loop_kill_${stage}.$$"
+    cat > "$killfile" <<'KILLSCRIPT'
+#!/bin/bash
+docker compose -f docker-compose-files/agents.yaml kill 'integration-test-agents' 2>/dev/null || true
+docker compose -f docker-compose-files/agents.yaml rm -f 'integration-test-agents' 2>/dev/null || true
+KILLSCRIPT
+    # Replace the service name dynamically
+    sed -i '' "s/integration-test-agents/${svc}/g" "$killfile"
+    timeout 30 setsid script -q "$killfile" < /dev/null 2>/dev/null || true
+    rm -f "$killfile" 2>/dev/null
     echo "    [$end_ts] elapsed ${elapsed}s"
     summary+=("$stage TIMEOUT")
     return 1
