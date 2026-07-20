@@ -1,17 +1,21 @@
 services:
   app:
-    build:
-      context: ..
-      dockerfile: containers/npm/Dockerfile
+    image: docker-compose-files-app:latest
+    pull_policy: never
     stdin_open: false
     tty: false
+    # Mount source to /project (hot-reload). /app/node_modules is preserved in image with correct arch bindings.
+    # Create symlink /project/node_modules -> /app/node_modules (host node_modules won't overwrite the symlink target)
     volumes:
-    - ../:/app
-    - /home/asimov/repository/git/projects/obsidian-timestamp-utility/node_modules:/app/node_modules
-    working_dir: /app
+    - ../:/project
+    - npm_modules:/project/node_modules
+    working_dir: /project
     environment:
     - TAG=${TAG:-v0.1.0}
     - REPO_NAME=${REPO_NAME:-obsidian-timestamp-utility}
+
+volumes:
+  npm_modules:
 
 # Rootless nerdctl CNI fix: unique default-network subnet (see agents.yaml note).
 # 10.88.0.0/24 is verified free on this host.

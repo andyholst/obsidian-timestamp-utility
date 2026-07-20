@@ -34,5 +34,9 @@ RUN curl -sL --retry 3 -o git-chglog.tar.gz https://github.com/git-chglog/git-ch
 
 COPY package.json .
 RUN npm install --no-package-lock --loglevel=silly
+# Fix npm optional dependency bug: force-install x64 native binding (compose builds arm64 on macOS, but node:22 is amd64 base)
+RUN npm_config_arch=x64 npm install --no-save --force @rollup/rollup-linux-x64-gnu --loglevel=silly || true
+# Create /project as symlink to /app so we can mount source files separately from node_modules
+RUN ln -sf /app /project
 
 CMD ["bash"]
