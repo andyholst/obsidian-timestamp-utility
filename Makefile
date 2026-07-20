@@ -95,7 +95,8 @@ DOCKER_SOCK := $(shell \
         wt-create openspec-flow openspec-redeliver \
         squash-commits \
         squash-commits bump-version release-notes tag-release loop-release check-released release bump-local release-prep \
-        lint-commits install-git-hooks release-flow loop-final
+        lint-commits install-git-hooks release-flow loop-final \
+        nuke-all-containers
 
 .DEFAULT_GOAL := help
 
@@ -879,13 +880,13 @@ collect-executed: ## Collect executed tests (used by CI)
 	@echo "Collecting executed tests..."
 	@find agents/agentics/tests -name '*.py' -path '*integration*' -o -name '*.py' -path '*unit*' | sort
 
-stop-containers: ## Stop all project containers
+stop-containers: ## Stop all project containers (excludes honcho)
 	@if command -v nerdctl >/dev/null 2>&1; then \
-		nerdctl ps -q --filter label=com.docker.compose.project 2>/dev/null | xargs -r nerdctl stop 2>/dev/null || true; \
-		echo "Stopped compose containers (nerdctl)."; \
+		nerdctl ps -q --filter label=com.docker.compose.project --filter 'label=com.docker.compose.project!=honcho' 2>/dev/null | xargs -r nerdctl stop 2>/dev/null || true; \
+		echo "Stopped compose containers (nerdctl, excluding honcho)."; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker ps -q --filter label=com.docker.compose.project 2>/dev/null | xargs -r docker stop 2>/dev/null || true; \
-		echo "Stopped compose containers (docker)."; \
+		docker ps -q --filter label=com.docker.compose.project --filter 'label=com.docker.compose.project!=honcho' 2>/dev/null | xargs -r docker stop 2>/dev/null || true; \
+		echo "Stopped compose containers (docker, excluding honcho)."; \
 	else \
 		echo "No container runtime found — skipping."; \
 	fi
@@ -908,6 +909,11 @@ clean-logs: ## Remove all logs
 clean-oci: ## Fast OCI nuke (nerdctl prune best practice)
 	nerdctl system prune -a -f --volumes || true
 	@echo "OCI pruned."
+
+# ---- Nuclear cleanup (manual only — not part of clean) ----
+nuke-all-containers: ## Nuclear cleanup: stop/remove ALL nerdctl containers, networks, volumes, images. Manual only — not part of clean. Removes honcho, otu, and any other compose project artifacts.
+	@echo "=== NUKE: stopping and removing ALL containers ==="
+	@bash scripts/nuke-all-containers.sh
 
 # ---- Secret scanning (gitleaks) — HOOK/CI SCAN + LOOP TESTS, CONTAINER-ONLY (B9) ----
 #
@@ -986,4 +992,21 @@ secret-scan-tests-image: ## Build the gitleaks + pytest test image.
 		-t $(GITLEAKS_TESTS_IMAGE) .
 
 .PHONY: secret-scan-image secret-scan-tests-image loop-secret-scan test-secret-scanner
+
+# ── Nuke helpers ──────────────────────────────────────────────────────
+# Stop and remove ALL project containers, networks, volumes, and images.
+# Platform-agnostic: uses `nerdctl` from PATH (macOS colima wrapper or native Linux).
+# Honcho containers are stopped first via HONCHO_COMPOSE env var.
+#
+# Usage:
+#   make nuke-containers                # default (no honcho)
+#   make nuke-containers HONCHO_COMPOSE=/path/to/honcho/docker-compose.yml
+nuke-containers: ## Stop and remove ALL containers, networks, volumes, and project images
+	@echo "=== NUKE: starting (platform-agnostic) ==="
+	@HONCHO_COMPOSE="$(HONCHO_COMPOSE)" \
+	PROJECT_COMPOSE_DIR="$(PROJECT_COMPOSE_DIR)" \
+	bash scripts/nuke-all-containers.sh
+	@echo "=== NUKE: done ==="
+
+.PHONY: nuke-containers
 
