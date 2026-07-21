@@ -227,8 +227,10 @@ run_stage() {
   local hb_pid=$!
 
   # Run stage with timeout, capture exit code via marker file
-  # Use 'script' for PTY (needed by nerdctl compose run), wrapped in timeout
-  $TIMEOUT_CMD "$cap" setsid script -qec "make $stage 2>&1; echo \$? > $rc_file" /dev/null 2>&1 | tee -a "$log"
+  # macOS script(1) has no -c flag — use sh -c instead.
+  # docker_run.sh already allocates PTY per-container via script -q /dev/null,
+  # so the harness-level wrapper doesn't need to allocate a PTY.
+  $TIMEOUT_CMD "$cap" sh -c "make $stage 2>&1; echo \$? > $rc_file" 2>&1 | tee -a "$log"
   local rc
   rc=$(cat "$rc_file" 2>/dev/null || echo 1)
   rm -f "$rc_file" 2>/dev/null
