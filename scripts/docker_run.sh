@@ -30,7 +30,10 @@ shift
 # Detect runtime
 if command -v nerdctl >/dev/null 2>&1; then
     RUNTIME="nerdctl"
-    DOCKER_CMD="nerdctl compose"
+    # On macOS with colima, the nerdctl wrapper is 'colima nerdctl --profile default'
+    # which doesn't expose compose subcommands directly. Use the -- separator to pass
+    # compose to the underlying nerdctl binary inside the colima VM.
+    DOCKER_CMD="colima nerdctl -- compose"
 else
     RUNTIME="docker"
     DOCKER_CMD="docker compose"
