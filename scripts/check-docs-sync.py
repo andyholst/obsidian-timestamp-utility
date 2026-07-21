@@ -139,15 +139,23 @@ def normalize(text: str) -> str:
 
 def ordered_stages_present(text: str, stages: list[str] | None = None) -> bool:
     """True if the canonical stage chain appears as a contiguous ordered substring
-    (after glyph normalization), so removing `loop-ts-floor` from the chain fails even
-    if the token appears elsewhere in the file.
+    (after glyph normalization) AND no reversed adjacent pair exists anywhere in the text.
+    This ensures that if ANY location has stages reordered (e.g. unit before ts-floor),
+    the gate catches it even if the full chain survives elsewhere.
     `stages` defaults to the derived canonical order (drop the gate itself).
     """
     if stages is None:
         stages = CANONICAL_STAGE_ORDER_FALLBACK
     norm = normalize(text)
     chain = " -> ".join(stages)
-    return chain in norm
+    if chain not in norm:
+        return False
+    # Detect reordering: check that no adjacent pair appears in reverse order
+    for i in range(len(stages) - 1):
+        reversed_pair = f"{stages[i+1]} -> {stages[i]}"
+        if reversed_pair in norm:
+            return False
+    return True
 
 
 def b_range_ok(text: str, b_min: int | None = None) -> bool:

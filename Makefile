@@ -880,13 +880,25 @@ collect-executed: ## Collect executed tests (used by CI)
 	@echo "Collecting executed tests..."
 	@find agents/agentics/tests -name '*.py' -path '*integration*' -o -name '*.py' -path '*unit*' | sort
 
-stop-containers: ## Stop all project containers (excludes honcho)
+stop-containers: ## Stop all project containers (excludes honcho by name prefix)
 	@if command -v nerdctl >/dev/null 2>&1; then \
-		nerdctl ps -q --filter label=com.docker.compose.project --filter 'label=com.docker.compose.project!=honcho' 2>/dev/null | xargs -r nerdctl stop 2>/dev/null || true; \
-		echo "Stopped compose containers (nerdctl, excluding honcho)."; \
+		CIDS=$$(nerdctl ps -q --filter label=com.docker.compose.project 2>/dev/null); \
+		REMAINING=""; \
+		for cid in $$CIDS; do \
+			CNAME=$$(nerdctl inspect "$$cid" --format '{{.Name}}' 2>/dev/null | sed 's|^/||'); \
+			case "$$CNAME" in honcho-*) echo "  PROTECTED (honcho): $$CNAME";; *) REMAINING="$$REMAINING $$cid";; esac; \
+		done; \
+		REMAINING=$$(echo "$$REMAINING" | xargs); \
+		if [ -n "$$REMAINING" ]; then nerdctl stop $$REMAINING 2>/dev/null; echo "Stopped project containers (nerdctl, honcho excluded)."; else echo "No project containers to stop (all honcho or none)."; fi; \
 	elif command -v docker >/dev/null 2>&1; then \
-		docker ps -q --filter label=com.docker.compose.project --filter 'label=com.docker.compose.project!=honcho' 2>/dev/null | xargs -r docker stop 2>/dev/null || true; \
-		echo "Stopped compose containers (docker, excluding honcho)."; \
+		CIDS=$$(docker ps -q --filter label=com.docker.compose.project 2>/dev/null); \
+		REMAINING=""; \
+		for cid in $$CIDS; do \
+			CNAME=$$(docker inspect "$$cid" --format '{{.Name}}' 2>/dev/null | sed 's|^/||'); \
+			case "$$CNAME" in honcho-*) echo "  PROTECTED (honcho): $$CNAME";; *) REMAINING="$$REMAINING $$cid";; esac; \
+		done; \
+		REMAINING=$$(echo "$$REMAINING" | xargs); \
+		if [ -n "$$REMAINING" ]; then docker stop $$REMAINING 2>/dev/null; echo "Stopped project containers (docker, honcho excluded)."; else echo "No project containers to stop (all honcho or none)."; fi; \
 	else \
 		echo "No container runtime found — skipping."; \
 	fi
