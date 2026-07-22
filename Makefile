@@ -1,4 +1,10 @@
+# Use bash 5.2+ from Homebrew on macOS, or default bash on Linux
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+SHELL := /opt/homebrew/bin/bash
+else
 SHELL := /bin/bash
+endif
 .ONESHELL:
 .DELETE_ON_ERROR:
 .SUFFIXES:
@@ -16,18 +22,18 @@ HOST_UID  := $(shell id -u)
 HOST_GID  := $(shell id -g)
 export HOST_UID HOST_GID
 
-# Ollama (local LLM that generates the TS code + TS tests)
-OLLAMA_MODEL      ?= sorc/qwen3.5-claude-4.6-opus:9b
-OLLAMA_CODE_MODEL ?= sorc/qwen3.5-claude-4.6-opus:9b
-OLLAMA_HOST       ?= http://localhost:11434
+# llama (local LLM that generates the TS code + TS tests)
+LLAMA_MODEL      ?= sorc/qwen3.5-claude-4.6-opus:9b
+LLAMA_CODE_MODEL ?= sorc/qwen3.5-claude-4.6-opus:9b
+LLAMA_HOST       ?= http://localhost:11434
 
 ISSUE_URL         ?= https://github.com/andyholst/obsidian-timestamp-utility/issues/20
 TEST_FILTER       ?=
 INTEGRATION_TEST_FILTER ?=
-OLLAMA_TIMEOUT    ?= 300
+LLAMA_TIMEOUT    ?= 300
 TYPE              ?=
 CHANGE            ?= uuid-modal-agentic-generation
-export TEST_FILTER INTEGRATION_TEST_FILTER OLLAMA_TIMEOUT TYPE OLLAMA_HOST CHANGE
+export TEST_FILTER INTEGRATION_TEST_FILTER LLAMA_TIMEOUT TYPE LLAMA_HOST CHANGE
 
 # HERMES_BIN: the project-manager Hermes CLI that record-work.py invokes for prose drafting.
 # DEFAULT IS EMPTY on purpose: hermes is a HOST-ONLY CLI (a venv under ~/.hermes with hardcoded
@@ -74,11 +80,40 @@ DOCKER_SOCK := $(shell \
 	elif [ -S $(XDG_RUNTIME_DIR)/containerd-rootless/api.sock ]; then echo $(XDG_RUNTIME_DIR)/containerd-rootless/api.sock; \
 	else echo ""; fi)
 
-# ---- docker_run.sh: PTY-aware wrapper for docker/nerdctl compose run ----
+# ---- define docker_run: PTY-aware wrapper for docker/nerdctl compose run ----
 # nerdctl compose run on macOS requires a TTY (gives "provided file is not a console" otherwise).
 # docker compose does not need it. nerdctl compose run does NOT support --rm.
-# This script detects nerdctl and wraps with `script -qec` to provide a pseudo-console.
-# Usage: scripts/docker_run.sh <compose-file> <extra-flags> <service> <cmd...>
+# This macro detects if running interactively; if not, uses `script` to allocate a PTY.
+# Usage: $(call docker_run,<compose-file> <extra-flags> <service> <cmd...>)
+
+define docker_run
+	@if [ -t 1 ]; then \
+		COMPOSE_FILE=$$(echo '$(1)' | awk '{print $$1}'); \
+		ARGLIST=$$(echo '$(1)' | sed 's|^[^ ]* ||'); \
+		if [ -z "$$ARGLIST" ]; then \
+			$(DOCKER) -f "$$COMPOSE_FILE" run; \
+		else \
+			$(DOCKER) -f "$$COMPOSE_FILE" run $$ARGLIST; \
+		fi; \
+	else \
+		COMPOSE_FILE=$$(echo '$(1)' | awk '{print $$1}'); \
+		ARGLIST=$$(echo '$(1)' | sed 's|^[^ ]* ||'); \
+		if [ -z "$$ARGLIST" ]; then \
+			COMMAND="$(DOCKER) -f $$COMPOSE_FILE run"; \
+		else \
+			COMMAND="$(DOCKER) -f $$COMPOSE_FILE run $$ARGLIST"; \
+		fi; \
+		CMD_FILE=$$(mktemp); CMD_OUT=$$(mktemp); \
+		printf '%s\n' "$$COMMAND" > "$$CMD_FILE"; \
+		script -q /dev/null sh -c "sh $$CMD_FILE; echo $$? > $$CMD_FILE.rc" /dev/null < /dev/null > "$$CMD_OUT" 2>&1; \
+		RC=$$(cat $$CMD_FILE.rc 2>/dev/null || echo 0); \
+		cat "$$CMD_OUT"; \
+		rm -f "$$CMD_FILE" "$$CMD_FILE.rc" "$$CMD_OUT"; \
+		if [ "$$RC" -ne 0 ]; then exit "$$RC"; fi; \
+	fi
+endef
+
+# docker_run.sh remains available for standalone use outside Makefile.
 
 .PHONY: help all \
         build-app test-app changelog release \
@@ -86,7 +121,7 @@ DOCKER_SOCK := $(shell \
         test-agents-unit test-agents-unit-mock test-agents-integration test-agents-integration-fast test-agents-e2e \
         test-agents test-agents-real verify-agentics-after-run \
         run-agentics phase7-archive b9-perms record-work record-work-prompt squash-commits openspec-new \
-        check-deps check-github check-issue-url check-ollama check-secrets \
+        check-deps check-github check-issue-url check-llama check-secrets \
         fix-perms create-logs \
         collect-tests collect-executed generate-requirements \
         stop-containers \
@@ -113,12 +148,12 @@ all: build-app test-app release ## Full pipeline
 
 build-app: b9-perms ## Build Obsidian plugin via docker compose (containers/npm)
 	@echo "Building plugin (npm run build) via containers/npm..."
-	@bash scripts/docker_run.sh docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm run build
+	@$(call docker_run,docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm run build)
 	@echo "Build complete"
 
 test-app: b9-perms ## Test the built plugin via docker compose (containers/npm)
 	@echo "Running jest via containers/npm..."
-	@bash scripts/docker_run.sh docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm test
+	@$(call docker_run,docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm test)
 	@echo "=== Plugin test output above ==="
 
 validate-ts: ## Fast TypeScript validation (runs tsc directly)
@@ -142,14 +177,14 @@ validate-tests: ## Fast test validation (runs jest directly)
 	@echo "Test validation complete"
 
 changelog: b9-perms ## Generate CHANGELOG.md: render new work as a '## Unreleased' (or versioned) section and OVERWRITE-merge it onto the curated history (idempotent re-run: no duplicate sections). Run 'make bump-from-changelog' to version it.
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents /project/scripts/gen_changelog.sh || echo "changelog skipped"
+	$(call docker_run,docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents /project/scripts/gen_changelog.sh || echo "changelog skipped")
 	@$(MAKE) changelog-format
 
 changelog-format: b9-perms ## Normalise CHANGELOG.md with Prettier (markdown-lint clean: tight lists, trimmed whitespace, consistent spacing). Idempotent.
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && node_modules/.bin/prettier --write CHANGELOG.md" || echo "changelog-format skipped"
+	$(call docker_run,docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && node_modules/.bin/prettier --write CHANGELOG.md" || echo "changelog-format skipped")
 
 bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchored to released state = tags merged into origin/main, so re-runs do NOT climb), fill gap versions in versions.json with the Obsidian minAppVersion from manifest.json, bump package.json/manifest.json AND the TS test file version literal, re-point v<next> locally. Fail-closed only if already released on the REMOTE.
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py" || echo "bump-from-changelog skipped"
+	$(call docker_run,docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py" || echo "bump-from-changelog skipped")
 	@$(MAKE) changelog-format
 
 release: clean ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
@@ -159,7 +194,7 @@ release: clean ## Create release + ZIP check (wires scripts/release.sh which gen
 	@echo "Release zip: $(REPO_NAME)-$(TAG).zip"
 
 lint-python: ## Run ruff linting on Python code via compose
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents ruff check agents/agentics/src || echo "ruff reported issues"
+	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents ruff check agents/agentics/src || echo "ruff reported issues")
 
 test-validator: ## Dedicated validator test (runs dev mode)
 	@cd scripts/validate-makefile && \
@@ -173,20 +208,20 @@ test-validator: ## Dedicated validator test (runs dev mode)
 	@echo "Validator test completed."
 
 format: ## Format Python code with ruff via compose
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents ruff format agents/agentics/src || true
+	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents ruff format agents/agentics/src || true)
 
 # ---- Agentic (Python) tests via containers/agents ----
 
-test-agents-unit: ## Unit tests for agents (Ollama)
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents
+test-agents-unit: ## Unit tests for agents (llama)
+	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents)
 	@echo "=== Unit test results ==="
 
-test-agents-unit-mock: ## Mocked unit tests (fast, no Ollama)
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e TEST_FILTER=$(TEST_FILTER) unit-test-agents python -m pytest tests/unit/ -q
+test-agents-unit-mock: ## Mocked unit tests (fast, no llama)
+	$(call docker_run,docker-compose-files/agents.yaml -e TEST_FILTER=$(TEST_FILTER) unit-test-agents python -m pytest tests/unit/ -q)
 	@echo "=== Mock unit test output above ==="
 
-test-agents-integration: ## Full integration tests (needs GITHUB_TOKEN + Ollama)
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e "TEST_FILTER=$(INTEGRATION_TEST_FILTER)" integration-test-agents
+test-agents-integration: ## Full integration tests (needs GITHUB_TOKEN + llama)
+	$(call docker_run,docker-compose-files/agents.yaml -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e "TEST_FILTER=$(INTEGRATION_TEST_FILTER)" integration-test-agents)
 	@echo "=== Integration test results ==="
 
 test-agents-integration-fast: INTEGRATION_TEST_FILTER = --maxfail=1 -k not slow ## Fast integration tests (fail fast, skip slow)
@@ -196,27 +231,27 @@ test-agents-e2e: INTEGRATION_TEST_FILTER = -m e2e ## End-to-end tests only
 test-agents-e2e: test-agents-integration
 
 test-agents: lint-python test-agents-unit-mock test-agents-integration ## All agent tests
-test-agents-real: lint-python test-agents-unit test-agents-integration ## Agent tests on REAL logic (no mocks for units; real Ollama/GitHub calls)
+test-agents-real: lint-python test-agents-unit test-agents-integration ## Agent tests on REAL logic (no mocks for units; real llama/GitHub calls)
 
 test-check-docs-sync: b9-perms ## Hermetic unit tests for scripts/check-docs-sync.py (edge-case fixtures, run INSIDE the unit-test-agents container — no host python3)
 	@echo "=== TEST-CHECK-DOCS-SYNC: pytest tests/test_check_docs_sync.py (in container) ==="
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q"
+	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
 	@echo "=== test-check-docs-sync done ==="
 
 check-docs-sync-and-test: check-docs-sync test-check-docs-sync ## Run the doc-sync gate AND its unit tests (proves it behaves, not just passes)
 
 regen-doc-sync-fixtures: b9-perms ## Regenerate the doc-sync .md fixtures from the CURRENT real docs (anchor-checked; run after any AGENTS.md/skill/harness-doc change), then verify
 	@echo "=== REGEN-DOC-SYNC-FIXTURES (in container) ==="
-	@bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents sh -c "cd /project && python3 /project/scripts/regen_doc_sync_fixtures.py"
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q"
+	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents sh -c "cd /project && python3 /project/scripts/regen_doc_sync_fixtures.py")
+	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
 # Collection guard (audit-mcp-slim-refactor-integrity 4.2): fail fast if any test file has a
 # dangling import / collection error — a slim-refactor that orphans a symbol must surface here
-# instead of reporting a cached "green". Runs hermetic (no Ollama) and is non-zero on any error.
+# instead of reporting a cached "green". Runs hermetic (no llama) and is non-zero on any error.
 test-agents-collect: ## CI guard: pytest --collect-only for unit + integration; fails on any collection error
 	@echo "=== Collection guard: unit ==="
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents python -m pytest tests/unit/ --collect-only -q
+	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents python -m pytest tests/unit/ --collect-only -q)
 	@echo "=== Collection guard: integration ==="
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml integration-test-agents python -m pytest tests/integration/ --collect-only -q
+	$(call docker_run,docker-compose-files/agents.yaml integration-test-agents python -m pytest tests/integration/ --collect-only -q)
 	@echo "=== Collection guard: clean (0 errors) ==="
 verify-agentics-after-run: ## After run-agentics: re-run agentic suite to prove refactored Python is still valid/in-sync
 	@echo "Re-running agentic unit + integration (real) after run-agentics..."
@@ -225,10 +260,10 @@ verify-agentics-after-run: ## After run-agentics: re-run agentic suite to prove 
 	@echo "=== Agentic suite green after run-agentics ==="
 test: test-app test-agents ## All tests (app + agents)
 
-# ---- Agentic code generation (OpenSpec-driven, local, Ollama) ----
+# ---- Agentic code generation (OpenSpec-driven, local, llama) ----
 
 run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<name>); no GitHub fetch, no MCP
-	@echo "Running agentics with Ollama model: $(OLLAMA_MODEL)"
+	@echo "Running agentics with llama model: $(LLAMA_MODEL)"
 	@echo "OpenSpec change: $(CHANGE)"
 	@test -n "$(CHANGE)" || { echo "ERROR: set CHANGE=<openspec-change-name> (e.g. make run-agentics CHANGE=uuid-modal-agentic-generation)"; exit 1; }
 	@# ---- BACK UP BEFORE GENERATING (timestamped safety net) ----
@@ -241,7 +276,7 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 			echo "WARN: $$f not present, nothing to back up"; \
 		fi; \
 	done
-	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e CHANGE=$(CHANGE) -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e OLLAMA_HOST=$(OLLAMA_HOST) -e OLLAMA_REASONING_MODEL=$(OLLAMA_MODEL) -e OLLAMA_CODE_MODEL=$(OLLAMA_CODE_MODEL) -e PROJECT_ROOT=/project agentics python -m prod.agentics openspec:$(CHANGE)
+	$(call docker_run,docker-compose-files/agents.yaml -e CHANGE=$(CHANGE) -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e LLAMA_HOST=$(LLAMA_HOST) -e LLAMA_REASONING_MODEL=$(LLAMA_MODEL) -e LLAMA_CODE_MODEL=$(LLAMA_CODE_MODEL) -e PROJECT_ROOT=/project agentics python -m prod.agentics openspec:$(CHANGE))
 	@echo "=== Agentics run complete ==="
 	@ls -la src/main.ts src/__tests__/main.test.ts 2>/dev/null || echo "Note: generated files may be in a different location"
 	@# ---- OMISSION GUARD (contract-aware, per bug 6.2): a shrink is only a genuine ----
@@ -278,8 +313,8 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #      + ts-test-floor):
 #        0. collect guard     (loop-collect)   -- hermetic collection guard (fail fast on dangling imports), audit-mcp-slim-refactor-integrity 4.2
 #        0.5 ts-floor         (loop-ts-floor)   -- STRICT TS test/command floor vs origin/main: FAIL if describe/leaf/jest-collected/addCommand drop (silent feature/test removal guard)
-#        1. unit tests        (loop-unit)       -- Fast/Unit gate FIRST (hermetic, no Ollama)
-#        2. unit-real tests   (loop-unit-real)  -- REAL agent unit tests (live Ollama, no mocks)
+#        1. unit tests        (loop-unit)       -- Fast/Unit gate FIRST (hermetic, no llama)
+#        2. unit-real tests   (loop-unit-real)  -- REAL agent unit tests (live llama, no mocks)
 #        3. e2e tests         (loop-e2e)        -- the 3 standing e2e gates (ticket20+ticket22+greetings), B1/B3
 #        4. integration tests (loop-integration) -- broad agentic integration suite (B17)
 #        5. build-app         (loop-build-app)  -- tsc/rollup of the plugin, must exit 0
@@ -308,12 +343,12 @@ loop-ts-floor: ## Loop gate 0.5: STRICT TS test/command floor — FAIL if curren
 	@echo "=== LOOP-HARNESS [ts-floor] strict TS test/command surface floor vs origin/main ==="
 	@bash scripts/ts_test_floor.sh
 
-loop-unit: ## Loop gate 1: hermetic unit tests (fast, no Ollama/GitHub)
+loop-unit: ## Loop gate 1: hermetic unit tests (fast, no llama/GitHub)
 	@echo "=== LOOP-HARNESS [1/6] unit tests (mocked, hermetic) ==="
 	@$(MAKE) test-agents-unit-mock
 
-loop-unit-real: ## Loop gate 2: REAL agent unit tests (live Ollama, no mocks)
-	@echo "=== LOOP-HARNESS [2/6] real agent unit tests (Ollama) ==="
+loop-unit-real: ## Loop gate 2: REAL agent unit tests (live llama, no mocks)
+	@echo "=== LOOP-HARNESS [2/6] real agent unit tests (llama) ==="
 	@$(MAKE) test-agents-unit
 
 loop-e2e: ## Loop gate 3: standing e2e gates (ticket20 + ticket22 + greetings)
@@ -828,7 +863,7 @@ release-flow: ## Canonical local release flow: squash (typed, commitlint-gated) 
 
 # ---- Checks ----
 
-check-deps: check-ollama check-issue-url ## Verify external dependencies
+check-deps: check-llama check-issue-url ## Verify external dependencies
 check-github: ## Validate GitHub token (only needed for integration tests)
 	@if [ -z "$(GITHUB_TOKEN)" ]; then echo "Error: GITHUB_TOKEN is required for integration tests" >&2; exit 1; fi
 	@echo "GITHUB_TOKEN present."
@@ -836,10 +871,10 @@ check-github: ## Validate GitHub token (only needed for integration tests)
 check-issue-url: ## Validate ISSUE_URL for agentics
 	@if [ -z "$(ISSUE_URL)" ] || ! echo "$(ISSUE_URL)" | grep -q '^https'; then echo "Error: Valid ISSUE_URL (https://...) is required" >&2; exit 1; fi
 
-check-ollama: ## Check Ollama availability
-	@code=$$(curl -s -o /dev/null -w '%{http_code}' $(OLLAMA_HOST)/api/tags || echo 000); \
-	if [ "$$code" != "200" ]; then echo "Error: Ollama not reachable at $(OLLAMA_HOST)"; exit 1; fi
-	@echo "Ollama reachable at $(OLLAMA_HOST)."
+check-llama: ## Check llama availability
+	@code=$$(curl -s -o /dev/null -w '%{http_code}' $(LLAMA_HOST)/api/tags || echo 000); \
+	if [ "$$code" != "200" ]; then echo "Error: llama not reachable at $(LLAMA_HOST)"; exit 1; fi
+	@echo "llama reachable at $(LLAMA_HOST)."
 
 check-secrets: loop-secret-scan  ## [ALIAS] Deprecated name -> loop-secret-scan (containerized gitleaks loop gate).
 	@true
