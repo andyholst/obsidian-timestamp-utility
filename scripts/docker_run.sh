@@ -18,7 +18,7 @@
 
 set -uo pipefail
 
-if [ $# -lt 3 ]; then
+if [ $# -lt 2 ]; then
     echo "Usage: $0 <compose-file> <extra-flags> <service> <cmd...>" >&2
     echo "Example: $0 docker-compose-files/tools.yaml -e TAG=v0.1.0 app npm run build" >&2
     exit 1
