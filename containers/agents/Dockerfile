@@ -41,11 +41,11 @@ ENV TRANSFORMERS_CACHE=/tmp/.cache/huggingface
 
 WORKDIR /app
 
-# Create non-root user
-RUN groupadd -r appgroup -g ${HOST_GID} && useradd -r -u ${HOST_UID} -g appgroup appuser
+# Create non-root user with home directory
+RUN groupadd -r appgroup -g ${HOST_GID} && useradd -r -u ${HOST_UID} -g appgroup -m -d /home/appuser appuser
 
-# Set ownership of /app to appuser
-RUN chown -R appuser:appgroup /app
+# Set ownership of /app and home to appuser
+RUN chown -R appuser:appgroup /app /home/appuser
 
 # Switch to non-root user
 USER appuser
