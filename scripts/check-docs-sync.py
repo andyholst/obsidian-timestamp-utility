@@ -10,7 +10,7 @@ the exact drift, scoped to the CURRENT WORKING DIRECTORY (the path where the com
 asked), so the human gets an actionable natural-language explanation.
 
 This is hermetic: it reads only local files and (optionally) shells out to `hermes` for the
-drift report. No network, no Ollama, no git tree writes.
+drift report. No network, no llama, no git tree writes.
 
 Usage:
     python3 scripts/check-docs-sync.py            # exit 0 if all sync files agree

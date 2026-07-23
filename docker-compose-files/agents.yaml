@@ -15,13 +15,13 @@ services:
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://127.0.0.1:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - LLAMA_HOST=http://host.lima.internal:11434
+      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - CHANGE=${CHANGE}
       - PYTHONDONTWRITEBYTECODE=1
     # Rootless nerdctl: these services use `network_mode: host`, so the container shares the
-    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, so the container reaches it
+    # host loopback. llama is bound to 127.0.0.1:11434 on the host, so the container reaches it
     # at http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
     # does NOT resolve under rootless nerdctl and must NOT be used (it returns 000).
     extra_hosts:
@@ -48,16 +48,16 @@ services:
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
-      - OLLAMA_HOST=http://127.0.0.1:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - LLAMA_HOST=http://host.lima.internal:11434
+      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
     # Rootless nerdctl: this service uses `network_mode: host`, so the container shares the
-    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, reachable at
+    # host loopback. llama is bound to 127.0.0.1:11434 on the host, reachable at
     # http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
     # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:
@@ -84,18 +84,18 @@ services:
     environment:
       - PROJECT_ROOT=/app
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://127.0.0.1:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - LLAMA_HOST=http://host.lima.internal:11434
+      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
       - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
+      - LLAMA_TIMEOUT=${LLAMA_TIMEOUT:-300}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
     # Rootless nerdctl: this service uses `network_mode: host`, so the container shares the
-    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, reachable at
+    # host loopback. llama is bound to 127.0.0.1:11434 on the host, reachable at
     # http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
     # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 #
 # ts_test_floor.sh — Strict TS test/command floor guard
 # (OpenSpec change: strict-ts-test-floor / capability ts-test-floor).
@@ -16,7 +16,7 @@
 #   4. addCommand(...) count in src/main.ts
 #
 # Hermetic + read-only: only diffs origin/main (via `git show`) and runs a LOCAL
-# `npx jest --collectOnly`. No network, no Ollama, no tree writes.
+# `npx jest --collectOnly`. No network, no llama, no tree writes.
 #
 # Exit 0 = floor respected (current >= baseline on all metrics).
 # Exit 1 = a metric dropped below baseline (loop MUST fail).

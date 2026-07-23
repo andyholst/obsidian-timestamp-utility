@@ -96,20 +96,7 @@ define docker_run
 			$(DOCKER) -f "$$COMPOSE_FILE" run $$ARGLIST; \
 		fi; \
 	else \
-		COMPOSE_FILE=$$(echo '$(1)' | awk '{print $$1}'); \
-		ARGLIST=$$(echo '$(1)' | sed 's|^[^ ]* ||'); \
-		if [ -z "$$ARGLIST" ]; then \
-			COMMAND="$(DOCKER) -f $$COMPOSE_FILE run"; \
-		else \
-			COMMAND="$(DOCKER) -f $$COMPOSE_FILE run $$ARGLIST"; \
-		fi; \
-		CMD_FILE=$$(mktemp); CMD_OUT=$$(mktemp); \
-		printf '%s\n' "$$COMMAND" > "$$CMD_FILE"; \
-		script -q /dev/null sh -c "sh $$CMD_FILE; echo $$? > $$CMD_FILE.rc" /dev/null < /dev/null > "$$CMD_OUT" 2>&1; \
-		RC=$$(cat $$CMD_FILE.rc 2>/dev/null || echo 0); \
-		cat "$$CMD_OUT"; \
-		rm -f "$$CMD_FILE" "$$CMD_FILE.rc" "$$CMD_OUT"; \
-		if [ "$$RC" -ne 0 ]; then exit "$$RC"; fi; \
+		bash scripts/docker_run.sh $(1); \
 	fi
 endef
 
@@ -148,12 +135,12 @@ all: build-app test-app release ## Full pipeline
 
 build-app: b9-perms ## Build Obsidian plugin via docker compose (containers/npm)
 	@echo "Building plugin (npm run build) via containers/npm..."
-	@$(call docker_run,docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm run build)
+	@bash scripts/docker_run.sh docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm run build
 	@echo "Build complete"
 
 test-app: b9-perms ## Test the built plugin via docker compose (containers/npm)
 	@echo "Running jest via containers/npm..."
-	@$(call docker_run,docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm test)
+	@bash scripts/docker_run.sh docker-compose-files/tools.yaml -e REPO_NAME=$(REPO_NAME) -e TAG=$(TAG) app npm test
 	@echo "=== Plugin test output above ==="
 
 validate-ts: ## Fast TypeScript validation (runs tsc directly)
@@ -177,14 +164,14 @@ validate-tests: ## Fast test validation (runs jest directly)
 	@echo "Test validation complete"
 
 changelog: b9-perms ## Generate CHANGELOG.md: render new work as a '## Unreleased' (or versioned) section and OVERWRITE-merge it onto the curated history (idempotent re-run: no duplicate sections). Run 'make bump-from-changelog' to version it.
-	$(call docker_run,docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents /project/scripts/gen_changelog.sh || echo "changelog skipped")
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents /project/scripts/gen_changelog.sh || echo "changelog skipped"
 	@$(MAKE) changelog-format
 
 changelog-format: b9-perms ## Normalise CHANGELOG.md with Prettier (markdown-lint clean: tight lists, trimmed whitespace, consistent spacing). Idempotent.
-	$(call docker_run,docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && node_modules/.bin/prettier --write CHANGELOG.md" || echo "changelog-format skipped")
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && node_modules/.bin/prettier --write CHANGELOG.md" || echo "changelog-format skipped"
 
 bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchored to released state = tags merged into origin/main, so re-runs do NOT climb), fill gap versions in versions.json with the Obsidian minAppVersion from manifest.json, bump package.json/manifest.json AND the TS test file version literal, re-point v<next> locally. Fail-closed only if already released on the REMOTE.
-	$(call docker_run,docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py" || echo "bump-from-changelog skipped")
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py" || echo "bump-from-changelog skipped"
 	@$(MAKE) changelog-format
 
 release: clean ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
@@ -194,7 +181,7 @@ release: clean ## Create release + ZIP check (wires scripts/release.sh which gen
 	@echo "Release zip: $(REPO_NAME)-$(TAG).zip"
 
 lint-python: ## Run ruff linting on Python code via compose
-	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents ruff check agents/agentics/src || echo "ruff reported issues")
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents ruff check /app/src || echo "ruff reported issues"
 
 test-validator: ## Dedicated validator test (runs dev mode)
 	@cd scripts/validate-makefile && \
@@ -208,20 +195,20 @@ test-validator: ## Dedicated validator test (runs dev mode)
 	@echo "Validator test completed."
 
 format: ## Format Python code with ruff via compose
-	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents ruff format agents/agentics/src || true)
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents ruff format agents/agentics/src || true
 
 # ---- Agentic (Python) tests via containers/agents ----
 
 test-agents-unit: ## Unit tests for agents (llama)
-	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents)
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents
 	@echo "=== Unit test results ==="
 
 test-agents-unit-mock: ## Mocked unit tests (fast, no llama)
-	$(call docker_run,docker-compose-files/agents.yaml -e TEST_FILTER=$(TEST_FILTER) unit-test-agents python -m pytest tests/unit/ -q)
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e TEST_FILTER=$(TEST_FILTER) unit-test-agents python -m pytest tests/unit/ -q
 	@echo "=== Mock unit test output above ==="
 
 test-agents-integration: ## Full integration tests (needs GITHUB_TOKEN + llama)
-	$(call docker_run,docker-compose-files/agents.yaml -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e "TEST_FILTER=$(INTEGRATION_TEST_FILTER)" integration-test-agents)
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e "TEST_FILTER=$(INTEGRATION_TEST_FILTER)" integration-test-agents
 	@echo "=== Integration test results ==="
 
 test-agents-integration-fast: INTEGRATION_TEST_FILTER = --maxfail=1 -k not slow ## Fast integration tests (fail fast, skip slow)
@@ -235,23 +222,23 @@ test-agents-real: lint-python test-agents-unit test-agents-integration ## Agent 
 
 test-check-docs-sync: b9-perms ## Hermetic unit tests for scripts/check-docs-sync.py (edge-case fixtures, run INSIDE the unit-test-agents container — no host python3)
 	@echo "=== TEST-CHECK-DOCS-SYNC: pytest tests/test_check_docs_sync.py (in container) ==="
-	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q"
 	@echo "=== test-check-docs-sync done ==="
 
 check-docs-sync-and-test: check-docs-sync test-check-docs-sync ## Run the doc-sync gate AND its unit tests (proves it behaves, not just passes)
 
 regen-doc-sync-fixtures: b9-perms ## Regenerate the doc-sync .md fixtures from the CURRENT real docs (anchor-checked; run after any AGENTS.md/skill/harness-doc change), then verify
 	@echo "=== REGEN-DOC-SYNC-FIXTURES (in container) ==="
-	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents sh -c "cd /project && python3 /project/scripts/regen_doc_sync_fixtures.py")
-	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents sh -c "cd /project && python3 /project/scripts/regen_doc_sync_fixtures.py"
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q"
 # Collection guard (audit-mcp-slim-refactor-integrity 4.2): fail fast if any test file has a
 # dangling import / collection error — a slim-refactor that orphans a symbol must surface here
 # instead of reporting a cached "green". Runs hermetic (no llama) and is non-zero on any error.
 test-agents-collect: ## CI guard: pytest --collect-only for unit + integration; fails on any collection error
 	@echo "=== Collection guard: unit ==="
-	$(call docker_run,docker-compose-files/agents.yaml unit-test-agents python -m pytest tests/unit/ --collect-only -q)
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents python -m pytest tests/unit/ --collect-only -q
 	@echo "=== Collection guard: integration ==="
-	$(call docker_run,docker-compose-files/agents.yaml integration-test-agents python -m pytest tests/integration/ --collect-only -q)
+	bash scripts/docker_run.sh docker-compose-files/agents.yaml integration-test-agents python -m pytest tests/integration/ --collect-only -q
 	@echo "=== Collection guard: clean (0 errors) ==="
 verify-agentics-after-run: ## After run-agentics: re-run agentic suite to prove refactored Python is still valid/in-sync
 	@echo "Re-running agentic unit + integration (real) after run-agentics..."
@@ -333,7 +320,7 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #      validate + status for the active change.
 check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B32). Runs INSIDE unit-test-agents (no host python3).
 	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — in container ==="
-	@bash scripts/docker_run.sh docker-compose-files/agents.yaml unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py"
+	@$(call docker_run,docker-compose-files/agents.yaml unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py")
 
 loop-collect: ## Loop gate 0: hermetic collection guard (fail fast on dangling imports)
 	@echo "=== LOOP-HARNESS [collect] collection guard (no dangling imports) ==="

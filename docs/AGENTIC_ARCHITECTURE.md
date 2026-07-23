@@ -143,7 +143,7 @@ are registered as runnables via `AgentComposer`.
 - `hitl_node.py` — `HITLNode`: opt-in, pass-through in automation, prompts a human only when ALL hold (score < 80, not CI, `HITL_ENABLED=1`, `INTERACTIVE_HITL=1`, `isatty()`) (B21).
 
 **Cross-cutting support**
-- `base_agent.py` — base agent class. `clients.py` — LLM/Ollama clients.
+- `base_agent.py` — base agent class. `clients.py` — LLM/llama clients.
 - `code_validator.py` / `llm_validator.py` — validation frameworks (see `docs/architecture/LLM_CODE_VALIDATION.md`).
 - `circuit_breaker.py` — retry/breaker; `monitoring.py` — structured logging; `performance.py` — batch processing.
 - `state.py` (`CodeGenerationState`, frozen dataclass) / `state_adapters.py` — immutable state + legacy adapters.
@@ -184,10 +184,10 @@ pass-through node in the loop (B21).
 
 ### 3.6 Testing layout
 
-- `agents/agentics/tests/unit/` — hermetic tests; mock ONLY external boundaries (GitHub/Ollama/network/FS).
-  Run on real agent units via `make test-agents-unit` (live Ollama) and `make test-agents-unit-mock`.
+- `agents/agentics/tests/unit/` — hermetic tests; mock ONLY external boundaries (GitHub/llama/network/FS).
+  Run on real agent units via `make test-agents-unit` (live llama) and `make test-agents-unit-mock`.
 - `agents/agentics/tests/integration/` — integration + e2e (`@pytest.mark.e2e`, `@pytest.mark.slow`,
-  `@pytest.mark.integration`). Live-Ollama tests skip cleanly on `OLLAMA_HOST` absence; public
+  `@pytest.mark.integration`). Live-llama tests skip cleanly on `LLAMA_HOST` absence; public
   GitHub reads run token-less. The standing e2e gates are `test_ticket20_*`, `test_ticket22_*`,
   `test_greetings_*` (see `openspec/specs/task-driven-ts-generation-e2e`).
 - `agents/agentics/tests/fixtures/` — shared mocks (circuit breaker, GitHub/LLM responses, scenarios).

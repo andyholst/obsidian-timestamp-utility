@@ -125,7 +125,7 @@ class MakefileValidator:
         return sorted(targets, key=lambda t: t.name)
 
     def _categorize_target(self, target: str) -> str:
-        if any(sub in target.lower() for sub in ["agents", "agent", "mcp", "ollama"]):
+        if any(sub in target.lower() for sub in ["agents", "agent", "mcp", "llama"]):
             return "agentics"
         if "dagger" in target or "engine" in target:
             return "dagger"
@@ -181,8 +181,8 @@ class MakefileValidator:
                 "http"
             ):
                 env["ISSUE_URL"] = "https://github.com/anomalyco/opencode/issues/42"
-            if not env.get("OLLAMA_MODEL"):
-                env["OLLAMA_MODEL"] = "sorc/qwen3.5-claude-4.6-opus:9b"
+            if not env.get("LLAMA_MODEL"):
+                env["LLAMA_MODEL"] = "sorc/qwen3.5-claude-4.6-opus:9b"
             if not env.get("TEST_ISSUE_URL"):
                 env["TEST_ISSUE_URL"] = env["ISSUE_URL"]
             if any(

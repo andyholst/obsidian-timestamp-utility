@@ -16,7 +16,7 @@
 ## 3. Tests
 - [x] 3.1 Add `tests/unit/test_e2e_conftest_b5_guard_unit.py` (5 cases): refuses real repo root,
       real src exactly, agentics mount, `/app`; allows isolated temp dir.
-- [x] 3.2 Confirm greetings e2e now runs GREEN with OLLAMA_HOST set + isolated temp dir, and the
+- [x] 3.2 Confirm greetings e2e now runs GREEN with LLAMA_HOST set + isolated temp dir, and the
       real committed `src/` is INTACT afterward (verified `src/main.ts` 9790 B, git clean).
 
 ## 4. Verification

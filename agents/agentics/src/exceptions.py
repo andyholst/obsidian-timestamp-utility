@@ -33,8 +33,8 @@ class GitHubError(AgenticsError):
     pass
 
 
-class OllamaError(AgenticsError):
-    """Raised when Ollama LLM operations fail."""
+class LlamaError(AgenticsError):
+    """Raised when llama LLM operations fail."""
 
     pass
 

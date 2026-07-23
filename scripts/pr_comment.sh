@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 # pr_comment.sh — B29a (PR-review stability / two-way interaction): post a comment on a PR.
 #
 # Usage: scripts/pr_comment.sh <branch> <body>

@@ -50,8 +50,8 @@ async def test_sequential_multi_agent_workflow(
         expected_history = ["agent1", "agent2"]
     else:
         llm = OllamaLLM(
-            model=real_ollama_config.ollama_code_model,
-            base_url=real_ollama_config.ollama_host,
+            model=real_ollama_config.llama_code_model,
+            base_url=real_ollama_config.llama_host,
             temperature=0.1,
         )
         base_agent = TestBaseAgent("base")

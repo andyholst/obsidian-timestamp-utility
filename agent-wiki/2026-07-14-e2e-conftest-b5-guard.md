@@ -31,7 +31,7 @@ real repo root. This is a latent floor defect (B13 — fix the Python floor, not
 |---|---|
 | E2E harness never deletes the real committed source | PASS — predicate returns False for real repo root / real src / agentics mount; 5/5 guard tests |
 | E2E harness guards same-file copies | PASS — copy loop skips same-file |
-| Greetings e2e green + real src intact | PASS — ran with OLLAMA_HOST + isolated temp dir: 1 passed in ~80s; `src/main.ts` 9790 B, git clean after |
+| Greetings e2e green + real src intact | PASS — ran with LLAMA_HOST + isolated temp dir: 1 passed in ~80s; `src/main.ts` 9790 B, git clean after |
 | Full unit suite | PASS — **522 passed** (517 prior + 5 new), 0 failed |
 
 ## Key Decisions

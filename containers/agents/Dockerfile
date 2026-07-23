@@ -47,5 +47,8 @@ RUN groupadd -r appgroup -g ${HOST_GID} && useradd -r -u ${HOST_UID} -g appgroup
 # Set ownership of /app and home to appuser
 RUN chown -R appuser:appgroup /app /home/appuser
 
+# HOME=/app avoids cd /home/appuser failures under rootless nerdctl (UID remapping breaks home dir access)
+ENV HOME=/app
+
 # Switch to non-root user
 USER appuser

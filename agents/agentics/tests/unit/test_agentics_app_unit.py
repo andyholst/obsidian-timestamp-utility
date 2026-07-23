@@ -13,9 +13,9 @@ def mock_config():
     """Mock AgenticsConfig."""
     config = MagicMock(spec=AgenticsConfig)
     config.github_token = "test_token"
-    config.ollama_host = "http://localhost:11434"
-    config.ollama_reasoning_model = "test-reasoning"
-    config.ollama_code_model = "test-code"
+    config.llama_host = "http://localhost:11434"
+    config.llama_reasoning_model = "test-reasoning"
+    config.llama_code_model = "test-code"
     return config
 
 
@@ -121,7 +121,7 @@ class TestAgenticsApp:
 
         app = AgenticsApp(mock_config)
         app._initialized = True
-        # app._initialized is True, but composable_workflows stays None (no Ollama),
+        # app._initialized is True, but composable_workflows stays None (no llama),
         # so the invalid URL still reaches the "workflow not initialized" branch.
         with pytest.raises(
             (ValidationError, AgenticsError)

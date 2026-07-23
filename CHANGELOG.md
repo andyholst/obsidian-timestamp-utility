@@ -154,7 +154,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - B1-B30 behaviours. The check-docs-sync fixture set (in_sync, in_sync_ascii,
   - in_sync_en_dash, drift_b_range_low, drift_reorder, drift_stage_removed) and
   - tests/test_check_docs_sync.py were regenerated to assert drift on stage
-  - order, B-behaviour range, and the OLLAMA_HOST-only live-test skip rule.
+  - order, B-behaviour range, and the LLAMA_HOST-only live-test skip rule.
   - scripts/run-loop-harness.sh and scripts/regen_doc_sync_fixtures.py reflect
   - the same order.
   - Docs: agent-wiki entries record each change's verification-against-spec and
@@ -171,7 +171,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - `make` target (run-agentics, build-app, test-app, loop-harness, loop-e2e,
   - deliver-change, phase7-archive, release-flow) MUST be launched through
   - terminal(background=true), which runs on the host where docker/rootless
-  - nerdctl/live Ollama live. The foreground sandbox at /workspace has no
+  - nerdctl/live llama live. The foreground sandbox at /workspace has no
   - docker/nerdctl and reporting `docker: command not found` is expected and
   - NOT a blocker. This removes the "can't run from here" failure mode.
   - The Makefile gains the docker-make-pipeline wiring that drives verification
@@ -198,7 +198,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app ->
   - loop-test-app -> loop-secret-scan-tests -> check-docs-sync), the
   - loop-ts-floor guard, the B1-B31 behaviour range, and the live-test skip rule
-  - (OLLAMA_HOST only, not GITHUB_TOKEN).
+  - (LLAMA_HOST only, not GITHUB_TOKEN).
   - Added check_docs_sync test fixtures covering in-sync, ascii/en-dash variants,
   - and three drift cases (B-range low, stage reorder, stage removed) so the
   - guard fails closed on any desync.
@@ -305,7 +305,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - B1-B30 behaviours. The check-docs-sync fixture set (in_sync, in_sync_ascii,
   - in_sync_en_dash, drift_b_range_low, drift_reorder, drift_stage_removed) and
   - tests/test_check_docs_sync.py were regenerated to assert drift on stage
-  - order, B-behaviour range, and the OLLAMA_HOST-only live-test skip rule.
+  - order, B-behaviour range, and the LLAMA_HOST-only live-test skip rule.
   - scripts/run-loop-harness.sh and scripts/regen_doc_sync_fixtures.py reflect
   - the same order.
   - Docs: agent-wiki entries record each change's verification-against-spec and
@@ -415,7 +415,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - Keep AGENTS.md, hermes/skills/openspec-loop-harness.md,
   - docs/openspec-engineering-loop-harness.md, and run-loop-harness.sh in
   - agreement on stage order, the loop-ts-floor guard, the B1-B25
-  - behaviours, and the live-test skip rule (OLLAMA_HOST only).
+  - behaviours, and the live-test skip rule (LLAMA_HOST only).
   - Add agent-wiki entries documenting the migration and the visible-
   - findings behaviour.
   - Credential hygiene: only documented example shapes (e.g. AKIA…EXAMPLE,
@@ -592,7 +592,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - docs/openspec-engineering-loop-harness.md are re-synced (B8) across the
   - full B1-B25 set: per-change worktrees (B24), no parent reset (B24),
   - no agent squash without approval (B25), false-skip audit (B17),
-  - live Ollama tests run rather than skip (B18/B19).
+  - live llama tests run rather than skip (B18/B19).
   - manifests bumped: manifest.json, package.json, versions.json.
   - agent-wiki captures the strict-ts-test-floor entry; CHANGELOG.md updated.
 

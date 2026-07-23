@@ -124,8 +124,8 @@ def run_pipeline_isolated(change: str, issue_url: str | None = None) -> dict:
     B3 guarantee: generated TS can ONLY land under ``project_dir``. The agentics source
     tree (``/app/src`` / ``agents/agentics/src``) is never written to.
     """
-    if not os.getenv("OLLAMA_HOST"):
-        raise RuntimeError("OLLAMA_HOST not set -- isolated pipeline run needs a real Ollama")
+    if not os.getenv("LLAMA_HOST"):
+        raise RuntimeError("LLAMA_HOST not set -- isolated pipeline run needs a real llama")
 
     root = _repo_root()
     real_src = os.path.join(root, "src")

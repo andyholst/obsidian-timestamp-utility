@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 #
 # run-loop-harness.sh — mandatory loop-gate trigger (AGENTS.md behaviour B20).
 #
@@ -16,7 +16,7 @@
 # Canonical stage order (B8 source of truth):
 #   loop-collect -> loop-ts-floor -> loop-unit -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app -> loop-test-app -> loop-release-tests -> loop-secret-scan-tests -> check-docs-sync
 #
-# Ollama is expected to be running on the host (bound to 127.0.0.1:11434) and is
+# llama is expected to be running on the host (bound to 127.0.0.1:11434) and is
 # reachable from the containers via network_mode: host (see docker-compose-files/agents.yaml).
 # So ALL stages run for real. If a stage genuinely fails OR hangs past its timeout, the
 # script reports FAIL/TIMEOUT and exits non-zero; fix the root cause and re-run.
@@ -95,7 +95,7 @@ stage_desc() {
     loop-collect)     echo "pytest --collect-only (unit + integration) via agents.yaml -> fail fast on dangling imports" ;;
     loop-ts-floor)    echo "scripts/ts_test_floor.sh -> FAIL if describe/leaf/jest-collected/addCommand counts drop below origin/main (silent feature/test removal guard)" ;;
     loop-unit)        echo "pytest tests/unit (mocked / hermetic) via agents.yaml -> unit-test-agents" ;;
-    loop-unit-real)   echo "pytest tests/unit on LIVE Ollama (no mocks) via agents.yaml -> unit-test-agents" ;;
+    loop-unit-real)   echo "pytest tests/unit on LIVE llama (no mocks) via agents.yaml -> unit-test-agents" ;;
     loop-e2e)         echo "3 standing e2e gates (ticket20 / ticket22 / greetings) via agents.yaml -> integration-test-agents" ;;
     loop-build-app)   echo "docker compose tools.yaml run app: npm run build (rollup)" ;;
     loop-test-app)    echo "docker compose tools.yaml run app: npm test (jest)" ;;

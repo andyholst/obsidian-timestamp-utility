@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 set -uo pipefail
 
 # ── Platform detection ───────────────────────────────────────────────

@@ -7,7 +7,7 @@ Pins the Plan-B merge contract (OpenSpec: integrator-merge-refactor):
 - no orphaned `export` keyword,
 - output size never shrinks (no omission).
 
-All external boundaries (LLM/Ollama/network/FS) are mocked; real merge logic is exercised.
+All external boundaries (LLM/llama/network/FS) are mocked; real merge logic is exercised.
 """
 import sys
 from pathlib import Path

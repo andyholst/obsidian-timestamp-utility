@@ -292,18 +292,18 @@ Before running the ticket interpreter agent, ensure you have the following:
 - Environment Variables:
   - GITHUB_TOKEN: A GitHub personal access token with repository access. Obtain
     one from [GitHub Settings](https://github.com/settings/tokens).
-  - OLLAMA_HOST: The URL of your Ollama LLM service (default:
+  - LLAMA_HOST: The URL of your llama LLM service (default:
     http://localhost:11434).
-  - OLLAMA_REASONING_MODEL: The LLM model for reasoning tasks (default:
+  - LLAMA_REASONING_MODEL: The LLM model for reasoning tasks (default:
     sorc/qwen3.5-claude-4.6-opus:9b).
-  - OLLAMA_CODE_MODEL: The LLM model for code generation (default:
+  - LLAMA_CODE_MODEL: The LLM model for code generation (default:
     sorc/qwen3.5-claude-4.6-opus:9b).
 
 Set these environment variables in your terminal: export
 GITHUB_TOKEN=your_token_here
-export OLLAMA_HOST=http://localhost:11434
-export OLLAMA_REASONING_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
-export OLLAMA_CODE_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
+export LLAMA_HOST=http://localhost:11434
+export LLAMA_REASONING_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
+export LLAMA_CODE_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
 
 ### Steps to Run the Agent
 
@@ -335,7 +335,7 @@ tests) and `agents/agentics/tests/integration/` (integration tests).
 - **[Make](https://www.gnu.org/software/make/)**: Required to execute the
   Makefile commands.
 - Environment Variables: Same as for running the agent (GITHUB_TOKEN,
-  OLLAMA_HOST, OLLAMA_REASONING_MODEL, OLLAMA_CODE_MODEL), plus:
+  LLAMA_HOST, LLAMA_REASONING_MODEL, LLAMA_CODE_MODEL), plus:
   - TEST_ISSUE_URL: A base GitHub repository URL (e.g.,
     https://github.com/andyholst/obsidian-timestamp-utility) used by integration
     tests.
@@ -366,7 +366,7 @@ Notes:
 
 - Ensure the TEST_ISSUE_URL points to a valid repository with accessible issues
   (e.g., issues #20, #22, #23) for integration tests to pass.
-- Integration tests require a live Ollama LLM service and a valid GITHUB_TOKEN.
+- Integration tests require a live llama LLM service and a valid GITHUB_TOKEN.
   If these are unavailable, tests may fail with appropriate error messages
   (e.g., GithubException or ValueError).
 

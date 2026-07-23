@@ -49,3 +49,10 @@
 - [x] 7.1 Commit each logical change group (not all at once)
 - [x] 7.2 Push to `feat/macos-makefile-simplification` regularly
 - [x] 7.3 Create OpenSpec change BEFORE pushing (per B15 / request intake gate)
+
+## 8. Fix container runtime and lint-python issues
+- [x] 8.1 Change docker_run.sh to use `colima nerdctl -- compose` instead of broken `/private/tmp/nerdctl`
+- [x] 8.2 Fix lint-python target to use absolute path `/app/src` instead of relative `agents/agentics/src`
+- [x] 8.3 Verify `make build-app` passes (11.8s, plugin builds successfully)
+- [x] 8.4 Verify `make test-app` passes (65 tests, 3 suites)
+- [x] 8.5 Verify `make lint-python` runs and reports real issues (217 ruff warnings)

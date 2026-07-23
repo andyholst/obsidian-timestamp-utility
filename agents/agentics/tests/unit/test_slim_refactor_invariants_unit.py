@@ -1,7 +1,7 @@
 """
 Hermetic regression tests for the python-agentic-slim-refactor change (§4.4 / §9.4 / §10).
 
-These prove the slimmed pipeline PRESERVES the harness invariants WITHOUT needing Ollama/Docker:
+These prove the slimmed pipeline PRESERVES the harness invariants WITHOUT needing llama/Docker:
   - The deterministic sole-writer floor (`code_integrator`) is wired in BOTH graph builders and
     runs in fast mode (route_hitl fast path -> code_integrator -> output_result). (B7.1)
   - The contract parser is GENERIC (greetings `name: 'Show Greetings'` parses, not just uuid). (B9.4)

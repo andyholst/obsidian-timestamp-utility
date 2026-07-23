@@ -108,14 +108,14 @@ async def create_composable_workflow(
     if _service_manager is None:
         await _init_global_services()
     # Use provided overrides or defaults
-    ollama_reasoning = llm_reasoning or (
-        _service_manager.ollama_reasoning.client
-        if _service_manager and hasattr(_service_manager, "ollama_reasoning") and _service_manager.ollama_reasoning
+    llama_reasoning = llm_reasoning or (
+        _service_manager.llama_reasoning.client
+        if _service_manager and hasattr(_service_manager, "llama_reasoning") and _service_manager.llama_reasoning
         else None
     )
-    ollama_code = llm_code or (
-        _service_manager.ollama_code.client
-        if _service_manager and hasattr(_service_manager, "ollama_code") and _service_manager.ollama_code
+    llama_code = llm_code or (
+        _service_manager.llama_code.client
+        if _service_manager and hasattr(_service_manager, "llama_code") and _service_manager.llama_code
         else None
     )
     github_client = github_client or (
@@ -125,8 +125,8 @@ async def create_composable_workflow(
     )
 
     return ComposableWorkflows(
-        llm_reasoning=ollama_reasoning,
-        llm_code=ollama_code,
+        llm_reasoning=llama_reasoning,
+        llm_code=llama_code,
         github_client=github_client,
     )
 
@@ -181,9 +181,9 @@ class AgenticsApp:
                 __name__,
                 f"Configuration: GitHub token {'set' if self.config.github_token else 'not set'}",
             )
-            log_info(__name__, f"Ollama host: {self.config.ollama_host}")
-            log_info(__name__, f"Reasoning model: {self.config.ollama_reasoning_model}")
-            log_info(__name__, f"Code model: {self.config.ollama_code_model}")
+            log_info(__name__, f"llama host: {self.config.llama_host}")
+            log_info(__name__, f"Reasoning model: {self.config.llama_reasoning_model}")
+            log_info(__name__, f"Code model: {self.config.llama_code_model}")
 
             # Always create a fresh service manager (self.service_manager is always None from __init__)
             self.service_manager = await init_services(self.config)
@@ -202,29 +202,29 @@ class AgenticsApp:
             # Perform service health checks
             await self._check_services_health()
 
-            # Initialize composable workflows only if Ollama clients are available
+            # Initialize composable workflows only if llama clients are available
             if self.composable_workflows is None:
-                ollama_reasoning_client = (
-                    self.service_manager.ollama_reasoning.client
-                    if self.service_manager.ollama_reasoning
+                llama_reasoning_client = (
+                    self.service_manager.llama_reasoning.client
+                    if self.service_manager.llama_reasoning
                     else None
                 )
-                ollama_code_client = (
-                    self.service_manager.ollama_code.client
-                    if self.service_manager.ollama_code
+                llama_code_client = (
+                    self.service_manager.llama_code.client
+                    if self.service_manager.llama_code
                     else None
                 )
-                if ollama_reasoning_client is not None and ollama_code_client is not None:
+                if llama_reasoning_client is not None and llama_code_client is not None:
                     self.composable_workflows = await create_composable_workflow(
                         github_client=self.service_manager.github._client
                         if self.service_manager.github
                         else None,
-                        llm_reasoning=ollama_reasoning_client,
-                        llm_code=ollama_code_client,
+                        llm_reasoning=llama_reasoning_client,
+                        llm_code=llama_code_client,
                     )
                 else:
                     self.monitor.info(
-                        "Skipping workflow initialization - Ollama clients not available"
+                        "Skipping workflow initialization - llama clients not available"
                     )
 
             self._initialized = True
@@ -246,7 +246,7 @@ class AgenticsApp:
         health_results = await self.service_manager.check_services_health()
 
         # Check critical services
-        critical_services = ["ollama_reasoning", "ollama_code", "github"]
+        critical_services = ["llama_reasoning", "llama_code", "github"]
         failed_services = []
 
         for service in critical_services:
@@ -312,7 +312,7 @@ class AgenticsApp:
 
         if self.composable_workflows is None:
             raise AgenticsError(
-                "Workflow not initialized - Ollama LLM service is required but not available"
+                "Workflow not initialized - llama LLM service is required but not available"
             )
 
         self.monitor.info("issue_processing_started", {"issue_url": issue_url})

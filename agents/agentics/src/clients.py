@@ -7,17 +7,17 @@ from langchain_ollama import OllamaLLM
 
 # Environment variables
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_REASONING_MODEL = os.getenv("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
-OLLAMA_CODE_MODEL = os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+LLAMA_HOST = os.getenv("LLAMA_HOST", "http://localhost:11434")
+LLAMA_REASONING_MODEL = os.getenv("LLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+LLAMA_CODE_MODEL = os.getenv("LLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
 
 monitor = structured_log(__name__)
 
 # GitHub client will be initialized lazily
 github = None
 
-# Initialize Ollama LLM clients
-monitor.info("Initializing Ollama LLM clients")
+# Initialize llama LLM clients
+monitor.info("Initializing llama LLM clients")
 
 
 class TimedOllamaLLM(OllamaLLM):
@@ -68,8 +68,8 @@ class TimedOllamaLLM(OllamaLLM):
 
 
 llm_reasoning = TimedOllamaLLM(
-    model=OLLAMA_REASONING_MODEL,
-    base_url=OLLAMA_HOST,
+    model=LLAMA_REASONING_MODEL,
+    base_url=LLAMA_HOST,
     temperature=0.7,  # Lowered to reduce hallucinations
     top_p=0.7,  # Adjusted for more focused output
     top_k=20,
@@ -78,8 +78,8 @@ llm_reasoning = TimedOllamaLLM(
     extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
 )
 llm_code = TimedOllamaLLM(
-    model=OLLAMA_CODE_MODEL,
-    base_url=OLLAMA_HOST,
+    model=LLAMA_CODE_MODEL,
+    base_url=LLAMA_HOST,
     temperature=0.7,  # Lowered to reduce hallucinations
     top_p=0.7,  # Adjusted for more focused output
     top_k=20,
@@ -87,4 +87,4 @@ llm_code = TimedOllamaLLM(
     model_name="code",
     extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
 )
-monitor.info("Ollama LLM clients initialized successfully")
+monitor.info("llama LLM clients initialized successfully")

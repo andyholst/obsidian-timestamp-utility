@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 #
 # docker_run.sh — PTY-aware wrapper for docker/nerdctl compose run.
 #
@@ -15,8 +15,13 @@
 #
 # bash 3.2 compatible (macOS default): no associative arrays, no [[ ]].
 # Uses ${arr[@]+...} idiom to handle empty arrays safely with set -u.
-
+#
 set -uo pipefail
+
+# Pre-load nerdctl containerd socket if colima is running (required for nerdctl to find the daemon)
+if command -v nerdctl >/dev/null 2>&1 && [ -S ~/.colima/default/containerd.sock ]; then
+    export NERDCTL_CONTAINERD_SOCK=~/.colima/default/containerd.sock
+fi
 
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <compose-file> <extra-flags> <service> <cmd...>" >&2
@@ -30,9 +35,10 @@ shift
 # Detect runtime
 if command -v nerdctl >/dev/null 2>&1; then
     RUNTIME="nerdctl"
-    # On macOS with colima, the nerdctl wrapper is 'colima nerdctl --profile default'
-    # which doesn't expose compose subcommands directly. Use the -- separator to pass
-    # compose to the underlying nerdctl binary inside the colima VM.
+    # Use colima nerdctl (which works) with containerd socket for compose
+    if [ -S ~/.colima/default/containerd.sock ]; then
+        export NERDCTL_CONTAINERD_SOCK=~/.colima/default/containerd.sock
+    fi
     DOCKER_CMD="colima nerdctl -- compose"
 else
     RUNTIME="docker"
@@ -42,6 +48,7 @@ fi
 # Build the compose run arguments
 # Everything until the service name are flags (--rm, -e, etc.)
 # The service name and everything after is the command
+# Special handling: if command starts with "bash -c", join all args after "-c" into one string
 
 # Use arrays for proper quoting preservation
 ARGS=()
@@ -65,6 +72,17 @@ for arg in "$@"; do
     fi
 done
 
+# Check if command starts with "bash -c" and join all args after "-c" into one string
+if [ ${#CMD_ARGS[@]} -ge 1 ]; then
+    case "${CMD_ARGS[0]}" in
+        bash\ -c*)
+            # Extract the command part after "bash -c"
+            BASH_C_CMD="${CMD_ARGS[0]#bash -c }"
+            CMD_ARGS=("-c" "$BASH_C_CMD")
+            ;;
+    esac
+fi
+
 if [ -z "$SERVICE" ]; then
     echo "ERROR: Could not determine service name" >&2
     exit 1
@@ -83,17 +101,16 @@ echo "DOCKER_RUN: $DOCKER_CMD -f $COMPOSE_FILE run $LOG_ARGS $SERVICE $LOG_CMD" 
 
 if [ "$RUNTIME" = "nerdctl" ]; then
     # nerdctl requires TTY — use macOS script to allocate PTY
-    # macOS script: script [-q] /dev/null command args...
+    # macOS (BSD) script syntax: script [-q] /dev/null command args...
     # This allocates a PTY and runs the command, discarding output to /dev/null
-    # Use explicit if-else to avoid ${arr[@]+"${arr[@]}"} bash 3.2 issues
     if [ ${#ARGS[@]} -gt 0 ] && [ ${#CMD_ARGS[@]} -gt 0 ]; then
-        exec script -q /dev/null $DOCKER_CMD -f $COMPOSE_FILE run "${ARGS[@]}" $SERVICE "${CMD_ARGS[@]}"
+        exec script -q /dev/null $DOCKER_CMD -f "$COMPOSE_FILE" run "${ARGS[@]}" "$SERVICE" "${CMD_ARGS[@]}"
     elif [ ${#ARGS[@]} -gt 0 ]; then
-        exec script -q /dev/null $DOCKER_CMD -f $COMPOSE_FILE run "${ARGS[@]}" $SERVICE
+        exec script -q /dev/null $DOCKER_CMD -f "$COMPOSE_FILE" run "${ARGS[@]}" "$SERVICE"
     elif [ ${#CMD_ARGS[@]} -gt 0 ]; then
-        exec script -q /dev/null $DOCKER_CMD -f $COMPOSE_FILE run $SERVICE "${CMD_ARGS[@]}"
+        exec script -q /dev/null $DOCKER_CMD -f "$COMPOSE_FILE" run "$SERVICE" "${CMD_ARGS[@]}"
     else
-        exec script -q /dev/null $DOCKER_CMD -f $COMPOSE_FILE run $SERVICE
+        exec script -q /dev/null $DOCKER_CMD -f "$COMPOSE_FILE" run "$SERVICE"
     fi
 else
     # docker compose supports --rm and doesn't require TTY

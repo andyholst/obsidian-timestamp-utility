@@ -17,7 +17,7 @@ strict duplicate of another (or superseded by a canonical per-agent file), the d
 - **THEN** the duplicates are removed and the canonical file retains the assertions.
 
 ### Requirement: Live tests skip cleanly without credentials
-Any integration test that requires `GITHUB_TOKEN` or a live Ollama endpoint (`OLLAMA_HOST`) MUST
+Any integration test that requires `GITHUB_TOKEN` or a live llama endpoint (`LLAMA_HOST`) MUST
 skip cleanly (not error) when that dependency is absent, so `make loop-integration` is green on a
 machine without network credentials.
 
@@ -26,7 +26,7 @@ machine without network credentials.
 - **THEN** GitHub-dependent tests are skipped and the suite exits 0 with a recorded skip count.
 
 ### Requirement: Categorization is documented
-The agent MUST produce + keep a categorization of the integration suite (hermetic / live-Ollama /
+The agent MUST produce + keep a categorization of the integration suite (hermetic / live-llama /
 live-GitHub / dead) and reflect it in this change's `tasks.md` so "the integration tests work and
 are updated" is provable, not asserted.
 

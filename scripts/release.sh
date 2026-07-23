@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 # Build a GitHub-release-ready artifact set in ./release from the current repo state.
 #
 # This is the single source of truth for what `make release` ships. It:
