@@ -16,9 +16,9 @@ os.environ.setdefault("TEST_ULTRA_FAST_MODE", "1")
 # Default is 300s (5 min), increase to 1800s (30 min) for LLM-heavy tests
 os.environ.setdefault("PYTEST_TIMEOUT", "1800")
 
-# Use sorc/qwen3.5-claude-4.6-opus:9b for both reasoning and code generation
-os.environ.setdefault("LLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
-os.environ.setdefault("LLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+# Use qwen3.6-35b-a3b for both reasoning and code generation
+os.environ.setdefault("LLAMA_REASONING_MODEL", "qwen3.6-35b-a3b")
+os.environ.setdefault("LLAMA_CODE_MODEL", "qwen3.6-35b-a3b")
 
 # Load .env file from project root so GITHUB_TOKEN and other env vars are available
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))

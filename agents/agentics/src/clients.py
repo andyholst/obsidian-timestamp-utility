@@ -8,8 +8,8 @@ from langchain_ollama import OllamaLLM
 # Environment variables
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 LLAMA_HOST = os.getenv("LLAMA_HOST", "http://localhost:11434")
-LLAMA_REASONING_MODEL = os.getenv("LLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
-LLAMA_CODE_MODEL = os.getenv("LLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+LLAMA_REASONING_MODEL = os.getenv("LLAMA_REASONING_MODEL", "qwen3.6-35b-a3b")
+LLAMA_CODE_MODEL = os.getenv("LLAMA_CODE_MODEL", "qwen3.6-35b-a3b")
 
 monitor = structured_log(__name__)
 

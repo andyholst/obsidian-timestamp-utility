@@ -48,10 +48,10 @@ class AgenticsConfig(BaseModel):
         default_factory=lambda: os.getenv("LLAMA_HOST", "http://localhost:11434")
     )
     llama_reasoning_model: str = Field(
-        default_factory=lambda: os.getenv("LLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+        default_factory=lambda: os.getenv("LLAMA_REASONING_MODEL", "qwen3.6-35b-a3b")
     )
     llama_code_model: str = Field(
-        default_factory=lambda: os.getenv("LLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+        default_factory=lambda: os.getenv("LLAMA_CODE_MODEL", "qwen3.6-35b-a3b")
     )
 
     # Circuit breaker configuration

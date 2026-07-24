@@ -8,7 +8,7 @@ Corrected `README.md` to match the real repo: removed the false MCP claim (local
 `make start-mcp-persist`), fixed `make run-agentics` to `CHANGE=<name>` (local OpenSpec change, no
 GitHub fetch) dropping the non-existent `build-image-agents` / `agentics.log`, fixed test
 references to `agents/agentics/tests/{unit,integration}`, and corrected llama model defaults to
-`sorc/qwen3.5-claude-4.6-opus:9b`. README format/headings preserved. Verified via
+`qwen3.6-35b-a3b`. README format/headings preserved. Verified via
 `make loop-collect` + `make loop-unit`. README-only — no B8 behaviour change.
 ## Requirements
 ### Requirement: README documents the documentation layout
@@ -75,7 +75,7 @@ name non-existent files like `test_ticket_interpreter.py`.
 
 ### Requirement: README env defaults match the Makefile
 The documented llama model defaults MUST match the Makefile (`LLAMA_MODEL` /
-`LLAMA_CODE_MODEL` default to `sorc/qwen3.5-claude-4.6-opus:9b`; `LLAMA_HOST` defaults to
+`LLAMA_CODE_MODEL` default to `qwen3.6-35b-a3b`; `LLAMA_HOST` defaults to
 `http://localhost:11434`).
 
 #### Scenario: model defaults correct

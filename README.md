@@ -295,15 +295,15 @@ Before running the ticket interpreter agent, ensure you have the following:
   - LLAMA_HOST: The URL of your llama LLM service (default:
     http://localhost:11434).
   - LLAMA_REASONING_MODEL: The LLM model for reasoning tasks (default:
-    sorc/qwen3.5-claude-4.6-opus:9b).
+    qwen3.6-35b-a3b).
   - LLAMA_CODE_MODEL: The LLM model for code generation (default:
-    sorc/qwen3.5-claude-4.6-opus:9b).
+    qwen3.6-35b-a3b).
 
 Set these environment variables in your terminal: export
 GITHUB_TOKEN=your_token_here
 export LLAMA_HOST=http://localhost:11434
-export LLAMA_REASONING_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
-export LLAMA_CODE_MODEL=sorc/qwen3.5-claude-4.6-opus:9b
+export LLAMA_REASONING_MODEL=qwen3.6-35b-a3b
+export LLAMA_CODE_MODEL=qwen3.6-35b-a3b
 
 ### Steps to Run the Agent
 

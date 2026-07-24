@@ -307,8 +307,8 @@ class TestConfigurationIntegration:
             {
                 "github_token": os.getenv("GITHUB_TOKEN"),
                 "llama_host": "http://localhost:11434",
-                "llama_reasoning_model": "sorc/qwen3.5-claude-4.6-opus:9b",
-                "llama_code_model": "sorc/qwen3.5-claude-4.6-opus:9b",
+                "llama_reasoning_model": "qwen3.6-35b-a3b",
+                "llama_code_model": "qwen3.6-35b-a3b",
             },
             # Minimal services (just GitHub)
             {
@@ -321,8 +321,8 @@ class TestConfigurationIntegration:
             {
                 "github_token": os.getenv("GITHUB_TOKEN"),
                 "llama_host": "http://localhost:11434",
-                "llama_reasoning_model": "sorc/qwen3.5-claude-4.6-opus:9b",
-                "llama_code_model": "sorc/qwen3.5-claude-4.6-opus:9b",
+                "llama_reasoning_model": "qwen3.6-35b-a3b",
+                "llama_code_model": "qwen3.6-35b-a3b",
                 "circuit_breaker_failure_threshold": 5,
                 "circuit_breaker_recovery_timeout": 60,
                 "github_circuit_breaker_failure_threshold": 3,

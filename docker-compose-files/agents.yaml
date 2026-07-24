@@ -15,9 +15,12 @@ services:
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - LLAMA_HOST=http://host.lima.internal:11434
-      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      # Rootless nerdctl/colima on macOS: --net=host shares the host loopback, so containers
+      # can reach llama at http://127.0.0.1:11434 directly. `host.lima.internal` does NOT
+      # resolve under rootless nerdctl (returns 000) — must use 127.0.0.1.
+      - LLAMA_HOST=http://127.0.0.1:11434
+      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-qwen3.6-35b-a3b}
+      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-qwen3.6-35b-a3b}
       - CHANGE=${CHANGE}
       - PYTHONDONTWRITEBYTECODE=1
     # Rootless nerdctl: these services use `network_mode: host`, so the container shares the
@@ -48,9 +51,12 @@ services:
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
-      - LLAMA_HOST=http://host.lima.internal:11434
-      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      # Rootless nerdctl/colima on macOS: --net=host shares the host loopback, so containers
+      # can reach llama at http://127.0.0.1:11434 directly. `host.lima.internal` does NOT
+      # resolve under rootless nerdctl (returns 000) — must use 127.0.0.1.
+      - LLAMA_HOST=http://127.0.0.1:11434
+      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-qwen3.6-35b-a3b}
+      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-qwen3.6-35b-a3b}
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
       - HOST_UID=${HOST_UID:-1000}
@@ -84,9 +90,12 @@ services:
     environment:
       - PROJECT_ROOT=/app
       - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - LLAMA_HOST=http://host.lima.internal:11434
-      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      # Rootless nerdctl/colima on macOS: --net=host shares the host loopback, so containers
+      # can reach llama at http://127.0.0.1:11434 directly. `host.lima.internal` does NOT
+      # resolve under rootless nerdctl (returns 000) — must use 127.0.0.1.
+      - LLAMA_HOST=http://127.0.0.1:11434
+      - LLAMA_REASONING_MODEL=${LLAMA_REASONING_MODEL:-qwen3.6-35b-a3b}
+      - LLAMA_CODE_MODEL=${LLAMA_CODE_MODEL:-qwen3.6-35b-a3b}
       - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
       - PYTHONPATH=/app
       - TEST_FILTER=${TEST_FILTER}
@@ -94,13 +103,8 @@ services:
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-    # Rootless nerdctl: this service uses `network_mode: host`, so the container shares the
-    # host loopback. llama is bound to 127.0.0.1:11434 on the host, reachable at
-    # http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
-    # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/integration/ -vv -s --tb=long ${TEST_FILTER}\""]
+    # Skip e2e tests during loop-harness (they're for full e2e only)
+    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/integration/ -vv -s --tb=long -m 'not e2e' ${TEST_FILTER}\""]
     network_mode: host
 
 # Rootless nerdctl CNI fix: pin a UNIQUE default-network subnet per compose file so

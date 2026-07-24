@@ -49,7 +49,7 @@ name non-existent files like `test_ticket_interpreter.py`.
 
 ### Requirement: README env defaults match the Makefile
 The documented llama model defaults MUST match the Makefile (`LLAMA_MODEL` /
-`LLAMA_CODE_MODEL` default to `sorc/qwen3.5-claude-4.6-opus:9b`; `LLAMA_HOST` defaults to
+`LLAMA_CODE_MODEL` default to `qwen3.6-35b-a3b`; `LLAMA_HOST` defaults to
 `http://localhost:11434`).
 
 #### Scenario: model defaults correct

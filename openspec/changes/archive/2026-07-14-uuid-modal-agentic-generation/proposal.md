@@ -21,6 +21,6 @@ Obsidian users need a fast way to insert unique, time-ordered identifiers for cr
 ## Impact
 
 - Affected code: `src/main.ts` (new command + generation function), `src/__tests__/main.test.ts` (new tests), possibly `package.json`/manifest if a runtime dependency is required.
-- Affected systems: the agentic pipeline (`make run-agentics`) and its LLM (Ollama `sorc/qwen3.5-claude-4.6-opus:9b`), which reads the GitHub issue and writes the TS files.
+- Affected systems: the agentic pipeline (`make run-agentics`) and its LLM (Ollama `qwen3.6-35b-a3b`), which reads the GitHub issue and writes the TS files.
 - Dependencies: none required if a UUID v7 is implemented with the Web Crypto / Node `crypto.randomUUID`-style randomness; otherwise a small npm helper. Decision deferred to `design.md`/agentic output.
 - Note: execution currently depends on `make run-agentics`, which routes through Dagger-gated Makefile targets. This proposal's execution is validated via the agentic pipeline; the Dagger dependency is removed in the companion change `docker-make-no-dagger`.

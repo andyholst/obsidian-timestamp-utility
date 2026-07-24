@@ -182,7 +182,7 @@ class MakefileValidator:
             ):
                 env["ISSUE_URL"] = "https://github.com/anomalyco/opencode/issues/42"
             if not env.get("LLAMA_MODEL"):
-                env["LLAMA_MODEL"] = "sorc/qwen3.5-claude-4.6-opus:9b"
+                env["LLAMA_MODEL"] = "qwen3.6-35b-a3b"
             if not env.get("TEST_ISSUE_URL"):
                 env["TEST_ISSUE_URL"] = env["ISSUE_URL"]
             if any(
