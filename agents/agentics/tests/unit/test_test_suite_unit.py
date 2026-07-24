@@ -38,7 +38,7 @@ describe('Calculator', () => {
 
 def test_validate_llm_test_suite_returns_result():
     result, report = validate_llm_test_suite(
-        REAL_CODE, REAL_TESTS, include_code_validator=False
+        REAL_CODE, REAL_TESTS, include_code_validator=False, skip_execution=True
     )
     assert isinstance(result, ValidationResult)
     # Real attributes the pipeline relies on

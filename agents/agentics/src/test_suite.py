@@ -1275,6 +1275,7 @@ class LLMSuiteValidator:
         tests: str,
         context: Dict[str, Any] = None,
         include_code_validator: bool = True,
+        skip_execution: bool = False,
     ) -> ValidationResult:
         """Run complete test suite validation"""
 
@@ -1284,15 +1285,16 @@ class LLMSuiteValidator:
 
         result = ValidationResult(code_hash=code_hash, test_hash=test_hash)
 
-        # Phase 1: Execute code and tests
-        try:
-            self.monitor.info("Executing generated code and tests")
-            result.code_execution, result.test_execution = (
-                self.executor.execute_code_and_tests(code, tests, context)
-            )
-        except Exception as e:
-            self.monitor.error(f"Execution phase failed: {str(e)}")
-            result.critical_issues.append(f"Execution failed: {str(e)}")
+        # Phase 1: Execute code and tests (skip for fast unit tests)
+        if not skip_execution:
+            try:
+                self.monitor.info("Executing generated code and tests")
+                result.code_execution, result.test_execution = (
+                    self.executor.execute_code_and_tests(code, tests, context)
+                )
+            except Exception as e:
+                self.monitor.error(f"Execution phase failed: {str(e)}")
+                result.critical_issues.append(f"Execution failed: {str(e)}")
 
         # Phase 2: Validate test-code relationship
         try:
@@ -1505,10 +1507,11 @@ def validate_llm_test_suite(
     tests: str,
     context: Dict[str, Any] = None,
     include_code_validator: bool = True,
+    skip_execution: bool = False,
 ) -> Tuple[ValidationResult, str]:
     """Global function for test suite validation"""
     result = test_suite_validator.validate_test_suite(
-        code, tests, context, include_code_validator
+        code, tests, context, include_code_validator, skip_execution
     )
     report = generate_test_suite_report(code, tests, result)
     return result, report
