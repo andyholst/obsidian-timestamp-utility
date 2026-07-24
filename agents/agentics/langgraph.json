@@ -9,7 +9,7 @@
       "data": {
         "name": "Code Integrator Agent",
         "instructions": "Integrate generated code into the codebase using LLM reasoning.",
-        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b",
+        "model": "ollama/qwen3.6-35b-a3b",
         "tools": []
       }
     },
@@ -19,7 +19,7 @@
       "data": {
         "name": "Dependency Installer Agent",
         "instructions": "Analyze and install required npm dependencies.",
-        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b",
+        "model": "ollama/qwen3.6-35b-a3b",
         "tools": [
           "npm_install_tool",
           "npm_list_tool"
@@ -48,7 +48,7 @@
       "data": {
         "name": "Error Recovery Agent",
         "instructions": "Diagnose test failures and suggest recovery actions.",
-        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b"
+        "model": "ollama/qwen3.6-35b-a3b"
       }
     },
     {
@@ -65,7 +65,7 @@
       "data": {
         "name": "Code Reviewer Agent",
         "instructions": "Review integrated code for quality and adherence to specs.",
-        "model": "ollama/sorc/qwen3.5-claude-4.6-opus:9b"
+        "model": "ollama/qwen3.6-35b-a3b"
       }
     },
     {

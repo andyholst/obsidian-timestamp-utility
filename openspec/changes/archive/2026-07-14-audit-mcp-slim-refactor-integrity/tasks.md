@@ -33,8 +33,8 @@
 
 ## 4. Recommended next steps (NOT auto-applied)
 - [x] 4.1 Re-ran the loop gates on this box (hermetic + collection + mocked unit + integration-skip;
-      live Ollama gates `loop-unit-real`/`loop-integration`/`loop-build-app`/`loop-test-app` skip
-      cleanly without OLLAMA_HOST per B17). `make test-agents-unit-mock` → 519 passed (6 failures are
+      live llama gates `loop-unit-real`/`loop-integration`/`loop-build-app`/`loop-test-app` skip
+      cleanly without LLAMA_HOST per B17). `make test-agents-unit-mock` → 519 passed (6 failures are
       pre-existing tests referencing now-deleted runtime change dirs, out of scope); `make test-agents-collect`
       → 525 + 200 collected, 0 errors. Confirms the MCP removal left no dangling import.
 - [x] 4.2 Added a CI collection guard: `make test-agents-collect` (unit + integration `--collect-only`)

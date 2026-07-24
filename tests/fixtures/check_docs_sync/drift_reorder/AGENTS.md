@@ -13,11 +13,11 @@ working tree is this repo. There are TWO execution contexts and you MUST use the
 - **Foreground `terminal` calls** run inside the agent **sandbox** at `/workspace` — a bind-mount of
   the repo. This is where file edits (`write_file`/`patch`), `git` (read-only), `openspec` (npm
   devDep, installed in `node_modules`), and quick checks happen. The sandbox has NO `docker`/
-  `nerdctl`/Ollama binary.
+  `nerdctl`/llama binary.
 - **`terminal(background=true)` calls run on the REAL HOST** at
   `/home/asimov/repository/git/projects/obsidian-timestamp-utility` — the same git worktree, just a
   different mount point. The host HAS `make` (`/usr/bin/make`), `docker` (`/usr/bin/docker`),
-  `nerdctl` (`/home/linuxbrew/.linuxbrew/bin/nerdctl`, rootless), and a **live Ollama** reachable
+  `nerdctl` (`/home/linuxbrew/.linuxbrew/bin/nerdctl`, rootless), and a **live llama** reachable
   from the host-networked loop containers at `127.0.0.1:11434` (B19).
   **RULE: every long-running verification step (`make run-agentics`, `make build-app`, `make test-app`,
   `make loop-harness`, `make loop-e2e`, `make deliver-change`, `make phase7-archive`, `make release-flow`)
@@ -29,8 +29,8 @@ working tree is this repo. There are TWO execution contexts and you MUST use the
 The host provides everything the Makefile targets need:
 - **rootless `nerdctl` / docker compose** — `make loop-harness`, `make build-app`, `make test-app`,
   `make run-agentics`, `make loop-e2e`, etc. spin up REAL containers on the host.
-- **a live Ollama** on the host, host-networked so `127.0.0.1:11434` from inside a container reaches
-  it (B19). `loop-unit-real` and `loop-e2e` are EXPECTED to RUN against live Ollama (not skip).
+- **a live llama** on the host, host-networked so `127.0.0.1:11434` from inside a container reaches
+  it (B19). `loop-unit-real` and `loop-e2e` are EXPECTED to RUN against live llama (not skip).
 - **`openspec`** is an npm devDependency (`npm install` makes the CLI available in `node_modules/.bin`),
   so `make openspec-new` / `openspec validate` / `openspec archive` work via the real CLI (B15).
   Invoke it through `make`, never by hand-writing change dirs.
@@ -195,7 +195,7 @@ cd ../worktrees/<name>
   self-correct loop is green), the refactored Python agentic code MUST be re-verified: run
   `make verify-agentics-after-run` (which runs `test-agents-unit` + `test-agents-integration`).
   These tests MUST exercise **real logic** — unit tests test the real Python modules (mocking ONLY
-  external calls: GitHub/Ollama/network/FS), and integration/e2e tests make **real** Ollama (and
+  external calls: GitHub/llama/network/FS), and integration/e2e tests make **real** llama (and
   real GitHub where they fetch an issue) calls. If the agentic suite fails, the change is NOT done;
   report the failing test honestly. (Owned by the `agentic-tests-real-logic` change.)
 
@@ -244,7 +244,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   `this.addCommand(...)`. It validates against the change's own spec, not a hardcoded expectation.
 - **(B3) E2E generates uniquely + is always runnable.** The e2e test runs the pipeline into an
   ISOLATED temp dir (unique per run) — never touches the real `src/main.ts`. Runnable any time;
-  if it depends on a live Ollama/GitHub it skips cleanly without one. **Standing e2e gate (proof of
+  if it depends on a live llama/GitHub it skips cleanly without one. **Standing e2e gate (proof of
   concept) = THREE tests:** `test_ticket20_e2e_integration.py` + `test_ticket22_e2e_integration.py`
   (GitHub-issue seed-then-generate) + `test_greetings_e2e_integration.py` (LOCAL hand-authored change,
   the simple non-algorithmic proof). They MUST ALL pass after any Python slim/refactor. Greetings is
@@ -334,7 +334,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
  `describe`/leaf `it`/`test`/jest-collected/`addCommand` counts drop below `origin/main`;
  the silent feature/test-removal guard, see behaviour `ts-test-floor`) → `loop-unit` (mocked,
  hermetic) → `loop-unit-real` (REAL agent unit tests on live
- Ollama, no mocks) → `loop-e2e` (the 3 standing B1/B3 e2e gates) → `loop-integration` (broad agentic
+ llama, no mocks) → `loop-e2e` (the 3 standing B1/B3 e2e gates) → `loop-integration` (broad agentic
  integration suite) → `loop-build-app` → `loop-test-app`. Each stage fails the whole run (no silent
     green). Rules for the integration tests themselves:
       1. **No dead tests.** When a file is a strict duplicate of another (or superseded by a canonical
@@ -352,15 +352,15 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
          deliberate deep verification. This keeps `loop-integration` at ~6 min while preserving all
          necessary coverage. (Marker registered in `pytest.ini`; heavy files tagged in the
          `setup-loop-harness-openspec` work.)
-      2. **Live tests skip cleanly.** Any test that needs a live Ollama endpoint
-         (`OLLAMA_HOST`) MUST use `pytest.mark.skipif` so it SKIPS (not errors) when that
+      2. **Live tests skip cleanly.** Any test that needs a live llama endpoint
+         (`LLAMA_HOST`) MUST use `pytest.mark.skipif` so it SKIPS (not errors) when that
          dependency is absent — `make loop-integration` must exit 0 with a recorded skip count
          on a creds-less machine. **GitHub public-repository reads are token-less**, so
          `GITHUB_TOKEN` is NOT a skip condition (per the user correction during
          `integration-tests-lifecycle`): tests that only read public issues must run without a
-         token and skip only on `OLLAMA_HOST`. Past edits applied this to
+         token and skip only on `LLAMA_HOST`. Past edits applied this to
          `test_agentics_app_integration.py` + `test_configuration_integration.py`.
-      3. **Categorization is provable.** The agent MUST keep an inventory (hermetic / live-Ollama /
+      3. **Categorization is provable.** The agent MUST keep an inventory (hermetic / live-llama /
          live-GitHub / dead) and reflect it in the active change's `tasks.md` so "the integration tests
          work and are updated (not just dead)" is demonstrable, not asserted.
       4. **Collection guard (fail-fast on dangling imports).** `make test-agents-collect` runs
@@ -370,7 +370,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
          a cached "green". This is the durable guard from the `audit-mcp-slim-refactor-integrity` change
          — never remove it. (B4/B14 still hold: no git commit/push from the loop.)
       5. **A green gate MUST NOT rely on FALSE skips.** A skip is legitimate ONLY when its required
-         dependency is genuinely absent (no `OLLAMA_HOST`, no `/project/src/main.ts` reachable, etc.).
+         dependency is genuinely absent (no `LLAMA_HOST`, no `/project/src/main.ts` reachable, etc.).
          A skip whose dependency IS present is a **false skip** and is a GATE DEFECT — it lets
          `make loop-harness` report green while real coverage is silently lost. The agent MUST, after
          every loop run, inspect the skip list and confirm each skip's reason is **true**; any false
@@ -388,30 +388,30 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   - **(B18) Run the agents' REAL unit tests, not only the mocked ones.** The loop MUST
     execute BOTH the hermetic mocked unit run (`loop-unit` → `make test-agents-unit-mock`)
     AND the real, non-mocked agent unit run (`loop-unit-real` → `make test-agents-unit`,
-    live Ollama) as ordered gates 1 and 2 of `make loop-harness`. Reporting "agent tests
+    live llama) as ordered gates 1 and 2 of `make loop-harness`. Reporting "agent tests
     green" after **only** the mocked run is INCOMPLETE — `loop-unit-real` is the proof that
     the deterministic floor + the agent units actually work against the live LLM (the unit
-    under test is never mocked; only the Ollama/HTTP boundary may be). `make test-agents-unit`
-    MUST be run when Ollama is reachable and its result reported alongside — not instead of —
-    the mocked run. If Ollama is unreachable, `loop-unit-real` SKIPS (it must not error), but
+    under test is never mocked; only the llama/HTTP boundary may be). `make test-agents-unit`
+    MUST be run when llama is reachable and its result reported alongside — not instead of —
+    the mocked run. If llama is unreachable, `loop-unit-real` SKIPS (it must not error), but
     the agent MUST note that the real unit gate did not execute rather than silently treating
     the mocked run as the whole story. (This closes the gap where the agentic suite was
     reported green from the mocked run alone.)
-  - **(B19) Archived change dirs carry a `YYYY-MM-DD-` prefix — resolvers and tests MUST handle it.** `openspec archive` moves `openspec/changes/<name>` to `openspec/changes/archive/<YYYY-MM-DD>-<name>`. Any code that locates a change by bare name — `openspec_loader.find_change_dir`, `CodeIntegratorAgent._expected_contract_for_change`, `run_pipeline_isolated` (e2e helper), and the contract/regression unit tests — MUST also match the date-prefixed archived variant (`archive/*-<name>`), otherwise those tests become dead tests pointing at a now-archived dir (violates B17). Likewise, the agentic code/tests resolve the repo root to wherever `openspec/changes` actually lives: in the unit/e2e containers the real repo is mounted at `/project` as a SIBLING of `/app` (only `/app/src` + `/app/tests` are mounted under `/app`), so a naive `../..` walk-up or `git rev-parse` from `/app` FAILS — resolve by probing for a dir that contains `openspec/changes` (never a fixed relative depth). The e2e/integration gates run the REAL pipeline against a live Ollama (`integration-test-agents` sets `OLLAMA_HOST=http://127.0.0.1:11434` — the loop/integration
+  - **(B19) Archived change dirs carry a `YYYY-MM-DD-` prefix — resolvers and tests MUST handle it.** `openspec archive` moves `openspec/changes/<name>` to `openspec/changes/archive/<YYYY-MM-DD>-<name>`. Any code that locates a change by bare name — `openspec_loader.find_change_dir`, `CodeIntegratorAgent._expected_contract_for_change`, `run_pipeline_isolated` (e2e helper), and the contract/regression unit tests — MUST also match the date-prefixed archived variant (`archive/*-<name>`), otherwise those tests become dead tests pointing at a now-archived dir (violates B17). Likewise, the agentic code/tests resolve the repo root to wherever `openspec/changes` actually lives: in the unit/e2e containers the real repo is mounted at `/project` as a SIBLING of `/app` (only `/app/src` + `/app/tests` are mounted under `/app`), so a naive `../..` walk-up or `git rev-parse` from `/app` FAILS — resolve by probing for a dir that contains `openspec/changes` (never a fixed relative depth). The e2e/integration gates run the REAL pipeline against a live llama (`integration-test-agents` sets `LLAMA_HOST=http://127.0.0.1:11434` — the loop/integration
  containers are rootless-nerdctl host-networked, so `host.docker.internal` does NOT resolve; the
- coordinate `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not
+ coordinate `127.0.0.1:11434` reaches the live llama on the docker host), so they must RUN (not
  skip) — root resolution is the actual bug to fix, not a skip guard.
   - **(B20) NEVER declare a change "done" without running the loop gate first — this is a hard pre-flight, not optional.** Before reporting any OpenSpec change as complete (or before claiming "the harness is green / aligned / fixed"), the agent MUST execute the loop gate and report its real output:
-      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-unit` → `loop-ts-floor` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
-         **HOW TO RUN (never make excuses):** long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the **REAL HOST** (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live Ollama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will print `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it. **Never say "can't run from here" / "environment absent" — the host runs `make` for you.** Drive verification through `make` with REAL output, always.
+      1. **Preferred:** run `bash scripts/run-loop-harness.sh` (the loop-harness runner — it streams each stage's container/pytest/jest output to the terminal LIVE, prints a start banner + heartbeat on quiet stages, and ends with a per-stage PASS/FAIL/timeout summary; it wraps `make <stage>` in `setsid script … | tee` so nerdctl's forced `--tty` gets a console without deadlocking under an interactive shell). It runs all stages in order: `loop-collect` → `loop-unit` → `loop-ts-floor` → `loop-unit-real` → `loop-e2e` → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. (The standalone `make test-agents-*` / `make run-agentics` commands also self-provide a console via the Makefile `$(call docker_run, …)` helper, which uses `script` only when stdout is not a tty.)
+         **HOW TO RUN (never make excuses):** long-running `make` targets (`run-agentics`, `build-app`, `test-app`, `loop-harness`, `loop-e2e`, `deliver-change`, `phase7-archive`, `release-flow`) MUST be launched via `terminal(background=true)` — that call executes on the **REAL HOST** (`/home/asimov/repository/git/projects/obsidian-timestamp-utility`), where `make`/`docker`/rootless `nerdctl`/live llama all live. The foreground sandbox (`/workspace`) has NO docker/nerdctl and will print `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has it. **Never say "can't run from here" / "environment absent" — the host runs `make` for you.** Drive verification through `make` with REAL output, always.
       2. **If the full `make loop-harness` cannot complete in the session** (e.g. an explicit
          timeout, or a stage is deliberately disabled via env), the agent MUST STILL run the
          **hermetic gates** — `make loop-collect`, `make loop-ts-floor`, and `make loop-unit` — and report their real
          results. The hermetic gates need NO external dependency and MUST be green before any
-         "done" claim. NOTE: a live Ollama IS reachable from the loop containers (the host runs
-         Ollama and the rootless-nerdctl containers are host-networked, so `127.0.0.1:11434`
+         "done" claim. NOTE: a live llama IS reachable from the loop containers (the host runs
+         llama and the rootless-nerdctl containers are host-networked, so `127.0.0.1:11434`
          reaches it — see B19) — so `loop-unit-real` and `loop-e2e` are EXPECTED to RUN, not skip.
-         Do not assume Ollama is unavailable; only fall back to hermetic-only when a stage truly
+         Do not assume llama is unavailable; only fall back to hermetic-only when a stage truly
          cannot run in the session.
       3. **Report honestly.** State the actual per-stage outcome (PASS / SKIP / FAIL with the failing stage named). Never say "done/green" if `loop-unit` (or `loop-collect`) is red. If a gate fails, fix the root cause and re-run — do not hand-edit generated output to fake green, and do not stop at doc/alignment edits while a code gate is failing.
       Rationale: in prior runs the agent repeatedly finished work (including AGENTS.md/skill edits) WITHOUT running the gate, leaving `make loop-unit` red and only discovering it later. B20 makes the gate a mandatory final step so regressions are caught before "done" is claimed. (B4/B14 still forbid git commit/push from the gate.)
@@ -662,7 +662,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
           deliberately bypass the B28a/B30b guard (e.g. an agreed pre-merge cleanup). It is OFF by
           default and ALWAYS prints a loud WARNING that history is being rewritten on explicit request.
           It does NOT bypass B30a (revert is never allowed). Use only when the user explicitly asks.
-  - **(B31) MAKE-THROUGH-DOCKER IS ALWAYS A BACKGROUND PROCESS — NEVER THE FOREGROUND SANDBOX.** Every Makefile target that invokes a container runtime (any `docker`, `nerdctl`, or `*compose*` binary via `$(call docker_run, …)`) MUST be executed through the Hermes `terminal(background=true)` channel, which runs on the **real host** that owns the docker/nerdctl daemon and the live Ollama. The foreground sandbox (`/workspace`) has NO container runtime and MUST NOT be used for these targets. This is mandatory for ANY such target — not merely the long-running ones (run-agentics, build-app, test-app, loop-harness, loop-e2e, deliver-change, phase7-archive, release-flow) but also short ones (loop-collect, loop-ts-floor, loop-unit, test-agents-unit, test-agents-integration, verify-agentics-after-run).
+  - **(B31) MAKE-THROUGH-DOCKER IS ALWAYS A BACKGROUND PROCESS — NEVER THE FOREGROUND SANDBOX.** Every Makefile target that invokes a container runtime (any `docker`, `nerdctl`, or `*compose*` binary via `$(call docker_run, …)`) MUST be executed through the Hermes `terminal(background=true)` channel, which runs on the **real host** that owns the docker/nerdctl daemon and the live llama. The foreground sandbox (`/workspace`) has NO container runtime and MUST NOT be used for these targets. This is mandatory for ANY such target — not merely the long-running ones (run-agentics, build-app, test-app, loop-harness, loop-e2e, deliver-change, phase7-archive, release-flow) but also short ones (loop-collect, loop-ts-floor, loop-unit, test-agents-unit, test-agents-integration, verify-agentics-after-run).
     1. **The host is the only supported docker path.** The foreground sandbox returns `docker: command not found` — that is EXPECTED and is NOT a blocker; the host has the daemon. The agent MUST route the target through `terminal(background=true)` and MUST NOT report "can't run from here" / "environment absent".
     2. **No silent foreground runs.** A `make <docker-backed-target>` issued from the foreground terminal is re-dispatched to the background host; the agent never lets it fail on a missing daemon in the sandbox.
     3. **B8 sync.** This behaviour is recorded in the B8 doc-sync set (AGENTS.md, `hermes/skills/openspec-loop-harness.md`, `docs/openspec-engineering-loop-harness.md`, `Makefile`, `scripts/run-loop-harness.sh`) with the B-range string `B1–B31` so `check-docs-sync` stays green.
@@ -805,7 +805,7 @@ These behaviours are encoded in `hermes/skills/openspec-loop-harness.md` and enf
   and confirm it PASSES: all sync docs agree on the 11-stage order (loop-collect → loop-ts-floor →
   loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
   loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, the B1–B32 behaviours, and
-  the live-test skip rule (`OLLAMA_HOST` only, not `GITHUB_TOKEN`). A change is NOT done while any
+  the live-test skip rule (`LLAMA_HOST` only, not `GITHUB_TOKEN`). A change is NOT done while any
   of the sync docs disagree.
   - **(B17a) ROOT `tests/` FOLDER IS PART OF THE LOOP.** Beyond `agents/agentics/tests/` (unit /
     integration / e2e) and `tests/test_secret_scanner*.py`, the loop gate ALSO exercises the

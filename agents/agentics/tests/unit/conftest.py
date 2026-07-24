@@ -70,7 +70,7 @@ def init_test_config():
     """Initialize config once for all tests"""
     import os
     os.environ.setdefault("GITHUB_TOKEN", "test_token")
-    os.environ.setdefault("OLLAMA_HOST", "http://localhost:11434")
+    os.environ.setdefault("LLAMA_HOST", "http://localhost:11434")
 
 
 @pytest.fixture(autouse=True)
@@ -255,7 +255,7 @@ def init_unit_test_config():
     init_config(
         AgenticsConfig(
             github_token=os.getenv("GITHUB_TOKEN", "test_token"),
-            ollama_host="http://localhost:11434",
+            llama_host="http://localhost:11434",
         )
     )
 

@@ -1,6 +1,6 @@
 # Capability: agentic-tests-real-logic
 
-After `run-agentics` refactors the Python agentic code, the agentic tests MUST re-run and exercise REAL logic (no mocks for deterministic units; real Ollama calls for integration/e2e).
+After `run-agentics` refactors the Python agentic code, the agentic tests MUST re-run and exercise REAL logic (no mocks for deterministic units; real llama calls for integration/e2e).
 
 ## ADDED Requirements
 
@@ -16,23 +16,23 @@ The agentic UNIT tests MUST test the REAL implementation of the Python modules
 (state adapters, `openspec_loader.load_change`, `code_integrator` assembly,
 `post_test_runner` parse/metrics, export_name derivation, prompt construction,
 omission-guard comparison). Mocks MUST be used ONLY for **external calls**
-(GitHub API, Ollama/LLM HTTP, network, filesystem boundaries) — never to replace
+(GitHub API, llama/LLM HTTP, network, filesystem boundaries) — never to replace
 the unit under test. The deterministic behaviour of each module is asserted on
 real return values / real state transitions.
 
 #### Scenario: A deterministic unit is tested without mocking its logic
 - **WHEN** a unit test for a deterministic function/class runs
-- **THEN** it invokes the real implementation (not a MagicMock/stub of the unit itself) and asserts on real return values, while any GitHub/Ollama/network call inside it is mocked at the boundary only.
+- **THEN** it invokes the real implementation (not a MagicMock/stub of the unit itself) and asserts on real return values, while any GitHub/llama/network call inside it is mocked at the boundary only.
 
 ### Requirement: Integration/e2e tests make real calls
-The agentic INTEGRATION and e2e tests MUST invoke the REAL Ollama endpoint
-(`OLLAMA_HOST`) and, where the test exercises issue fetching, the REAL GitHub API
+The agentic INTEGRATION and e2e tests MUST invoke the REAL llama endpoint
+(`LLAMA_HOST`) and, where the test exercises issue fetching, the REAL GitHub API
 (with `GITHUB_TOKEN`) — NO `@patch` / `monkeypatch` / fake HTTP for those.
 They must perform an end-to-end generation and assert on real generated TS output.
 
-#### Scenario: e2e test hits real Ollama (and real GitHub when relevant)
+#### Scenario: e2e test hits real llama (and real GitHub when relevant)
 - **WHEN** an integration/e2e test that exercises code generation runs
-- **THEN** it makes a real request to `OLLAMA_HOST` (no patched LLM client) and,
+- **THEN** it makes a real request to `LLAMA_HOST` (no patched LLM client) and,
   if it fetches an issue, a real GitHub call — and validates the real generated TypeScript.
 
 ### Requirement: Mocks only for non-runnable external boundaries
@@ -51,8 +51,8 @@ If the post-run agentic unit or integration/e2e suite fails, the change MUST NOT
 
 ## ADDED Acceptance Criteria
 
-- `make test-agents-unit` passes with deterministic units tested on real implementations; mocks appear ONLY around external calls (GitHub/Ollama/network/FS), not the unit under test.
-- `make test-agents-integration` (and e2e) passes making REAL Ollama calls (and real GitHub where the test fetches an issue) — no patched LLM/HTTP.
+- `make test-agents-unit` passes with deterministic units tested on real implementations; mocks appear ONLY around external calls (GitHub/llama/network/FS), not the unit under test.
+- `make test-agents-integration` (and e2e) passes making REAL llama calls (and real GitHub where the test fetches an issue) — no patched LLM/HTTP.
 - A `verify-agentics-after-run` (or `test-agents`) gate exists and is part of the post-`run-agentics` loop.
 - Mock usage is limited to documented, non-runnable external boundaries only.
 - The agents' REAL (non-mocked) unit tests (`make test-agents-unit`, the `loop-unit-real` gate) are run AND pass — i.e. both the mocked unit run (`test-agents-unit-mock`) and the real unit run (`test-agents-unit`) are executed, not only the mocked one.

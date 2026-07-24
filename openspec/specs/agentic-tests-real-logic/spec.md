@@ -15,23 +15,23 @@ The agentic UNIT tests MUST test the REAL implementation of the Python modules
 (state adapters, `openspec_loader.load_change`, `code_integrator` assembly,
 `post_test_runner` parse/metrics, export_name derivation, prompt construction,
 omission-guard comparison). Mocks MUST be used ONLY for **external calls**
-(GitHub API, Ollama/LLM HTTP, network, filesystem boundaries) — never to replace
+(GitHub API, llama/LLM HTTP, network, filesystem boundaries) — never to replace
 the unit under test. The deterministic behaviour of each module is asserted on
 real return values / real state transitions.
 
 #### Scenario: A deterministic unit is tested without mocking its logic
 - **WHEN** a unit test for a deterministic function/class runs
-- **THEN** it invokes the real implementation (not a MagicMock/stub of the unit itself) and asserts on real return values, while any GitHub/Ollama/network call inside it is mocked at the boundary only.
+- **THEN** it invokes the real implementation (not a MagicMock/stub of the unit itself) and asserts on real return values, while any GitHub/llama/network call inside it is mocked at the boundary only.
 
 ### Requirement: Integration/e2e tests make real calls
-The agentic INTEGRATION and e2e tests MUST invoke the REAL Ollama endpoint
-(`OLLAMA_HOST`) and, where the test exercises issue fetching, the REAL GitHub API
+The agentic INTEGRATION and e2e tests MUST invoke the REAL llama endpoint
+(`LLAMA_HOST`) and, where the test exercises issue fetching, the REAL GitHub API
 (with `GITHUB_TOKEN`) — NO `@patch` / `monkeypatch` / fake HTTP for those.
 They must perform an end-to-end generation and assert on real generated TS output.
 
-#### Scenario: e2e test hits real Ollama (and real GitHub when relevant)
+#### Scenario: e2e test hits real llama (and real GitHub when relevant)
 - **WHEN** an integration/e2e test that exercises code generation runs
-- **THEN** it makes a real request to `OLLAMA_HOST` (no patched LLM client) and,
+- **THEN** it makes a real request to `LLAMA_HOST` (no patched LLM client) and,
   if it fetches an issue, a real GitHub call — and validates the real generated TypeScript.
 
 ### Requirement: Mocks only for non-runnable external boundaries

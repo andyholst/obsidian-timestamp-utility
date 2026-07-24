@@ -4,7 +4,7 @@
 
 ## 2. Inventory + categorize (proves "tests work, not dead")
 - [x] 2.1 List every file in `agents/agentics/tests/integration/` with test count + live markers (GITHUB_TOKEN/OLLAMA/NET) + mock usage. [34 files inventoried this session]
-- [x] 2.2 Classify each as: hermetic / live-Ollama / live-GitHub / dead. Record the table in this tasks.md.
+- [x] 2.2 Classify each as: hermetic / live-llama / live-GitHub / dead. Record the table in this tasks.md.
       [Inventory (33 files, 210 tests) this session:
        - live-GitHub+OLLAMA (no skip guard, B17 defect): test_agentics_app_integration.py(15),
          test_configuration_integration.py(10)
@@ -38,33 +38,33 @@
 
 ## 4. Hermeticize valid-but-live tests
 - [x] 4.1 Valid-but-live tests reviewed: `test_collaborative_hitl_e2e.py` already mocks the LLM
-      (`dummy_llm`, an external boundary) and is hermetic; live-Ollama tests
+      (`dummy_llm`, an external boundary) and is hermetic; live-llama tests
       (`test_configuration_integration.py`, `test_agentics_app_integration.py`) assert on real
-      config/LLM output, so they correctly remain LIVE (skip on OLLAMA_HOST). No valid-but-live
+      config/LLM output, so they correctly remain LIVE (skip on LLAMA_HOST). No valid-but-live
       test has a live call that is NOT the assertion, so no further hermeticization needed.
-- [x] 4.2 Ensure live tests `skip` cleanly (pytest `skipif` on `OLLAMA_HOST`) when absent.
-      [DONE: live integration tests skip (0 errors) without OLLAMA_HOST. GitHub public-read is token-less — GITHUB_TOKEN is NOT a skip condition (B17).]
+- [x] 4.2 Ensure live tests `skip` cleanly (pytest `skipif` on `LLAMA_HOST`) when absent.
+      [DONE: live integration tests skip (0 errors) without LLAMA_HOST. GitHub public-read is token-less — GITHUB_TOKEN is NOT a skip condition (B17).]
 
 ## 5. Makefile gate (loop/harness engineering)
 - [x] 5.1 Add `loop-integration` target → `test-agents-integration` (broad agentic integration suite, B17). [DONE this session]
-- [x] 5.2 Add `loop-unit-real` target → `test-agents-unit` (REAL agent unit tests on live Ollama, no mocks). [DONE this session]
+- [x] 5.2 Add `loop-unit-real` target → `test-agents-unit` (REAL agent unit tests on live llama, no mocks). [DONE this session]
 - [x] 5.3 Re-order `loop-harness` to run the 6 gates in this sequence:
-      `loop-unit` (mocked) → `loop-unit-real` (Ollama) → `loop-e2e` → `loop-integration`
+      `loop-unit` (mocked) → `loop-unit-real` (llama) → `loop-e2e` → `loop-integration`
       → `loop-build-app` → `loop-test-app`. [DONE this session]
 - [x] 5.4 `make -n loop-harness` shows the 6-step order correctly. [VERIFIED this session]
 
 ## 6. Docs sync (B8 bidirectional)
 - [x] 6.1 Add behaviour **B17** to `AGENTS.md` (integration suite = mandatory loop phase; dead-test
-      deletion rule; live tests skip cleanly on OLLAMA_HOST; real unit gate included). [DONE this session]
+      deletion rule; live tests skip cleanly on LLAMA_HOST; real unit gate included). [DONE this session]
 - [x] 6.2 Mirror B17 in `hermes/skills/openspec-loop-harness.md`. [DONE this session]
 - [x] 6.3 Add `loop-integration` + `loop-unit-real` to the skill's command/phase list. [DONE this session]
 
 ## 7. Verify + decide
 - [x] 7.1 Run `make loop-integration` (or `pytest tests/integration`); confirm green / skips-ok.
-      [VERIFIED: 200 tests collected, 0 errors; live tests skip cleanly without OLLAMA_HOST (B17).
+      [VERIFIED: 200 tests collected, 0 errors; live tests skip cleanly without LLAMA_HOST (B17).
       Hermetic subset runs fast — e.g. test_cross_validation_integration.py: 4 passed in 0.17s.]
 - [x] 7.2 Integration-run hang investigation: ran hermetic files directly in the integration container
-      (no timeout plugin needed) — they complete in <1s, no network/Ollama init blocking. The earlier
+      (no timeout plugin needed) — they complete in <1s, no network/llama init blocking. The earlier
       60s timeout was a single heavy live-tagged file; collection-only proves all 200 import cleanly.
       No hang remains; hermetic files are green creds-less.
 - [x] 7.3 `record-work` + `agent-wiki/index.md` update; then archive via B16 gate.

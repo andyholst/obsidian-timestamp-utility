@@ -251,7 +251,7 @@ async def test_full_workflow_well_structured():
 
     # Calculate semantic similarity against expected JSON
     # Note: threshold varies by model - qwen3.5 models produce different output
-    similarity_threshold = 10 if "qwen3.5" in os.getenv("OLLAMA_REASONING_MODEL", "") else 85
+    similarity_threshold = 10 if "qwen3.5" in os.getenv("LLAMA_REASONING_MODEL", "") else 85
     similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
     assert similarity >= similarity_threshold, (
         f"Semantic similarity {similarity:.2f}% is below {similarity_threshold}% threshold"
@@ -491,7 +491,7 @@ async def test_full_workflow_sloppy():
     )
     # Calculate semantic similarity against expected JSON
     # Note: threshold varies by model - qwen3.5 models produce different output
-    similarity_threshold = 10 if "qwen3.5" in os.getenv("OLLAMA_REASONING_MODEL", "") else 85
+    similarity_threshold = 10 if "qwen3.5" in os.getenv("LLAMA_REASONING_MODEL", "") else 85
     similarity = compute_ticket_similarity(EXPECTED_TICKET_JSON, refined)
     assert similarity >= similarity_threshold, (
         f"Semantic similarity {similarity:.2f}% is below {similarity_threshold}% threshold"

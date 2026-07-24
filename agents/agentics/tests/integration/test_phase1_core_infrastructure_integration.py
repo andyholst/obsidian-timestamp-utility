@@ -17,8 +17,8 @@ async def test_composer_state_toolagent_tools_e2e(
     composer = AgentComposer()
 
     llm = OllamaLLM(
-        model=real_ollama_config.ollama_code_model,
-        base_url=real_ollama_config.ollama_host,
+        model=real_ollama_config.llama_code_model,
+        base_url=real_ollama_config.llama_host,
         temperature=0.1,
     )
 
@@ -60,15 +60,15 @@ async def test_composer_state_toolagent_tools_e2e(
     assert os.path.exists(input_file)
 
 
-@pytest.mark.parametrize("model", ["sorc/qwen3.5-claude-4.6-opus:9b", "sorc/qwen3.5-claude-4.6-opus:9b"])
+@pytest.mark.parametrize("model", ["qwen3.6-35b-a3b", "qwen3.6-35b-a3b"])
 @pytest.mark.integration
 def test_config_driven_variations(model, dummy_state):
-    config = AgenticsConfig(ollama_code_model=model)
-    assert config.ollama_code_model == model
+    config = AgenticsConfig(llama_code_model=model)
+    assert config.llama_code_model == model
 
     llm = OllamaLLM(
-        model=config.ollama_code_model,
-        base_url=config.ollama_host,
+        model=config.llama_code_model,
+        base_url=config.llama_host,
         temperature=0.1,
     )
 

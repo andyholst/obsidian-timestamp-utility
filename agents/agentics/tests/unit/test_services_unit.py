@@ -1,16 +1,17 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, patch, AsyncMock
+from langchain_ollama import OllamaLLM
 from src.services import (
     ServiceClient,
-    OllamaClient,
+    LlamaClient,
     GitHubClient,
     ServiceManager,
     get_service_manager,
     init_services,
     _service_manager,
 )
-from src.exceptions import OllamaError, GitHubError, ServiceUnavailableError
+from src.exceptions import LlamaError, GitHubError, ServiceUnavailableError
 from src.config import LLMConfig
 from src.circuit_breaker import CircuitBreaker, ServiceHealthMonitor
 from tests.fixtures.mock_circuit_breaker import (
@@ -133,262 +134,194 @@ class TestServiceClientTests:
         assert client.is_available() is True
 
 
-class TestOllamaClient:
-    """Test OllamaClient functionality."""
+class TestLlamaClient:
+    """Test LlamaClient functionality."""
 
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_initialization_success(
+    def test_llama_client_initialization_success(
         self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
         mock_llm_config,
         mock_circuit_breaker,
         mock_health_monitor,
     ):
-        """Test OllamaClient initialization with valid config."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
+        """Test LlamaClient initialization with valid config."""
+        with (
+            patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+            patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            patch("src.services.OllamaLLM") as mock_ollama,
+        ):
+            mock_llm_instance = MagicMock()
+            mock_ollama.return_value = mock_llm_instance
 
-        mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
+            client = LlamaClient(mock_llm_config)
 
-        client = OllamaClient(mock_llm_config)
-
-        assert client.config == mock_llm_config
-        # With lazy initialization, _client is None until first use
-        assert client._client is None
-        # Accessing the client property triggers initialization
-        assert client.client == mock_llm_instance
-        mock_ollama_class.assert_called_once_with(
-            model="test-model",
-            base_url="http://test.com",
-            temperature=0.7,
-            top_p=0.9,
-            top_k=40,
-            min_p=0.0,
-            request_timeout=30,
-            extra_params={
-                "presence_penalty": 1.0,
-                "num_ctx": 2048,
-                "num_predict": 512,
-            },
-        )
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_initialization_failure(
-        self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_llm_config,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test OllamaClient initialization failure."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        mock_ollama_class.side_effect = Exception("Init failed")
-
-        client = OllamaClient(mock_llm_config)
-
-        assert client._client is None
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_health_check_success(
-        self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_llm_config,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test OllamaClient health check success."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        mock_llm_instance = MagicMock()
-        mock_llm_instance.invoke.return_value = "Hello response"
-        mock_ollama_class.return_value = mock_llm_instance
-
-        client = OllamaClient(mock_llm_config)
-
-        # Mock asyncio loop
-        async def mock_run_in_executor(*args, **kwargs):
-            return "Hello response"
-
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor = mock_run_in_executor
-
-            result = asyncio.run(client.health_check())
-
-            assert result is True
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_health_check_no_client(
-        self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_llm_config,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test OllamaClient health check when client is None."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        mock_ollama_class.side_effect = Exception("Init failed")
-
-        client = OllamaClient(mock_llm_config)
-
-        result = asyncio.run(client.health_check())
-
-        assert result is False
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_health_check_exception(
-        self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
-        mock_llm_config,
-        mock_circuit_breaker,
-        mock_health_monitor,
-    ):
-        """Test OllamaClient health check with exception."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-
-        mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
-
-        client = OllamaClient(mock_llm_config)
-
-        with patch("asyncio.get_event_loop") as mock_loop:
-            mock_loop.return_value.run_in_executor.side_effect = Exception(
-                "Health check failed"
+            assert client.config == mock_llm_config
+            # Lazy init: _client is None until accessed
+            assert client._client is None
+            # Accessing client property triggers initialization
+            assert client.client is mock_llm_instance
+            mock_ollama.assert_called_once_with(
+                model="test-model",
+                base_url="http://test.com",
+                temperature=0.7,
+                top_p=0.9,
+                top_k=40,
+                min_p=0.0,
+                request_timeout=30,
+                extra_params={
+                    "presence_penalty": 1.0,
+                    "num_ctx": 2048,
+                    "num_predict": 512,
+                },
             )
 
-            result = asyncio.run(client.health_check())
-
-            assert result is False
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_is_available(
+    def test_llama_client_initialization_failure(
         self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
         mock_llm_config,
         mock_circuit_breaker,
         mock_health_monitor,
     ):
-        """Test OllamaClient is_available method."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
+        """Test LlamaClient initialization failure."""
+        with patch("src.services.OllamaLLM", side_effect=Exception("Init failed")):
+            with (
+                patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+                patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            ):
+                client = LlamaClient(mock_llm_config)
+                assert client._client is None
 
+    def test_llama_client_health_check_success(
+        self,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
+        """Test LlamaClient health check success."""
         mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
+        mock_llm_instance.invoke.return_value = "Hello response"
+        with (
+            patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+            patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+        ):
+            client = LlamaClient(mock_llm_config)
+            with patch("src.services.OllamaLLM", return_value=mock_llm_instance):
+                result = asyncio.run(client.health_check())
+                assert result is True
+                mock_llm_instance.invoke.assert_called_once_with("Hello")
 
-        client = OllamaClient(mock_llm_config)
-
-        result = client.is_available()
-
-        assert result is True
-        mock_health_monitor.is_service_healthy.assert_called_once_with("ollama")
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_is_available_no_client(
+    def test_llama_client_health_check_no_client(
         self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
         mock_llm_config,
         mock_circuit_breaker,
         mock_health_monitor,
     ):
-        """Test OllamaClient is_available when client is None."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
+        """Test LlamaClient health check when client is None."""
+        with patch("src.services.OllamaLLM", side_effect=Exception("Init failed")):
+            with (
+                patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+                patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            ):
+                client = LlamaClient(mock_llm_config)
+                result = asyncio.run(client.health_check())
+                assert result is False
 
-        mock_ollama_class.side_effect = Exception("Init failed")
-
-        client = OllamaClient(mock_llm_config)
-
-        result = client.is_available()
-
-        assert result is False
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_invoke_success(
+    def test_llama_client_health_check_exception(
         self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
         mock_llm_config,
         mock_circuit_breaker,
         mock_health_monitor,
     ):
-        """Test OllamaClient invoke method success."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
+        """Test LlamaClient health check with exception."""
+        mock_llm_instance = MagicMock()
+        mock_loop_instance = MagicMock()
+        mock_loop_instance.run_in_executor.side_effect = Exception("Health check failed")
+        with patch("asyncio.get_event_loop", return_value=mock_loop_instance):
+            with (
+                patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+                patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            ):
+                with patch("src.services.OllamaLLM", return_value=mock_llm_instance):
+                    client = LlamaClient(mock_llm_config)
+                    result = asyncio.run(client.health_check())
+                    assert result is False
 
+    def test_llama_client_is_available(
+        self,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
+        """Test LlamaClient is_available method."""
+        mock_llm_instance = MagicMock()
+        with (
+            patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+            patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            patch("src.services.OllamaLLM", return_value=mock_llm_instance),
+        ):
+            client = LlamaClient(mock_llm_config)
+            # Trigger initialization
+            _ = client.client
+            result = client.is_available()
+            assert result is True
+            mock_health_monitor.is_service_healthy.assert_called_once_with("llama")
+
+    def test_llama_client_is_available_no_client(
+        self,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
+        """Test LlamaClient is_available when client is None."""
+        with patch("src.services.OllamaLLM", side_effect=Exception("Init failed")):
+            with (
+                patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+                patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            ):
+                client = LlamaClient(mock_llm_config)
+                result = client.is_available()
+                assert result is False
+
+    def test_llama_client_invoke_success(
+        self,
+        mock_llm_config,
+        mock_circuit_breaker,
+        mock_health_monitor,
+    ):
+        """Test LlamaClient invoke method success."""
         mock_llm_instance = MagicMock()
         mock_llm_instance.invoke.return_value = "LLM response"
-        mock_ollama_class.return_value = mock_llm_instance
+        with (
+            patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+            patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            patch("src.services.OllamaLLM", return_value=mock_llm_instance),
+        ):
+            client = LlamaClient(mock_llm_config)
+            # Trigger initialization
+            _ = client.client
+            result = client.invoke("Test prompt")
+            assert result == "LLM response"
+            mock_llm_instance.invoke.assert_called_once_with("Test prompt")
 
-        client = OllamaClient(mock_llm_config)
-
-        result = client.invoke("Test prompt")
-
-        assert result == "LLM response"
-        mock_llm_instance.invoke.assert_called_once_with("Test prompt")
-
-    @patch("src.services.get_circuit_breaker")
-    @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
-    def test_ollama_client_invoke_not_available(
+    def test_llama_client_invoke_not_available(
         self,
-        mock_ollama_class,
-        mock_get_health_monitor,
-        mock_get_circuit_breaker,
         mock_llm_config,
         mock_circuit_breaker,
         mock_health_monitor,
     ):
-        """Test OllamaClient invoke when service not available."""
-        mock_get_circuit_breaker.return_value = mock_circuit_breaker
-        mock_get_health_monitor.return_value = mock_health_monitor
-        mock_health_monitor.is_service_healthy.return_value = False
-
+        """Test LlamaClient invoke when service not available."""
         mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
-
-        client = OllamaClient(mock_llm_config)
-
-        with pytest.raises(
-            OllamaError, match="Ollama service \\(test-model\\) is not available"
+        mock_health_monitor.is_service_healthy.return_value = False
+        with (
+            patch("src.services.get_circuit_breaker", return_value=mock_circuit_breaker),
+            patch("src.services.get_health_monitor", return_value=mock_health_monitor),
+            patch("src.services.OllamaLLM", return_value=mock_llm_instance),
         ):
-            client.invoke("Test prompt")
+            client = LlamaClient(mock_llm_config)
+            # Trigger initialization
+            _ = client.client
+            with pytest.raises(
+                LlamaError, match=r"llama service \(test-model\) is not available"
+            ):
+                client.invoke("Test prompt")
 
 
 class TestGitHubClient:
@@ -628,8 +561,8 @@ class TestServiceManager:
         manager = ServiceManager(config)
 
         assert manager.config == config
-        assert manager.ollama_reasoning is None
-        assert manager.ollama_code is None
+        assert manager.llama_reasoning is None
+        assert manager.llama_code is None
         assert manager.github is None
         assert manager.health_monitor == mock_health_monitor
 
@@ -649,22 +582,22 @@ class TestServiceManager:
 
         asyncio.run(manager.initialize_services())
 
-        assert manager.ollama_reasoning is not None
-        assert manager.ollama_code is not None
+        assert manager.llama_reasoning is not None
+        assert manager.llama_code is not None
         assert manager.github is not None
 
         mock_health_monitor.register_service.assert_any_call(
-            "ollama_reasoning", manager.ollama_reasoning.health_check
+            "llama_reasoning", manager.llama_reasoning.health_check
         )
         mock_health_monitor.register_service.assert_any_call(
-            "ollama_code", manager.ollama_code.health_check
+            "llama_code", manager.llama_code.health_check
         )
         mock_health_monitor.register_service.assert_any_call(
             "github", manager.github.health_check
         )
 
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaClient")
+    @patch("src.services.LlamaClient")
     @patch("src.services.GitHubClient")
     def test_service_manager_initialize_services_no_github_token(
         self,
@@ -701,8 +634,8 @@ class TestServiceManager:
         mock_get_health_monitor.return_value = mock_health_monitor
 
         mock_health_monitor.is_service_healthy.side_effect = lambda name: {
-            "ollama_reasoning": True,
-            "ollama_code": False,
+            "llama_reasoning": True,
+            "llama_code": False,
             "github": True,
         }.get(name, False)
 
@@ -714,15 +647,15 @@ class TestServiceManager:
         mock_ollama_code = MagicMock()
         mock_github = MagicMock()
 
-        manager.ollama_reasoning = mock_ollama_reasoning
-        manager.ollama_code = mock_ollama_code
+        manager.llama_reasoning = mock_ollama_reasoning
+        manager.llama_code = mock_ollama_code
         manager.github = mock_github
 
         result = asyncio.run(manager.check_services_health())
 
         expected = {
-            "ollama_reasoning": True,
-            "ollama_code": False,
+            "llama_reasoning": True,
+            "llama_code": False,
             "github": True,
         }
         assert result == expected
@@ -738,15 +671,15 @@ class TestServiceManager:
         manager = ServiceManager(config)
 
         # Ensure services are None
-        manager.ollama_reasoning = None
-        manager.ollama_code = None
+        manager.llama_reasoning = None
+        manager.llama_code = None
         manager.github = None
 
         result = asyncio.run(manager.check_services_health())
 
         expected = {
-            "ollama_reasoning": False,
-            "ollama_code": False,
+            "llama_reasoning": False,
+            "llama_code": False,
             "github": False,
         }
         assert result == expected

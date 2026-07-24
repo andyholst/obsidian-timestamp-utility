@@ -7,7 +7,7 @@ from src.state import State
 def _mock_llm_with_json(payload: dict) -> MagicMock:
     """Build a mocked reasoning-LLM whose .invoke() returns a JSON planning response.
 
-    Keeps the test hermetic (no live Ollama call) while exercising the agent's real
+    Keeps the test hermetic (no live llama call) while exercising the agent's real
     plan_implementation / parse / merge logic.
     """
     import json

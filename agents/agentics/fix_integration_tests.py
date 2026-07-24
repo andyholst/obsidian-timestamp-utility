@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fix all integration tests to work without real GitHub/Ollama credentials."""
+"""Fix all integration tests to work without real GitHub/llama credentials."""
 import os
 import re
 
@@ -173,8 +173,8 @@ fix_file("test_cross_validation_integration.py", [
             config = AgenticsConfig()
             from langchain_ollama import OllamaLLM
             llm = OllamaLLM(
-                model=config.ollama_code_model,
-                base_url=config.ollama_host,
+                model=config.llama_code_model,
+                base_url=config.llama_host,
                 temperature=0.1,
                 timeout=5.0,
             )
@@ -201,7 +201,7 @@ fix_file("test_cross_validation_integration.py", [
         """Test cross-validation with various scenarios."""
         name, success, score, recovery_attempts = test_case
         
-        # Use mock LLM for all test cases to avoid needing real Ollama
+        # Use mock LLM for all test cases to avoid needing real llama
         from unittest.mock import MagicMock
         from langchain_core.runnables import RunnableLambda
         from langchain_core.messages import AIMessage

@@ -174,7 +174,7 @@ Full Phase 1 integration.
     LLMs; assert propagation.
   - **Involved**: config.py, env vars.
   - **Data Flow**: set env → config → agent config.
-  - **Assertions**: `config.ollama_code_model == expected`.
+  - **Assertions**: `config.llama_code_model == expected`.
   - **Pytest**: parametrize models.
 
 - [x] 13. **LLM Code Gen/Validation E2E**
@@ -206,14 +206,14 @@ Full Phase 1 integration.
 
 ## Prerequisites
 
-- **Env Vars**: `OLLAMA_HOST=http://127.0.0.1:11434` (optional, dummy
+- **Env Vars**: `LLAMA_HOST=http://127.0.0.1:11434` (optional, dummy
   used); `PROJECT_ROOT=/tmp/test-*` (temp fixture); `GITHUB_TOKEN` (if GitHub
   tools). Under rootless nerdctl `network_mode: host`, the container shares the
-  host loopback, so `127.0.0.1:11434` reaches the live Ollama; do NOT use
+  host loopback, so `127.0.0.1:11434` reaches the live llama; do NOT use
   `host.docker.internal` (it does not resolve).
 - **Fixtures**: Extend
   [`conftest.py`](agents/agentics/tests/integration/conftest.py):
-  `real_ollama_config` (skip if unhealthy), `temp_project_dir` (mkdtemp +
+  `real_llama_config` (skip if unhealthy), `temp_project_dir` (mkdtemp +
   cleanup), `dummy_state`.
 - **pytest.ini**: `addopts = -vv --tb=long`; marks.
 - **No Mocks**: Dummy LLMs deterministic; real file/CB/LLM config if enabled.

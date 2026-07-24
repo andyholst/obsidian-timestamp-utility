@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 # Generate the NEW changelog `## Unreleased` section from the commits AFTER the latest tag
 # (range `<latest-tag>..HEAD`) and OVERWRITE-merge it onto the existing CHANGELOG.md.
 #

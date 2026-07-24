@@ -22,6 +22,7 @@ that temp root. This isolates the .md drift under test.
 """
 
 import importlib.util
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -370,7 +371,28 @@ def test_drift_fixture_flips_to_pass_when_fixed():
     for rel in MD_FILES:
         old, new = _REGEN._derive_b_range_drift(rel)
         p = root / rel
-        p.write_text(p.read_text().replace(new, old))
+        # old = the original anchor (e.g. B1-B32), new = the drifted value (e.g. B1-B31).
+        # The fixture has `new` everywhere the old was, plus any pre-existing `new`.
+        # Repair: find where `new` already existed in the real file (these were NOT drifted),
+        # then replace ALL `new` occurrences in the fixture with `old` EXCEPT those positions.
+        ptext = p.read_text()
+        real_new_count = (REPO_ROOT / rel).read_text().count(new)
+        drifted_count = ptext.count(new) - real_new_count
+        if drifted_count > 0:
+            # Positions where `new` already existed in the real file (never drifted).
+            real_new_pos = sorted(
+                m.start() for m in re.finditer(re.escape(new), (REPO_ROOT / rel).read_text())
+            )
+            # All `new` positions in the fixture (same positions since old/new are same length).
+            fixture_new_pos = sorted(
+                m.start() for m in re.finditer(re.escape(new), ptext)
+            )
+            # Replace `new` with `old` at positions NOT in real_new_pos.
+            for pos in fixture_new_pos:
+                if pos not in real_new_pos and drifted_count > 0:
+                    ptext = ptext[:pos] + old + ptext[pos+len(new):]
+                    drifted_count -= 1
+            p.write_text(ptext)
         # each repaired temp file must be byte-identical to the real source
         assert (root / rel).read_bytes() == (REPO_ROOT / rel).read_bytes(), rel
     problems = MOD.check_docs_sync(root, root)

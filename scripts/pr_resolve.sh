@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 # pr_resolve.sh — B28b (PR-review stability): gh-driven PR comment resolution.
 #
 # Usage: scripts/pr_resolve.sh <branch>

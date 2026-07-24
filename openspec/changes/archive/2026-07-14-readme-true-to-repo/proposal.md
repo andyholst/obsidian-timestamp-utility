@@ -20,8 +20,8 @@ live `Makefile` and `AGENTS.md`):
 - **Wrong test filenames** (lines ~237-238): `test_ticket_interpreter.py` /
   `test_ticket_interpreter_integration.py` — the real suites live under
   `agents/agentics/tests/unit/` and `agents/agentics/tests/integration/` with different names.
-- **Wrong model defaults** (Prerequisites): README lists `OLLAMA_REASONING_MODEL=qwen3.5:9b` /
-  `OLLAMA_CODE_MODEL=qwen3.5:4b`. The Makefile defaults are `sorc/qwen3.5-claude-4.6-opus:9b`
+- **Wrong model defaults** (Prerequisites): README lists `LLAMA_REASONING_MODEL=qwen3.5:9b` /
+  `LLAMA_CODE_MODEL=qwen3.5:4b`. The Makefile defaults are `qwen3.6-35b-a3b`
   (both reasoning and code).
 
 ## What Changes

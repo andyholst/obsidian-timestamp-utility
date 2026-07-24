@@ -256,10 +256,10 @@ def create_llm_error_scenarios():
     # Connection error
     connection_mock = MagicMock()
     connection_mock.invoke.side_effect = ConnectionError(
-        "Failed to connect to Ollama server"
+        "Failed to connect to llama server"
     )
     connection_mock.stream.side_effect = ConnectionError(
-        "Failed to connect to Ollama server"
+        "Failed to connect to llama server"
     )
 
     # Model not found error

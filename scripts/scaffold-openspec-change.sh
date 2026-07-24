@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 # scaffold-openspec-change.sh — reproducible harness for creating OpenSpec changes.
 #
 # Wraps the REAL openspec CLI (durable behaviour B15: the change directory is produced by

@@ -128,9 +128,8 @@ class CircuitBreaker:
         self.failure_count = 0
         self.success_count = 0
         self.next_attempt_time = None
-        monitor.info("circuit_breaker_reset", data={"name": self.name})
-
-        # Record state for monitoring
+        # Don't log every reset — too verbose for test runs (525 tests * multiple resets = minutes of logs)
+        # Only log on state transitions that matter: OPEN→HALF_OPEN→CLOSED via call()
         record_circuit_breaker_state(self.name, self.state.value, self.failure_count)
 
     def call(self, func: Callable, *args, **kwargs) -> Any:

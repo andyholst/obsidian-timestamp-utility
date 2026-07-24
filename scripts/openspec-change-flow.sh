@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/opt/homebrew/bin/bash
 # openspec-change-flow.sh — agent-driven OpenSpec lifecycle, CONFINED TO A WORKTREE.
 #
 # Contract (see openspec/changes/openspec-change-worktree-flow):

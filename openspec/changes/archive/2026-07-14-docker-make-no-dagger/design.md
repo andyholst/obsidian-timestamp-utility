@@ -16,8 +16,8 @@
 
 - `dagger.json`, `dagger-pipeline/` (whole dir), `bin/dagger`.
 - Makefile variables: `DAGGER`, `DAGGER_ENGINE_HOST`, `DAGGER_ENGINE_PORT`, `SOCAT_PORT`,
-  `OLLAMA_LOCAL_PORT`, `HOST_IP`, `OLLAMA_HOST` (Dagger-container proxy) — keep a plain
-  `OLLAMA_HOST=http://localhost:11434` for the agentics service.
+  `OLLAMA_LOCAL_PORT`, `HOST_IP`, `LLAMA_HOST` (Dagger-container proxy) — keep a plain
+  `LLAMA_HOST=http://localhost:11434` for the agentics service.
 - Makefile targets: `install-dagger`, `sync-pipeline-deps`, `generate-sdk`,
   `ensure-dagger-ready`, `start-engine`, `stop-engine`, `check-engine`, `start-socat`,
   `stop-socat`, `check-mcp`, `start-mcp`, `stop-mcp`, `start-mcp-persist`,

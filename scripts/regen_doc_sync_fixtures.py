@@ -46,35 +46,46 @@ def _copy_real(rel: str, dst: Path) -> None:
 def _derive_b_range_drift(rel: str) -> tuple[str, str]:
     """Derive the B-range drift anchor from the CURRENT doc.
 
-    Finds the max B-range phrase (e.g. 'B1-B25' / 'B1–B25') in the doc,
+    Picks the B-range phrase with the **highest upper bound** in the doc,
     lowers its upper bound by one, and returns (old_phrase, new_phrase).
-    Anchor check: old must exist; new bound must stay >= 2 so the drift is real.
+    This ensures the gate's b_range_ok check will catch the drift even in
+    files where multiple B-range phrases exist (e.g. AGENTS.md with both
+    B1–B32 and B1–B31).  Unique-anchor selection was removed because it
+    caused the gate to miss drift when the unique anchor was lower than the
+    main B-range.
+
+    Anchor check: old must exist in the doc; new bound must stay >= 2 so
+    the drift is real.
     """
     text = (REPO / rel).read_text(encoding="utf-8")
-    # find every B1[-–]B<d> phrase, pick the one with the highest upper bound
-    best = None  # (upper_bound, raw_phrase)
+    # Gather every B1[-–]B<d> phrase and how many times it occurs.
+    counts: dict[str, int] = {}
     for m in re.finditer(r"B1\s*[-–]\s*B(\d+)", text):
         phrase = m.group(0)
-        upper = int(m.group(1))
-        if best is None or upper > best[0]:
-            best = (upper, phrase)
-    assert best is not None, (
+        counts[phrase] = counts.get(phrase, 0) + 1
+
+    # Always use the phrase with the highest upper bound.
+    def _upper_of(p: str) -> int:
+        return int(p.split("B")[-1])
+
+    phrase = max(counts, key=_upper_of)
+
+    assert phrase in text, (
         f"no 'B1-B<d>' range phrase found in current {rel} — the doc was "
         f"restructured. The B-range drift scenario can no longer be produced. "
         f"Update the drift definition in scripts/regen_doc_sync_fixtures.py AND "
         f"the matching test in tests/test_check_docs_sync.py before regenerating."
     )
-    upper, phrase = best
+    upper = int(re.search(r"B(\d+)$", phrase).group(1))
     new_upper = upper - 1
     assert new_upper >= 2, (
         f"derived B-range drift would lower the bound to {new_upper} (from {upper}) "
         f"in {rel} — that is not a meaningful drift. The doc's range is too low."
     )
-    # lower the UPPER-bound 'B<d>' (the second B<d> in the phrase, e.g. the
-    # 'B25' in 'B1-B25'), leaving the 'B1' prefix intact.
+    # Lower the upper-bound B<d> in the phrase, leaving the 'B1' prefix intact.
     matches = list(re.finditer(r"B(\d+)", phrase))
     assert matches, f"no B<d> found in derived phrase {phrase!r}"
-    upper_match = matches[-1]  # the upper bound is the LAST B<d> in "B1-B25"
+    upper_match = matches[-1]
     new_upper = int(upper_match.group(1)) - 1
     assert new_upper >= 2, (
         f"derived B-range drift would lower the bound to {new_upper} "

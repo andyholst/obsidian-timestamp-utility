@@ -20,7 +20,7 @@
       integrator merges whatever the LLM produces from the spec contract.
 
 ## 4. Generate + integrate via the loop
-- [x] 4.1 `make run-agentics CHANGE=<target>` (real Ollama) generates the helper from the task.
+- [x] 4.1 `make run-agentics CHANGE=<target>` (real llama) generates the helper from the task.
 - [x] 4.2 Confirmed integrator MERGES (existing `main.ts` commands preserved; file not smaller than
       backup) via the deterministic floor in `code_integrator_agent.py` (`_assemble_contract_features`).
 - [x] 4.3 Generated TS exposes the helper and a format test (asserted by the e2e/contract path).
@@ -31,8 +31,8 @@
       `openspec/changes/<CHANGE>/tasks.md` (+`spec.md`), and asserts the generated `src/main.ts`
       contains an `obsidian.Modal` subclass wired via `this.addCommand(...)`. Never removed (B1).
       Never commits/pushes (B4).
-- [x] 5.2 Runs via `make test-agents-e2e` / `pytest -m e2e`; passes against real Ollama and SKIPS
-      cleanly when Ollama/the change dir is absent (verified: 1 skipped, 0 errors, no OLLAMA_HOST).
+- [x] 5.2 Runs via `make test-agents-e2e` / `pytest -m e2e`; passes against real llama and SKIPS
+      cleanly when llama/the change dir is absent (verified: 1 skipped, 0 errors, no LLAMA_HOST).
 - [x] 5.3 Generated TS/test is ABSENT from the repo when the e2e runs (B5/B6): the harness restores
       repo `src/main.ts`/`src/__tests__/main.test.ts` to the git HEAD committed baseline and only
       writes into an isolated temp dir.
@@ -45,7 +45,7 @@
 - [x] 6.1 Grep confirms no hardcoded TS-feature emitter (B10 clean).
 - [x] 6.2 Generated TS has the spec-mandated modal/command (enforced by the deterministic floor; the
       e2e asserts it from the committed baseline).
-- [x] 6.3 e2e passes against real Ollama; omission guard holds; repo TS files restored to committed HEAD
+- [x] 6.3 e2e passes against real llama; omission guard holds; repo TS files restored to committed HEAD
       (verified the skip/restore behaviour on this creds-less machine).
 
 ## 7. Document + decide

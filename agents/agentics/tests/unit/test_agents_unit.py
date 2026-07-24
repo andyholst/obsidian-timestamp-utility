@@ -224,8 +224,8 @@ def test_full_workflow_empty_ticket():
         patch.object(GitHubClient, "health_check", return_value=True),
         patch.object(GitHubClient, "get_repo", return_value=mock_repo),
         patch.object(GitHubClient, "get_user", return_value=MagicMock(login="mock_user")),
-        patch("src.services.OllamaClient._initialize_client", return_value=None),
-        patch("src.services.OllamaClient.client", mock_ollama),
+        patch("src.services.LlamaClient._initialize_client", return_value=None),
+        patch("src.services.LlamaClient.client", mock_ollama),
     ):
         from src.agentics import AgenticsApp
 
@@ -266,8 +266,8 @@ def test_aaa_full_workflow_github_error():
         patch.object(GitHubClient, "__init__", mock_github_init),
         patch.object(GitHubClient, "_initialize_client", lambda self: None),
         patch.object(GitHubClient, "health_check", return_value=True),
-        patch("src.services.OllamaClient._initialize_client", return_value=None),
-        patch("src.services.OllamaClient.client", mock_ollama),
+        patch("src.services.LlamaClient._initialize_client", return_value=None),
+        patch("src.services.LlamaClient.client", mock_ollama),
     ):
         app.initialize()
         # Workflow returns error dict instead of raising for graceful error handling

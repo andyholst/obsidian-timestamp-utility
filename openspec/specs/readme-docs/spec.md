@@ -7,8 +7,8 @@ mapping contributors to `docs/AGENTIC_ARCHITECTURE.md`, `docs/architecture/`,
 Corrected `README.md` to match the real repo: removed the false MCP claim (localhost:3003 /
 `make start-mcp-persist`), fixed `make run-agentics` to `CHANGE=<name>` (local OpenSpec change, no
 GitHub fetch) dropping the non-existent `build-image-agents` / `agentics.log`, fixed test
-references to `agents/agentics/tests/{unit,integration}`, and corrected Ollama model defaults to
-`sorc/qwen3.5-claude-4.6-opus:9b`. README format/headings preserved. Verified via
+references to `agents/agentics/tests/{unit,integration}`, and corrected llama model defaults to
+`qwen3.6-35b-a3b`. README format/headings preserved. Verified via
 `make loop-collect` + `make loop-unit`. README-only — no B8 behaviour change.
 ## Requirements
 ### Requirement: README documents the documentation layout
@@ -74,12 +74,12 @@ name non-existent files like `test_ticket_interpreter.py`.
   `make test-agents*` targets, with no invented filenames.
 
 ### Requirement: README env defaults match the Makefile
-The documented Ollama model defaults MUST match the Makefile (`OLLAMA_MODEL` /
-`OLLAMA_CODE_MODEL` default to `sorc/qwen3.5-claude-4.6-opus:9b`; `OLLAMA_HOST` defaults to
+The documented llama model defaults MUST match the Makefile (`LLAMA_MODEL` /
+`LLAMA_CODE_MODEL` default to `qwen3.6-35b-a3b`; `LLAMA_HOST` defaults to
 `http://localhost:11434`).
 
 #### Scenario: model defaults correct
-- **WHEN** the README Prerequisites list Ollama env vars
+- **WHEN** the README Prerequisites list llama env vars
 - **THEN** the stated defaults equal the Makefile values (not `qwen3.5:9b` / `qwen3.5:4b`).
 
 ### Requirement: Documentation change preserves format and does not regress the agentic suite

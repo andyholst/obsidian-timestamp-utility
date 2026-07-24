@@ -14,7 +14,7 @@ whose ``generator_kind`` is neither ``uuid`` nor ``timestamp`` — the GENERATOR
 injected verbatim via the ``=== CONTRACT_GENERATOR ===`` marker.
 
 B1/B2/B3/B4/B5 hold: runs in an isolated temp dir, never touches the real ``src/main.ts``,
-skips cleanly without Ollama (B17), and asserts the modal is wired + the contract is honored.
+skips cleanly without llama (B17), and asserts the modal is wired + the contract is honored.
 """
 
 import os

@@ -1,5 +1,5 @@
 ## 1. Remove Dagger from the Makefile
-- [x] 1.1 Delete Dagger vars: `DAGGER_ENGINE_HOST`, `DAGGER_ENGINE_PORT`, `DAGGER`, `PATH += ./bin`, `DAGGER_TIMEOUT`, and the socat/Ollama-proxy vars (`HOST_IP`, `OLLAMA_HOST` proxy, `SOCAT_PORT`, `OLLAMA_LOCAL_PORT`). Point `OLLAMA_HOST` at `http://localhost:11434`.
+- [x] 1.1 Delete Dagger vars: `DAGGER_ENGINE_HOST`, `DAGGER_ENGINE_PORT`, `DAGGER`, `PATH += ./bin`, `DAGGER_TIMEOUT`, and the socat/llama-proxy vars (`HOST_IP`, `LLAMA_HOST` proxy, `SOCAT_PORT`, `OLLAMA_LOCAL_PORT`). Point `LLAMA_HOST` at `http://localhost:11434`.
 - [x] 1.2 Delete Dagger-only targets: `install-dagger`, `sync-pipeline-deps`, `generate-sdk`, `ensure-dagger-ready`, `check-engine`, `start-engine`, `stop-engine`, `start-socat`, `stop-socat`, `dagger-clean`, `clean-dagger-cache`, `clean-dagger-engine`, `nuke-dagger`, `kill-dagger-shims`, `rm-stale-dagger-dirs`, `start-mcp`, `stop-mcp`, `start-mcp-persist`, `stop-mcp-persist`.
 - [x] 1.3 Strip `ensure-dagger-ready` from every remaining target's prerequisites.
 
@@ -10,10 +10,10 @@
 - [x] 2.4 `changelog` / `release` / `generate-requirements` → compose `validate-test-suite` (or local `zip`).
 - [x] 2.5 Agentic test variants (`test-agents-unit`, `test-agents-unit-mock`, `test-agents-integration`, verbose/watch/fail, `validate-test_suite`) → the `agents.yaml` services via `script -qec "docker compose ... run --rm <svc>"`.
 
-## 3. Keep run-agentics + make it OpenSpec/Ollama-driven
+## 3. Keep run-agentics + make it OpenSpec/llama-driven
 - [x] 3.1 `run-agentics` accepts `CHANGE=<name>` (default `uuid-modal-agentic-generation`); errors if unset.
-- [x] 3.2 It runs `script -qec "docker compose -f docker-compose-files/agents.yaml run --rm -e CHANGE=... -e OLLAMA_HOST -e OLLAMA_MODEL -e OLLAMA_CODE_MODEL agentics python -m prod.agentics openspec:<name>"`.
-- [x] 3.3 No `MCP_SERVER_URL`, no GitHub fetch, no Dagger. Ollama generates `src/main.ts` + `src/__tests__/main.test.ts` from the local OpenSpec change.
+- [x] 3.2 It runs `script -qec "docker compose -f docker-compose-files/agents.yaml run --rm -e CHANGE=... -e LLAMA_HOST -e LLAMA_MODEL -e LLAMA_CODE_MODEL agentics python -m prod.agentics openspec:<name>"`.
+- [x] 3.3 No `MCP_SERVER_URL`, no GitHub fetch, no Dagger. llama generates `src/main.ts` + `src/__tests__/main.test.ts` from the local OpenSpec change.
 
 ## 4. Remove Dagger + MCP artifacts from the repo
 - [x] 4.1 Delete `dagger.json`, `dagger-pipeline/`, `bin/dagger`, `docker-files/mcp/`.
@@ -24,7 +24,7 @@
 ## 5. Verify the new pipeline
 - [x] 5.1 `make build-app` succeeds (proves containers/npm works, no Dagger). [verified in prior runs]
 - [x] 5.2 `make test-app` passes (jest green via compose). [verified in prior runs]
-- [x] 5.3 `make run-agentics CHANGE=uuid-modal-agentic-generation` runs (Ollama generates TS code + tests) and the Python self-correct loop is the verification gate. [VERIFIED — ran green in prior verification; deterministic floor injected uuid modal, jest passed]
+- [x] 5.3 `make run-agentics CHANGE=uuid-modal-agentic-generation` runs (llama generates TS code + tests) and the Python self-correct loop is the verification gate. [VERIFIED — ran green in prior verification; deterministic floor injected uuid modal, jest passed]
 - [x] 5.4 `make help` lists targets with no Dagger targets.
 
 - [x] 6.1 `record-work` entry `agent-wiki/YYYY-MM-DD-docker-make-no-dagger.md` with Verification Against Spec.

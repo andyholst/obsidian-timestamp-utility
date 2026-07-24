@@ -12,7 +12,7 @@ from .config import LLMConfig, get_config
 from .exceptions import (
     ServiceUnavailableError,
     GitHubError,
-    OllamaError,
+    LlamaError,
     HealthCheckError,
 )
 from .circuit_breaker import get_circuit_breaker, get_health_monitor
@@ -38,16 +38,16 @@ class ServiceClient(ABC):
         pass
 
 
-class OllamaClient(ServiceClient):
-    """Client for Ollama LLM services."""
+class LlamaClient(ServiceClient):
+    """Client for llama LLM services."""
 
     def __init__(self, config: LLMConfig):
-        super().__init__("ollama")
+        super().__init__("llama")
         self.config = config
         self._client: Optional[OllamaLLM] = None
 
     def _initialize_client(self) -> None:
-        """Initialize the Ollama client."""
+        """Initialize the llama client."""
         try:
             self._client = OllamaLLM(
                 model=self.config.model,
@@ -64,18 +64,18 @@ class OllamaClient(ServiceClient):
                 },
             )
         except Exception as e:
-            log_info(__name__, f"Failed to initialize Ollama client: {str(e)}")
+            log_info(__name__, f"Failed to initialize llama client: {str(e)}")
             self._client = None
 
     @property
     def client(self) -> Optional[OllamaLLM]:
-        """Lazily initialize and return the Ollama client."""
+        """Lazily initialize and return the llama client."""
         if self._client is None:
             self._initialize_client()
         return self._client
 
     async def health_check(self) -> bool:
-        """Check if Ollama is healthy."""
+        """Check if llama is healthy."""
         # Use lazy client property to trigger initialization if needed
         client = self.client
         if not client:
@@ -91,15 +91,15 @@ class OllamaClient(ServiceClient):
             return False
 
     def is_available(self) -> bool:
-        """Check if Ollama client is available."""
+        """Check if llama client is available."""
         return self.client is not None and self.health_monitor.is_service_healthy(
-            "ollama"
+            "llama"
         )
 
     def invoke(self, prompt: str) -> str:
         """Invoke the LLM with a prompt."""
         if not self.is_available():
-            raise OllamaError(f"Ollama service ({self.config.model}) is not available")
+            raise LlamaError(f"llama service ({self.config.model}) is not available")
 
         @self.circuit_breaker.call
         def _invoke():
@@ -183,8 +183,8 @@ class ServiceManager:
 
     def __init__(self, config):
         self.config = config
-        self.ollama_reasoning: Optional[OllamaClient] = None
-        self.ollama_code: Optional[OllamaClient] = None
+        self.llama_reasoning: Optional[LlamaClient] = None
+        self.llama_code: Optional[LlamaClient] = None
         self.github: Optional[GitHubClient] = None
         self.health_monitor = get_health_monitor()
 
@@ -192,25 +192,25 @@ class ServiceManager:
         """Initialize all service clients."""
         log_info(__name__, "Initializing service clients")
 
-        # Initialize Ollama clients
+        # Initialize llama clients
         reasoning_config = self.config.get_reasoning_llm_config()
         code_config = self.config.get_code_llm_config()
 
-        self.ollama_reasoning = OllamaClient(reasoning_config)
-        self.ollama_code = OllamaClient(code_config)
+        self.llama_reasoning = LlamaClient(reasoning_config)
+        self.llama_code = LlamaClient(code_config)
 
         # Initialize GitHub client
         if self.config.github_token:
             self.github = GitHubClient(self.config.github_token)
 
         # Register health checks
-        if self.ollama_reasoning:
+        if self.llama_reasoning:
             self.health_monitor.register_service(
-                "ollama_reasoning", self.ollama_reasoning.health_check
+                "llama_reasoning", self.llama_reasoning.health_check
             )
-        if self.ollama_code:
+        if self.llama_code:
             self.health_monitor.register_service(
-                "ollama_code", self.ollama_code.health_check
+                "llama_code", self.llama_code.health_check
             )
         if self.github:
             self.health_monitor.register_service("github", self.github.health_check)
@@ -222,8 +222,8 @@ class ServiceManager:
         results = {}
 
         services_to_check = [
-            ("ollama_reasoning", self.ollama_reasoning),
-            ("ollama_code", self.ollama_code),
+            ("llama_reasoning", self.llama_reasoning),
+            ("llama_code", self.llama_code),
             ("github", self.github),
         ]
 

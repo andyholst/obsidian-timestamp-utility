@@ -43,15 +43,15 @@ class AgenticsConfig(BaseModel):
         default_factory=lambda: os.getenv("GITHUB_TOKEN")
     )
 
-    # Ollama configuration
-    ollama_host: str = Field(
-        default_factory=lambda: os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    # llama configuration
+    llama_host: str = Field(
+        default_factory=lambda: os.getenv("LLAMA_HOST", "http://localhost:11434")
     )
-    ollama_reasoning_model: str = Field(
-        default_factory=lambda: os.getenv("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+    llama_reasoning_model: str = Field(
+        default_factory=lambda: os.getenv("LLAMA_REASONING_MODEL", "qwen3.6-35b-a3b")
     )
-    ollama_code_model: str = Field(
-        default_factory=lambda: os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+    llama_code_model: str = Field(
+        default_factory=lambda: os.getenv("LLAMA_CODE_MODEL", "qwen3.6-35b-a3b")
     )
 
     # Circuit breaker configuration
@@ -65,9 +65,9 @@ class AgenticsConfig(BaseModel):
     info_as_debug: bool = INFO_AS_DEBUG
 
     @model_validator(mode="after")
-    def validate_ollama_host(cls, model):
-        if not model.ollama_host.startswith(("http://", "https://")):
-            raise ConfigValidationError("OLLAMA_HOST must be a valid HTTP/HTTPS URL")
+    def validate_llama_host(cls, model):
+        if not model.llama_host.startswith(("http://", "https://")):
+            raise ConfigValidationError("LLAMA_HOST must be a valid HTTP/HTTPS URL")
         return model
 
     @field_validator("github_token")
@@ -81,8 +81,8 @@ class AgenticsConfig(BaseModel):
     def get_reasoning_llm_config(self) -> LLMConfig:
         """Get configuration for reasoning LLM."""
         return LLMConfig(
-            model=self.ollama_reasoning_model,
-            base_url=self.ollama_host,
+            model=self.llama_reasoning_model,
+            base_url=self.llama_host,
             temperature=0.7,
             top_p=0.7,
             top_k=20,
@@ -95,8 +95,8 @@ class AgenticsConfig(BaseModel):
     def get_code_llm_config(self) -> LLMConfig:
         """Get configuration for code generation LLM."""
         return LLMConfig(
-            model=self.ollama_code_model,
-            base_url=self.ollama_host,
+            model=self.llama_code_model,
+            base_url=self.llama_host,
             temperature=0.7,
             top_p=0.7,
             top_k=20,

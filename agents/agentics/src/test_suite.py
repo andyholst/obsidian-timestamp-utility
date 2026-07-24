@@ -178,6 +178,43 @@ class SuiteExecutor:
         self.monitor = structured_log(__name__)
         self.execution_timeout = int(os.getenv("TEST_EXECUTION_TIMEOUT", "30000"))
         self.memory_limit = os.getenv("TEST_MEMORY_LIMIT", "256MB")
+        self._npm_cache_dir = self._setup_npm_cache()
+
+    def _setup_npm_cache(self):
+        """Setup and populate npm cache directory with dependencies to avoid repeated npm install"""
+        cache_dir = os.path.join("/app/npm-cache", "npm-install-cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Create package.json for cache
+        package_json = {
+            "name": "test-validation-cache",
+            "version": "1.0.0",
+            "scripts": {"test": "jest"},
+            "devDependencies": {
+                "@types/jest": "^29.0.0",
+                "jest": "^29.0.0",
+                "ts-jest": "^29.0.0",
+                "@types/node": "^20.0.0",
+                "typescript": "^5.0.0",
+            },
+        }
+        
+        package_file = os.path.join(cache_dir, "package.json")
+        with open(package_file, "w") as f:
+            json.dump(package_json, f, indent=2)
+            
+        # Install dependencies once in cache directory
+        try:
+            subprocess.run(
+                ["npm", "install", "--include=dev"],
+                cwd=cache_dir,
+                capture_output=True,
+                timeout=120,
+            )
+        except Exception:
+            pass
+            
+        return cache_dir
 
     def execute_code_and_tests(
         self, code: str, tests: str, context: Dict[str, Any] = None
@@ -324,16 +361,13 @@ try {{
                 with open(os.path.join(temp_dir, "package.json"), "w") as f:
                     json.dump(package_json, f, indent=2)
 
-                # Install dependencies (if npm available)
-                try:
-                    subprocess.run(
-                        ["npm", "install", "--include=dev"],
-                        cwd=temp_dir,
-                        capture_output=True,
-                        timeout=120,
-                    )
-                except Exception:
-                    pass
+                # Copy node_modules from cache to avoid repeated npm install
+                cache_node_modules = os.path.join(self._npm_cache_dir, "node_modules")
+                if os.path.exists(cache_node_modules):
+                    import shutil
+                    dest_node_modules = os.path.join(temp_dir, "node_modules")
+                    if not os.path.exists(dest_node_modules):
+                        shutil.copytree(cache_node_modules, dest_node_modules)
 
                 # Run Jest
                 result = subprocess.run(
@@ -1275,6 +1309,7 @@ class LLMSuiteValidator:
         tests: str,
         context: Dict[str, Any] = None,
         include_code_validator: bool = True,
+        skip_execution: bool = False,
     ) -> ValidationResult:
         """Run complete test suite validation"""
 
@@ -1284,15 +1319,16 @@ class LLMSuiteValidator:
 
         result = ValidationResult(code_hash=code_hash, test_hash=test_hash)
 
-        # Phase 1: Execute code and tests
-        try:
-            self.monitor.info("Executing generated code and tests")
-            result.code_execution, result.test_execution = (
-                self.executor.execute_code_and_tests(code, tests, context)
-            )
-        except Exception as e:
-            self.monitor.error(f"Execution phase failed: {str(e)}")
-            result.critical_issues.append(f"Execution failed: {str(e)}")
+        # Phase 1: Execute code and tests (skip for fast unit tests)
+        if not skip_execution:
+            try:
+                self.monitor.info("Executing generated code and tests")
+                result.code_execution, result.test_execution = (
+                    self.executor.execute_code_and_tests(code, tests, context)
+                )
+            except Exception as e:
+                self.monitor.error(f"Execution phase failed: {str(e)}")
+                result.critical_issues.append(f"Execution failed: {str(e)}")
 
         # Phase 2: Validate test-code relationship
         try:
@@ -1505,10 +1541,11 @@ def validate_llm_test_suite(
     tests: str,
     context: Dict[str, Any] = None,
     include_code_validator: bool = True,
+    skip_execution: bool = False,
 ) -> Tuple[ValidationResult, str]:
     """Global function for test suite validation"""
     result = test_suite_validator.validate_test_suite(
-        code, tests, context, include_code_validator
+        code, tests, context, include_code_validator, skip_execution
     )
     report = generate_test_suite_report(code, tests, result)
     return result, report

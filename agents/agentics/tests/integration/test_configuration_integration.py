@@ -21,12 +21,12 @@ import asyncio
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
-# B17: live-service integration tests. Skip cleanly (not error) without OLLAMA_HOST.
+# B17: live-service integration tests. Skip cleanly (not error) without LLAMA_HOST.
 # GitHub public-repo reads are token-less, so GITHUB_TOKEN is NOT a skip condition.
-_REQUIRES_LIVE = not os.getenv("OLLAMA_HOST")
+_REQUIRES_LIVE = not os.getenv("LLAMA_HOST")
 pytestmark = pytest.mark.skipif(
     _REQUIRES_LIVE,
-    reason="B17: live Ollama integration tests skipped without OLLAMA_HOST (GitHub public-read is token-less)",
+    reason="B17: live llama integration tests skipped without LLAMA_HOST (GitHub public-read is token-less)",
 )
 
 from src.agentics import AgenticsApp
@@ -79,13 +79,13 @@ class TestConfigurationIntegration:
 
         # Verify configuration values
         assert app.config.github_token is not None
-        assert app.config.ollama_host.startswith(("http://", "https://"))
-        assert app.config.ollama_reasoning_model is not None
-        assert app.config.ollama_code_model is not None
+        assert app.config.llama_host.startswith(("http://", "https://"))
+        assert app.config.llama_reasoning_model is not None
+        assert app.config.llama_code_model is not None
 
         # Verify services are initialized
-        assert app.service_manager.ollama_reasoning is not None
-        assert app.service_manager.ollama_code is not None
+        assert app.service_manager.llama_reasoning is not None
+        assert app.service_manager.llama_code is not None
         assert app.service_manager.github is not None
 
         # Clean up
@@ -100,9 +100,9 @@ class TestConfigurationIntegration:
         # Create custom configuration
         custom_config = AgenticsConfig(
             github_token=os.getenv("GITHUB_TOKEN"),
-            ollama_host="http://localhost:11434",
-            ollama_reasoning_model="test-reasoning-model",
-            ollama_code_model="test-code-model",
+            llama_host="http://localhost:11434",
+            llama_reasoning_model="test-reasoning-model",
+            llama_code_model="test-code-model",
         )
 
         # Initialize services directly
@@ -112,13 +112,13 @@ class TestConfigurationIntegration:
         assert service_manager is not None
         assert service_manager.config is custom_config
 
-        # Verify Ollama clients are initialized with custom config
-        assert service_manager.ollama_reasoning is not None
-        assert service_manager.ollama_code is not None
+        # Verify llama clients are initialized with custom config
+        assert service_manager.llama_reasoning is not None
+        assert service_manager.llama_code is not None
 
         # Verify LLM configurations match custom config
-        reasoning_config = service_manager.ollama_reasoning.config
-        code_config = service_manager.ollama_code.config
+        reasoning_config = service_manager.llama_reasoning.config
+        code_config = service_manager.llama_code.config
 
         assert reasoning_config.model == "test-reasoning-model"
         assert reasoning_config.base_url == "http://localhost:11434"
@@ -139,18 +139,18 @@ class TestConfigurationIntegration:
         """Test configuration validation in integration scenarios."""
         # Test valid configuration
         valid_config = AgenticsConfig(
-            github_token="test-token", ollama_host="http://localhost:11434"
+            github_token="test-token", llama_host="http://localhost:11434"
         )
         assert valid_config.github_token == "test-token"
-        assert valid_config.ollama_host == "http://localhost:11434"
+        assert valid_config.llama_host == "http://localhost:11434"
 
         # Test invalid GitHub token - pydantic raises ValidationError
         with pytest.raises(Exception):
             AgenticsConfig(github_token="")
 
-        # Test invalid Ollama host
+        # Test invalid llama host
         with pytest.raises(Exception):
-            AgenticsConfig(github_token="test-token", ollama_host="invalid-url")
+            AgenticsConfig(github_token="test-token", llama_host="invalid-url")
 
         # Test configuration with app initialization
         app = AgenticsApp(valid_config)
@@ -158,7 +158,7 @@ class TestConfigurationIntegration:
 
         # Verify config is used
         assert app.config.github_token == "test-token"
-        assert app.config.ollama_host == "http://localhost:11434"
+        assert app.config.llama_host == "http://localhost:11434"
 
         await app.shutdown()
 
@@ -170,14 +170,14 @@ class TestConfigurationIntegration:
             # Basic override
             AgenticsConfig(
                 github_token="test-token",
-                ollama_host="http://localhost:11434",
-                ollama_reasoning_model="custom-reasoning",
-                ollama_code_model="custom-code",
+                llama_host="http://localhost:11434",
+                llama_reasoning_model="custom-reasoning",
+                llama_code_model="custom-code",
             ),
             # Circuit breaker overrides
             AgenticsConfig(
                 github_token="test-token",
-                ollama_host="http://localhost:11434",
+                llama_host="http://localhost:11434",
                 circuit_breaker_failure_threshold=10,
                 circuit_breaker_recovery_timeout=120,
                 github_circuit_breaker_failure_threshold=15,
@@ -186,7 +186,7 @@ class TestConfigurationIntegration:
             # Logging overrides
             AgenticsConfig(
                 github_token="test-token",
-                ollama_host="http://localhost:11434",
+                llama_host="http://localhost:11434",
                 logger_level=10,  # DEBUG
                 info_as_debug=True,
             ),
@@ -209,14 +209,14 @@ class TestConfigurationIntegration:
             assert app.config.github_token == "test-token"
 
             # Verify service manager uses custom config
-            if custom_config.ollama_reasoning_model is not None:
+            if custom_config.llama_reasoning_model is not None:
                 assert (
-                    app.service_manager.config.ollama_reasoning_model
-                    == custom_config.ollama_reasoning_model
+                    app.service_manager.config.llama_reasoning_model
+                    == custom_config.llama_reasoning_model
                 )
                 assert (
-                    app.service_manager.config.ollama_code_model
-                    == custom_config.ollama_code_model
+                    app.service_manager.config.llama_code_model
+                    == custom_config.llama_code_model
                 )
 
             if custom_config.circuit_breaker_failure_threshold is not None:
@@ -239,18 +239,18 @@ class TestConfigurationIntegration:
         # Store original environment
         original_env = {
             "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN"),
-            "OLLAMA_HOST": os.getenv("OLLAMA_HOST"),
-            "OLLAMA_REASONING_MODEL": os.getenv("OLLAMA_REASONING_MODEL"),
-            "OLLAMA_CODE_MODEL": os.getenv("OLLAMA_CODE_MODEL"),
+            "LLAMA_HOST": os.getenv("LLAMA_HOST"),
+            "LLAMA_REASONING_MODEL": os.getenv("LLAMA_REASONING_MODEL"),
+            "LLAMA_CODE_MODEL": os.getenv("LLAMA_CODE_MODEL"),
         }
 
         try:
             # Test with custom environment variables
             test_env = {
                 "GITHUB_TOKEN": "env-test-token",
-                "OLLAMA_HOST": "http://env-test-host:11434",
-                "OLLAMA_REASONING_MODEL": "env-reasoning-model",
-                "OLLAMA_CODE_MODEL": "env-code-model",
+                "LLAMA_HOST": "http://env-test-host:11434",
+                "LLAMA_REASONING_MODEL": "env-reasoning-model",
+                "LLAMA_CODE_MODEL": "env-code-model",
             }
 
             with patch.dict(os.environ, test_env):
@@ -259,9 +259,9 @@ class TestConfigurationIntegration:
 
                 # Verify environment variables are used
                 assert config.github_token == "env-test-token"
-                assert config.ollama_host == "http://env-test-host:11434"
-                assert config.ollama_reasoning_model == "env-reasoning-model"
-                assert config.ollama_code_model == "env-code-model"
+                assert config.llama_host == "http://env-test-host:11434"
+                assert config.llama_reasoning_model == "env-reasoning-model"
+                assert config.llama_code_model == "env-code-model"
 
                 # Test with app
                 app = AgenticsApp(config)
@@ -269,7 +269,7 @@ class TestConfigurationIntegration:
 
                 # Verify app uses environment-based config
                 assert app.config.github_token == "env-test-token"
-                assert app.config.ollama_host == "http://env-test-host:11434"
+                assert app.config.llama_host == "http://env-test-host:11434"
 
                 await app.shutdown()
 
@@ -291,9 +291,9 @@ class TestConfigurationIntegration:
         with pytest.raises(Exception):
             AgenticsConfig(github_token="")
 
-        # Invalid Ollama host also raises at construction time
+        # Invalid llama host also raises at construction time
         with pytest.raises(Exception):
-            AgenticsConfig(github_token="test-token", ollama_host="invalid-host")
+            AgenticsConfig(github_token="test-token", llama_host="invalid-host")
 
     @pytest.mark.integration
     async def test_service_initialization_with_various_configuration_combinations(
@@ -306,23 +306,23 @@ class TestConfigurationIntegration:
             # Full services
             {
                 "github_token": os.getenv("GITHUB_TOKEN"),
-                "ollama_host": "http://localhost:11434",
-                "ollama_reasoning_model": "sorc/qwen3.5-claude-4.6-opus:9b",
-                "ollama_code_model": "sorc/qwen3.5-claude-4.6-opus:9b",
+                "llama_host": "http://localhost:11434",
+                "llama_reasoning_model": "qwen3.6-35b-a3b",
+                "llama_code_model": "qwen3.6-35b-a3b",
             },
             # Minimal services (just GitHub)
             {
                 "github_token": os.getenv("GITHUB_TOKEN"),
-                "ollama_host": "http://localhost:11434",
-                "ollama_reasoning_model": "minimal-model",
-                "ollama_code_model": "minimal-code-model",
+                "llama_host": "http://localhost:11434",
+                "llama_reasoning_model": "minimal-model",
+                "llama_code_model": "minimal-code-model",
             },
             # Custom circuit breaker settings
             {
                 "github_token": os.getenv("GITHUB_TOKEN"),
-                "ollama_host": "http://localhost:11434",
-                "ollama_reasoning_model": "sorc/qwen3.5-claude-4.6-opus:9b",
-                "ollama_code_model": "sorc/qwen3.5-claude-4.6-opus:9b",
+                "llama_host": "http://localhost:11434",
+                "llama_reasoning_model": "qwen3.6-35b-a3b",
+                "llama_code_model": "qwen3.6-35b-a3b",
                 "circuit_breaker_failure_threshold": 5,
                 "circuit_breaker_recovery_timeout": 60,
                 "github_circuit_breaker_failure_threshold": 3,
@@ -335,20 +335,20 @@ class TestConfigurationIntegration:
             service_manager = await init_services(config)
 
             # Verify services are initialized according to config
-            assert service_manager.ollama_reasoning is not None
-            assert service_manager.ollama_code is not None
+            assert service_manager.llama_reasoning is not None
+            assert service_manager.llama_code is not None
             assert service_manager.github is not None
 
             # Verify config values are applied
             assert service_manager.config.github_token == config_dict["github_token"]
-            assert service_manager.config.ollama_host == config_dict["ollama_host"]
+            assert service_manager.config.llama_host == config_dict["llama_host"]
             assert (
-                service_manager.config.ollama_reasoning_model
-                == config_dict["ollama_reasoning_model"]
+                service_manager.config.llama_reasoning_model
+                == config_dict["llama_reasoning_model"]
             )
             assert (
-                service_manager.config.ollama_code_model
-                == config_dict["ollama_code_model"]
+                service_manager.config.llama_code_model
+                == config_dict["llama_code_model"]
             )
 
             if "circuit_breaker_failure_threshold" in config_dict:
@@ -364,8 +364,8 @@ class TestConfigurationIntegration:
             # Test health checks
             health_results = await service_manager.check_services_health()
             assert isinstance(health_results, dict)
-            assert "ollama_reasoning" in health_results
-            assert "ollama_code" in health_results
+            assert "llama_reasoning" in health_results
+            assert "llama_code" in health_results
             assert "github" in health_results
 
             await service_manager.close_services()
@@ -379,9 +379,9 @@ class TestConfigurationIntegration:
         # Create first app with custom config
         custom_config = AgenticsConfig(
             github_token=os.getenv("GITHUB_TOKEN"),
-            ollama_host="http://localhost:11434",
-            ollama_reasoning_model="persistent-reasoning",
-            ollama_code_model="persistent-code",
+            llama_host="http://localhost:11434",
+            llama_reasoning_model="persistent-reasoning",
+            llama_code_model="persistent-code",
         )
 
         app1 = AgenticsApp(custom_config)
@@ -392,12 +392,12 @@ class TestConfigurationIntegration:
         await app2.initialize()
 
         # Verify configs are independent
-        assert app1.config.ollama_reasoning_model == "persistent-reasoning"
-        assert app1.config.ollama_code_model == "persistent-code"
+        assert app1.config.llama_reasoning_model == "persistent-reasoning"
+        assert app1.config.llama_code_model == "persistent-code"
 
         # Second app should have default values
-        assert app2.config.ollama_reasoning_model != "persistent-reasoning"
-        assert app2.config.ollama_code_model != "persistent-code"
+        assert app2.config.llama_reasoning_model != "persistent-reasoning"
+        assert app2.config.llama_code_model != "persistent-code"
 
         await app1.shutdown()
         await app2.shutdown()
@@ -410,7 +410,7 @@ class TestConfigurationIntegration:
 
         # Create config
         config = AgenticsConfig(
-            github_token=os.getenv("GITHUB_TOKEN"), ollama_host="http://localhost:11434"
+            github_token=os.getenv("GITHUB_TOKEN"), llama_host="http://localhost:11434"
         )
 
         # Initialize services
@@ -419,14 +419,14 @@ class TestConfigurationIntegration:
         # Verify dependency injection - services should have access to config
         assert service_manager.config is config
 
-        # Ollama clients should be initialized with config values
-        reasoning_llm_config = service_manager.ollama_reasoning.config
-        code_llm_config = service_manager.ollama_code.config
+        # llama clients should be initialized with config values
+        reasoning_llm_config = service_manager.llama_reasoning.config
+        code_llm_config = service_manager.llama_code.config
 
-        assert reasoning_llm_config.base_url == config.ollama_host
-        assert reasoning_llm_config.model == config.ollama_reasoning_model
-        assert code_llm_config.base_url == config.ollama_host
-        assert code_llm_config.model == config.ollama_code_model
+        assert reasoning_llm_config.base_url == config.llama_host
+        assert reasoning_llm_config.model == config.llama_reasoning_model
+        assert code_llm_config.base_url == config.llama_host
+        assert code_llm_config.model == config.llama_code_model
 
         # GitHub client should have token from config
         assert service_manager.github.token == config.github_token
@@ -439,7 +439,7 @@ class TestConfigurationIntegration:
         # Test with explicit values
         config = AgenticsConfig(
             github_token="test-token",
-            ollama_host="http://localhost:11434",
+            llama_host="http://localhost:11434",
         )
 
         # Should not raise validation errors
@@ -450,8 +450,8 @@ class TestConfigurationIntegration:
         await app.initialize()
 
         # Config should have resolved values
-        assert app.config.ollama_host is not None
-        assert app.config.ollama_reasoning_model is not None
-        assert app.config.ollama_code_model is not None
+        assert app.config.llama_host is not None
+        assert app.config.llama_reasoning_model is not None
+        assert app.config.llama_code_model is not None
 
         await app.shutdown()

@@ -22,7 +22,7 @@
 - [x] 4.1 Delete tests targeting removed modules or asserting only on mocked-out dead logic (keep duplicates removed).
       Removed `test_generate_filename_*` (dead `generate_filename`); fixed `test_init_success`
       (2 tools, not 3) + `test_process_no_files_with_content` to match the hardened sole-writer.
-- [x] 4.2 Confirm every live module on the TS-generation path has ≥1 real unit test (real logic; external GitHub/Ollama/network/FS mocked).
+- [x] 4.2 Confirm every live module on the TS-generation path has ≥1 real unit test (real logic; external GitHub/llama/network/FS mocked).
 - [x] 4.3 Ensure the e2e path still has a real-call integration test.
 - [x] 4.4 Measure `pytest --cov` (unit) ≥ pre-refactor baseline. [Verified: full hermetic unit suite 522 passed this session; coverage retained]
 - [x] 4.5 Fixed the 4 stale `_assemble_contract_features` unit-test failures: the tests used a
@@ -107,7 +107,7 @@ to be applied repo-wide (not just to the integrator floor):
       `main.ts` / `__tests__/main.test.ts` exists under `agents/agentics/src/` that was not in the
       pre-run snapshot. If pollution is detected, the test FAILS (B3 violated) instead of silently
       leaving generated code behind. (B5 restore of repo TS to git HEAD preserved.)
-- [x] 10.4 **Verify.** Run `make test-agents-e2e` with `OLLAMA_HOST=http://localhost:11434` (the
+- [x] 10.4 **Verify.** Run `make test-agents-e2e` with `LLAMA_HOST=http://localhost:11434` (the
       integration container uses `--net=host`, where `host.docker.internal` does NOT resolve). After
       the run: (a) the e2e is GREEN, (b) `git status` shows NO untracked `agents/agentics/src/main.ts`
       or `agents/agentics/src/__tests__/main.test.ts`, (c) the real `src/main.ts` (repo root) is at its
