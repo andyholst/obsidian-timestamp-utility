@@ -178,6 +178,43 @@ class SuiteExecutor:
         self.monitor = structured_log(__name__)
         self.execution_timeout = int(os.getenv("TEST_EXECUTION_TIMEOUT", "30000"))
         self.memory_limit = os.getenv("TEST_MEMORY_LIMIT", "256MB")
+        self._npm_cache_dir = self._setup_npm_cache()
+
+    def _setup_npm_cache(self):
+        """Setup and populate npm cache directory with dependencies to avoid repeated npm install"""
+        cache_dir = os.path.join(tempfile.gettempdir(), "obsidian-timestamp-utility-npm-cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Create package.json for cache
+        package_json = {
+            "name": "test-validation-cache",
+            "version": "1.0.0",
+            "scripts": {"test": "jest"},
+            "devDependencies": {
+                "@types/jest": "^29.0.0",
+                "jest": "^29.0.0",
+                "ts-jest": "^29.0.0",
+                "@types/node": "^20.0.0",
+                "typescript": "^5.0.0",
+            },
+        }
+        
+        package_file = os.path.join(cache_dir, "package.json")
+        with open(package_file, "w") as f:
+            json.dump(package_json, f, indent=2)
+            
+        # Install dependencies once in cache directory
+        try:
+            subprocess.run(
+                ["npm", "install", "--include=dev"],
+                cwd=cache_dir,
+                capture_output=True,
+                timeout=120,
+            )
+        except Exception:
+            pass
+            
+        return cache_dir
 
     def execute_code_and_tests(
         self, code: str, tests: str, context: Dict[str, Any] = None
@@ -324,16 +361,13 @@ try {{
                 with open(os.path.join(temp_dir, "package.json"), "w") as f:
                     json.dump(package_json, f, indent=2)
 
-                # Install dependencies (if npm available)
-                try:
-                    subprocess.run(
-                        ["npm", "install", "--include=dev"],
-                        cwd=temp_dir,
-                        capture_output=True,
-                        timeout=120,
-                    )
-                except Exception:
-                    pass
+                # Copy node_modules from cache to avoid repeated npm install
+                cache_node_modules = os.path.join(self._npm_cache_dir, "node_modules")
+                if os.path.exists(cache_node_modules):
+                    import shutil
+                    dest_node_modules = os.path.join(temp_dir, "node_modules")
+                    if not os.path.exists(dest_node_modules):
+                        shutil.copytree(cache_node_modules, dest_node_modules)
 
                 # Run Jest
                 result = subprocess.run(
