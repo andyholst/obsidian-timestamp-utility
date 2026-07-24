@@ -182,7 +182,7 @@ class SuiteExecutor:
 
     def _setup_npm_cache(self):
         """Setup and populate npm cache directory with dependencies to avoid repeated npm install"""
-        cache_dir = os.path.join(tempfile.gettempdir(), "obsidian-timestamp-utility-npm-cache")
+        cache_dir = os.path.join("/app/npm-cache", "npm-install-cache")
         os.makedirs(cache_dir, exist_ok=True)
         
         # Create package.json for cache

@@ -48,6 +48,7 @@ services:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
       - ..:/project
+      - npm-cache:/app/npm-cache
     environment:
       - PROJECT_ROOT=/project
       - GITHUB_TOKEN=dummy
@@ -119,3 +120,6 @@ networks:
     ipam:
       config:
         - subnet: 10.89.0.0/24
+
+volumes:
+  npm-cache:
