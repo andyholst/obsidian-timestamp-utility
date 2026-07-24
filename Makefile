@@ -73,8 +73,12 @@ test-app: b9-perms
 
 loop-collect: ## Gate 0: collection guard (dangling imports)
 	@echo "=== LOOP [collect] collection guard ==="
-	$(DOCKER) -f docker-compose-files/agents.yaml run --remove-orphans -e TEST_FILTER="" unit-test-agents python -m pytest tests/unit/ --collect-only -q
-	$(DOCKER) -f docker-compose-files/agents.yaml run --remove-orphans -e TEST_FILTER="" integration-test-agents python -m pytest tests/integration/ --collect-only -q
+	@echo "--- Collecting unit tests ---"
+	$(DOCKER) -f docker-compose-files/agents.yaml run --remove-orphans -e TEST_FILTER="" unit-test-agents python -m pytest tests/unit/ --collect-only
+	@echo ""
+	@echo "--- Collecting integration tests ---"
+	$(DOCKER) -f docker-compose-files/agents.yaml run --remove-orphans -e TEST_FILTER="" integration-test-agents python -m pytest tests/integration/ --collect-only
+	@echo ""
 	@echo "LOOP [collect]: clean."
 
 loop-ts-floor: ## Gate 0.5: strict TS test/command floor vs origin/main
