@@ -7,7 +7,7 @@ export function addOneHour(timeStr: string): string {
 }
 
 export function processLine(line: string): { date: string; formatted: string } | null {
-    const regex = /^\- \[\ \] (.*?) \(@(\d{4}-\d{2}-\d{2})( (\d{2}:\d{2}))?\)( ?(#\w+))?$/;
+    const regex = /^\- \[\ \] (.*?) \(@(\d{4}-\d{2}-\d{2})( (\d{2}:\d{2}))?\)( ?(#\w+(?:-[\w]+)*))?$/;
     const match = line.trim().match(regex);
     if (!match) return null;
 
