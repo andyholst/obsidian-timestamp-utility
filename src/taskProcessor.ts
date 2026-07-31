@@ -7,7 +7,9 @@ export function addOneHour(timeStr: string): string {
 }
 
 export function processLine(line: string): { date: string; formatted: string } | null {
-    const regex = /^\- \[\ \] (.*?) \(@(\d{4}-\d{2}-\d{2})( (\d{2}:\d{2}))?\)( ?(#\w+))?$/;
+    // Support hyphenated tags like #my-tag (not just single-word #tag)
+    const tagPattern = '( ?(#\\w+(?:-\\w+)*))?';
+    const regex = new RegExp(`^\\- \\[\\ \\] (.*?) \\(@(\\d{4}-\\d{2}-\\d{2})( (\\d{2}:\\d{2}))?\\)${tagPattern}$`);
     const match = line.trim().match(regex);
     if (!match) return null;
 

@@ -139,7 +139,7 @@ validate-ts: ## Fast TypeScript validation (runs tsc directly)
 
 format-ts: ## Format TypeScript files with prettier
 	@echo "Formatting TypeScript files..."
-	@npx prettier --write src/main.ts src/__tests__/main.test.ts 2>&1 || true
+	@npx prettier --write 'src/**/*.ts' 2>&1 || true
 	@echo "Formatting complete"
 
 validate-tests: ## Fast test validation (runs jest directly)
