@@ -43,6 +43,13 @@ You are not allowed to just leave a pile of experimental commits. Successful or 
    - `specs/<capability>/spec.md` (proper delta format with Requirements + Scenarios)
 6. You may leave experimental work on `wt/<name>` or `autoresearch/...` branches, but the OpenSpec change is the real deliverable.
 7. **All OpenSpec tasks must be completed and marked as done in `tasks.md` before creating a PR.** Every checkbox (`- [ ]`) in the change's `tasks.md` must be ticked (`- [x]`) and verified — not just the implementation tasks, but also the verification tasks (build, tests, spec walk-through). A PR with unchecked tasks is incomplete.
+8. **PR branches must contain BOTH code changes AND OpenSpec files together.** When creating a PR, the feature branch must include both the actual code changes (TS/JS/etc.) AND the corresponding OpenSpec change directory (`openspec/changes/<name>/`). Never merge code directly to main and leave the OpenSpec metadata on a separate orphaned branch. The workflow is:
+   - Create the OpenSpec change first (`make openspec-new`)
+   - Implement code changes in the same branch
+   - Mark all tasks complete in `tasks.md`
+   - Create a PR from that branch to main — it must include both the code diffs AND the OpenSpec files
+   - Only after the PR is merged does `openspec archive` move the change to `archive/` and merge specs into `openspec/specs/`
+   This ensures every committed code change has its spec of record in the same PR, making the history self-documenting.
 
 ---
 
