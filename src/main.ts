@@ -148,48 +148,46 @@ export default class TimestampPlugin extends obsidian.Plugin {
                 modal.open();
             },
         });
+        this.addCommand({
+            id: 'insert-uuid-v7',
+            name: 'Insert UUID v7 (timestamp-based)',
+            editorCallback: (__editor: obsidian.Editor, _ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
+                try {
+                    const ms = Date.now();
+                    const rand = new Uint8Array(10);
+                    crypto.getRandomValues(rand);
+                    const hex = (n: number, w: number) => n.toString(16).padStart(w, '0');
+                    const t = hex(ms, 12);
+                    const r1 = (rand[0] << 8) | rand[1];
+                    const r2 = (rand[2] << 8) | rand[3];
+                    const r3 = (rand[4] << 8) | rand[5];
+                    const r4 = (rand[6] << 8) | rand[7];
+                    const r5 = (rand[8] << 8) | rand[9];
+                    const uuid =
+                        t.slice(0, 8) + '-' + t.slice(8, 12) + '-7' + hex(r1, 3).slice(0, 3) + '-' +
+                        hex(0x8000 | (r2 & 0x0fff), 4) + '-' + hex(r3, 4) + hex(r4, 4) + hex(r5, 4);
+                    __editor.replaceSelection(uuid);
+                } catch (error) {
+                    new obsidian.Notice(`Failed to generate UUID v7: ${(error as Error).message}`);
+                }
+            },
+        });
 
+        this.addCommand({
+            id: 'encode-base64-message',
+            name: 'Encode Base64 Message',
+            callback: () => {
+                new Base64Modal(this.app, 'encode').open();
+            },
+        });
 
-    this.addCommand({
-        id: 'insert-uuid-v7',
-        name: 'Insert UUID v7 (timestamp-based)',
-        editorCallback: (__editor: obsidian.Editor, _ctx: obsidian.MarkdownView | obsidian.MarkdownFileInfo) => {
-            try {
-                const ms = Date.now();
-                const rand = new Uint8Array(10);
-                crypto.getRandomValues(rand);
-                const hex = (n: number, w: number) => n.toString(16).padStart(w, '0');
-                const t = hex(ms, 12);
-                const r1 = (rand[0] << 8) | rand[1];
-                const r2 = (rand[2] << 8) | rand[3];
-                const r3 = (rand[4] << 8) | rand[5];
-                const r4 = (rand[6] << 8) | rand[7];
-                const r5 = (rand[8] << 8) | rand[9];
-                const uuid =
-                    t.slice(0, 8) + '-' + t.slice(8, 12) + '-7' + hex(r1, 3).slice(0, 3) + '-' +
-                    hex(0x8000 | (r2 & 0x0fff), 4) + '-' + hex(r3, 4) + hex(r4, 4) + hex(r5, 4);
-                __editor.replaceSelection(uuid);
-            } catch (error) {
-                new obsidian.Notice(`Failed to generate UUID v7: ${(error as Error).message}`);
-            }
-        },
-    });
-
-
-    this.addCommand({
-        id: 'encode-base64-message',
-        name: 'Encode Base64 Message',
-        callback: () => {
-            new Base64Modal(this.app, 'encode').open();
-        },
-    });
-    this.addCommand({
-        id: 'decode-base64-message',
-        name: 'Decode Base64 Message',
-        callback: () => {
-            new Base64Modal(this.app, 'decode').open();
-        },
-    });
+        this.addCommand({
+            id: 'decode-base64-message',
+            name: 'Decode Base64 Message',
+            callback: () => {
+                new Base64Modal(this.app, 'decode').open();
+            },
+        });
 
         this.addCommand({
             id: 'process-tasks',
@@ -231,30 +229,6 @@ export default class TimestampPlugin extends obsidian.Plugin {
         const seconds = String(now.getSeconds()).padStart(2, '0');
         return `${year}${month}${day}${hours}${minutes}${seconds}`;
     }
-
-generateUuidV7(): string {
-    const ms = Date.now();
-    const rand = new Uint8Array(10);
-    crypto.getRandomValues(rand);
-    const hex = (n: number, w: number) => n.toString(16).padStart(w, '0');
-    const t = hex(ms, 12);
-    const r1 = (rand[0] << 8) | rand[1];
-    const r2 = (rand[2] << 8) | rand[3];
-    const r3 = (rand[4] << 8) | rand[5];
-    const r4 = (rand[6] << 8) | rand[7];
-    const r5 = (rand[8] << 8) | rand[9];
-    const uuid =
-        t.slice(0, 8) + '-' + t.slice(8, 12) + '-7' + hex(r1, 3).slice(0, 3) + '-' +
-        hex(0x8000 | (r2 & 0x0fff), 4) + '-' + hex(r3, 4) + hex(r4, 4) + hex(r5, 4);
-    return uuid;
-}
-
-encodeBase64(message: string): string {
-    return btoa(unescape(encodeURIComponent(message)));
-}
-decodeBase64(encoded: string): string {
-    return decodeURIComponent(escape(atob(encoded)));
-}
 }
 
 export class UuidV7Modal extends obsidian.Modal {

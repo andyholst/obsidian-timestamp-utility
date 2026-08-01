@@ -15,7 +15,14 @@ You are not allowed to just leave a pile of experimental commits. Successful or 
 ## Core Rules
 
 ### Free reign (what you *can* do)
-- Explore any part of the plugin (`src/`, tests, Makefile targets related to the app, configs, edge cases, missing validations, UX of commands, etc.)
+- **Analyze the entire codebase**, not just TypeScript files:
+  - `src/` — all source files (`main.ts`, `taskProcessor.ts`, `folderSelectorModal.ts`, etc.)
+  - `Makefile` — build targets, docker compose config, loop harness stages
+  - `configs/` — `tsconfig.json`, `rollup.config.js`, `.prettierrc.json`, `package.json`
+  - `tests/` — test structure, coverage gaps, dead tests, integration/e2e tests
+  - `docs/` — `README.md`, `CHANGELOG.md`, `agent-wiki/`, `openspec/` specs
+  - `containers/` and `docker-compose-files/` — container definitions
+  - `scripts/` — utility scripts, helpers, automation
 - Try radical simplifications, stronger error handling, better coverage, new helpful commands, better date/UUID/reminder handling, etc.
 - Break things temporarily while exploring
 - Run any combination of `make test-app`, `make build-app`, `make loop-harness`, coverage reports, manual checks
@@ -35,6 +42,7 @@ You are not allowed to just leave a pile of experimental commits. Successful or 
    - `tasks.md`
    - `specs/<capability>/spec.md` (proper delta format with Requirements + Scenarios)
 6. You may leave experimental work on `wt/<name>` or `autoresearch/...` branches, but the OpenSpec change is the real deliverable.
+7. **All OpenSpec tasks must be completed and marked as done in `tasks.md` before creating a PR.** Every checkbox (`- [ ]`) in the change's `tasks.md` must be ticked (`- [x]`) and verified — not just the implementation tasks, but also the verification tasks (build, tests, spec walk-through). A PR with unchecked tasks is incomplete.
 
 ---
 

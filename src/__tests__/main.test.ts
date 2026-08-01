@@ -1,4 +1,4 @@
-import TimestampPlugin from '../main';
+import TimestampPlugin, { Base64Modal } from '../main';
 import * as obsidian from 'obsidian';
 
 const mockManifest: obsidian.PluginManifest = {
@@ -611,15 +611,15 @@ describe('TimestampPlugin', () => {
         });
 
         test('encode produces base64 of the input', () => {
-            const plugin = new TimestampPlugin(mockApp, mockManifest);
-            const encoded = (plugin as any).encodeBase64('hello world');
+            const modal = new Base64Modal(mockApp, 'encode');
+            const encoded = (modal as any).pluginEncode('hello world');
             expect(encoded).toBe('aGVsbG8gd29ybGQ=');
         });
 
         test('decode reverses encode', () => {
-            const plugin = new TimestampPlugin(mockApp, mockManifest);
-            const encoded = (plugin as any).encodeBase64('hello world');
-            const decoded = (plugin as any).decodeBase64(encoded);
+            const modal = new Base64Modal(mockApp, 'decode');
+            const encoded = btoa(unescape(encodeURIComponent('hello world')));
+            const decoded = (modal as any).pluginDecode(encoded);
             expect(decoded).toBe('hello world');
         });
     });
