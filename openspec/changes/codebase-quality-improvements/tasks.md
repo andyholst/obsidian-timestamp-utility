@@ -13,12 +13,12 @@
 
 ## Tasks
 
-- [ ] 1. Fix indentation in `src/main.ts` for UUID v7 and Base64 command blocks (lines 153-192)
-- [ ] 2. Remove dead code methods: `generateUuidV7()`, `encodeBase64()`, `decodeBase64()` from `src/main.ts`
-- [ ] 3. Update tag regex in `src/taskProcessor.ts` line 10 to support hyphenated tags
-- [ ] 4. Expand `.prettierrc.json` formatting coverage to include all source and test files
-- [ ] 5. Run `npm run build` and confirm exit 0
-- [ ] 6. Run `npm test` and confirm all tests pass
-- [ ] 7. Run `npx tsc --noEmit` and confirm no TypeScript errors
-- [ ] 8. Verify changes with `git diff` and review for correctness
-- [ ] 9. openspec validate codebase-quality-improvements passes
+- [x] 1. Fix indentation in `src/main.ts` for UUID v7 and Base64 command blocks (lines 153-192)
+- [x] 2. Remove dead code methods: `generateUuidV7()`, `encodeBase64()`, `decodeBase64()` from `src/main.ts`
+- [x] 3. Update tag regex in `src/taskProcessor.ts` line 10 to support hyphenated tags
+- [x] 4. Expand `.prettierrc.json` formatting coverage to include all source and test files
+- [x] 5. Run `npm run build` and confirm exit 0
+- [x] 6. Run `npm test` and confirm all tests pass
+- [x] 7. Run `npx tsc --noEmit` and confirm no TypeScript errors
+- [x] 8. Verify changes with `git diff` and review for correctness
+- [x] 9. openspec validate codebase-quality-improvements passes
