@@ -93,7 +93,10 @@ def _validate_method_inside_class(code: str, method_name: str) -> str:
     # Check if the method appears after the class closing brace
     method_line_idx = -1
     for i in range(class_end + 1, len(lines)):
-        if f"public {method_name}(" in lines[i] or f"private {method_name}(" in lines[i]:
+        if (
+            f"public {method_name}(" in lines[i]
+            or f"private {method_name}(" in lines[i]
+        ):
             method_line_idx = i
             break
 
@@ -117,7 +120,7 @@ def _validate_method_inside_class(code: str, method_name: str) -> str:
         return code
 
     # Remove the method from its current position
-    new_lines = lines[:method_line_idx] + lines[method_line_idx + len(method_lines):]
+    new_lines = lines[:method_line_idx] + lines[method_line_idx + len(method_lines) :]
 
     # Re-find the class end (indices shifted after removal)
     class_end = -1
@@ -138,7 +141,9 @@ def _validate_method_inside_class(code: str, method_name: str) -> str:
 
     # Insert method inside the class, before the closing brace
     base_indent = "    "
-    indented_method = [base_indent + l.strip() if l.strip() else l for l in method_lines]
+    indented_method = [
+        base_indent + l.strip() if l.strip() else l for l in method_lines
+    ]
     for j, ml in enumerate(indented_method):
         new_lines.insert(class_end + j, ml)
 
@@ -215,10 +220,12 @@ def _strip_generated_methods(lines, method_names):
         stripped = line.strip()
         if not in_method:
             for name in method_names:
-                if (stripped.startswith("public " + name + "(") or
-                    stripped.startswith("private " + name + "(") or
-                    stripped.startswith("async " + name + "(") or
-                    stripped.startswith(name + "(")):
+                if (
+                    stripped.startswith("public " + name + "(")
+                    or stripped.startswith("private " + name + "(")
+                    or stripped.startswith("async " + name + "(")
+                    or stripped.startswith(name + "(")
+                ):
                     in_method = True
                     brace_depth = line.count("{") - line.count("}")
                     if brace_depth <= 0:
@@ -248,7 +255,7 @@ def _insert_code_into_class(existing_code: str, generated_code: str) -> str:
         stripped = line.strip()
         for prefix in ["public ", "private ", "protected "]:
             if stripped.startswith(prefix) and "(" in stripped:
-                name_part = stripped[len(prefix):].split("(")[0].strip()
+                name_part = stripped[len(prefix) :].split("(")[0].strip()
                 if name_part and " " not in name_part:
                     method_names.append(name_part)
                     break
@@ -262,7 +269,9 @@ def _insert_code_into_class(existing_code: str, generated_code: str) -> str:
             addcommand_start = i
             break
 
-    method_lines = generated_lines[:addcommand_start] if addcommand_start >= 0 else generated_lines
+    method_lines = (
+        generated_lines[:addcommand_start] if addcommand_start >= 0 else generated_lines
+    )
     command_lines = generated_lines[addcommand_start:] if addcommand_start >= 0 else []
 
     # Clean up empty lines
@@ -287,7 +296,9 @@ def _insert_code_into_class(existing_code: str, generated_code: str) -> str:
     # Insert method lines before the class closing brace (4 spaces for class member)
     if class_insert >= 0 and method_lines:
         base_indent = "    "
-        indented_method = [base_indent + line if line.strip() else line for line in method_lines]
+        indented_method = [
+            base_indent + line if line.strip() else line for line in method_lines
+        ]
         for j, ml in enumerate(indented_method):
             result_lines.insert(class_insert + j, ml)
 
@@ -298,7 +309,9 @@ def _insert_code_into_class(existing_code: str, generated_code: str) -> str:
             adjusted_onload_insert += len(method_lines)
         adjusted_onload_insert += 1
         base_indent = "        "
-        indented_command = [base_indent + line if line.strip() else line for line in command_lines]
+        indented_command = [
+            base_indent + line if line.strip() else line for line in command_lines
+        ]
         for j, cl in enumerate(indented_command):
             result_lines.insert(adjusted_onload_insert + j, cl)
 
@@ -328,13 +341,13 @@ def _filter_tests_for_existing_methods(test_code: str, plugin_code: str) -> str:
 
     # Extract all public method names from the plugin
     plugin_methods = set()
-    for m in re.finditer(r'public\s+(\w+)\s*\(', plugin_code):
+    for m in re.finditer(r"public\s+(\w+)\s*\(", plugin_code):
         plugin_methods.add(m.group(1))
     # Also include private methods
-    for m in re.finditer(r'private\s+(\w+)\s*\(', plugin_code):
+    for m in re.finditer(r"private\s+(\w+)\s*\(", plugin_code):
         plugin_methods.add(m.group(1))
     # Also include methods without access modifier
-    for m in re.finditer(r'^\s+(\w+)\s*\(\w*\)\s*:\s*\w+', plugin_code, re.MULTILINE):
+    for m in re.finditer(r"^\s+(\w+)\s*\(\w*\)\s*:\s*\w+", plugin_code, re.MULTILINE):
         plugin_methods.add(m.group(1))
 
     if not plugin_methods:
@@ -366,7 +379,7 @@ def _filter_tests_for_existing_methods(test_code: str, plugin_code: str) -> str:
                 block_lines = lines[j]
                 temp_depth += block_lines.count("(") - block_lines.count(")")
                 # Check for method calls like plugin.someMethod()
-                for method in re.finditer(r'plugin\.(\w+)\s*\(', block_lines):
+                for method in re.finditer(r"plugin\.(\w+)\s*\(", block_lines):
                     found_method_call = True
                     if method.group(1) not in plugin_methods:
                         has_nonexistent_method = True
@@ -427,9 +440,7 @@ def _backup_project_files(project_root: str):
 class ComposableWorkflows:
     """Factory for creating the three-phase composable workflows."""
 
-    def __init__(
-        self, llm_reasoning: Runnable, llm_code: Runnable, github_client
-    ):
+    def __init__(self, llm_reasoning: Runnable, llm_code: Runnable, github_client):
         self.llm_reasoning = llm_reasoning
         self.llm_code = llm_code
         self.github_client = github_client
@@ -647,8 +658,10 @@ class ComposableWorkflows:
         """
         if os.getenv("TEST_FAST_MODE") == "1":
             return "code_integrator"
-        score = state.get("validation_score", 0) if isinstance(state, dict) else getattr(
-            state, "validation_score", 0
+        score = (
+            state.get("validation_score", 0)
+            if isinstance(state, dict)
+            else getattr(state, "validation_score", 0)
         )
         return "hitl" if score < 80 else "integration_testing"
 
@@ -772,7 +785,11 @@ class ComposableWorkflows:
         graph.add_conditional_edges(
             "code_generation",
             ComposableWorkflows.route_hitl,
-            {"hitl": "hitl", "integration_testing": "integration_testing", "code_integrator": "code_integrator"},
+            {
+                "hitl": "hitl",
+                "integration_testing": "integration_testing",
+                "code_integrator": "code_integrator",
+            },
         )
         graph.add_edge("hitl", "integration_testing")
         graph.add_edge("integration_testing", END)
@@ -810,11 +827,12 @@ class ComposableWorkflows:
             try:
                 # Create new state with merged dependencies
                 from dataclasses import replace
+
                 merged = replace(
                     merged,
                     code_spec=replace(
                         merged.code_spec,
-                        dependencies=dep_state["available_dependencies"]
+                        dependencies=dep_state["available_dependencies"],
                     ),
                 )
                 self.monitor.info(
@@ -848,7 +866,10 @@ class ComposableWorkflows:
 
         try:
             initial_state = {"url": issue_url}
-            config = {"configurable": {"thread_id": workflow_id}, "recursion_limit": 500}
+            config = {
+                "configurable": {"thread_id": workflow_id},
+                "recursion_limit": 500,
+            }
             result = await self.full_workflow.ainvoke(initial_state, config)
 
             self.monitor.info(

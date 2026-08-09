@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import shutil
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional, Union
 import json
 from datetime import datetime
 from tenacity import (
@@ -97,7 +97,15 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
 
             if any(
                 os.path.exists(os.path.join(root, p))
-                for p in [".prettierrc", ".prettierrc.json", ".prettierrc.js", ".prettierrc.cjs", ".prettierrc.mjs", ".prettierrc.yaml", ".prettierrc.yml"]
+                for p in [
+                    ".prettierrc",
+                    ".prettierrc.json",
+                    ".prettierrc.js",
+                    ".prettierrc.cjs",
+                    ".prettierrc.mjs",
+                    ".prettierrc.yaml",
+                    ".prettierrc.yml",
+                ]
             ):
                 return True
             pkg = os.path.join(root, "package.json")
@@ -111,7 +119,7 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
             return False
         return True
 
-    def run_lint_gate(self) -> str | None:
+    def run_lint_gate(self) -> Optional[str]:
         """Lint gate (agentic-self-correct-loop §2).
 
         Runs eslint then prettier --check in the project root. Returns the combined
@@ -245,7 +253,10 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
             self.monitor.warning(
                 f"TypeScript compile errors (non-fatal): {combined_output[:200]}..."
             )
-            log_info(self.name, f"TypeScript typecheck failed (non-fatal): {combined_output[:200]}")
+            log_info(
+                self.name,
+                f"TypeScript typecheck failed (non-fatal): {combined_output[:200]}",
+            )
 
         # §2 Lint gate: non-zero lint exit MUST raise LintError so the loop re-enters
         # error_recovery (agentic-self-correct-loop §2.2). Raising here (not swallowing)
@@ -279,8 +290,12 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
             log_info(self.name, f"Combined test output length: {len(combined_output)}")
         except Exception as e:
             combined_output = self.strip_ansi_codes(str(e))
-            self.monitor.warning(f"Test command failed (non-fatal): {combined_output[:200]}")
-            log_info(self.name, f"Test command failed (non-fatal): {combined_output[:200]}")
+            self.monitor.warning(
+                f"Test command failed (non-fatal): {combined_output[:200]}"
+            )
+            log_info(
+                self.name, f"Test command failed (non-fatal): {combined_output[:200]}"
+            )
 
         log_info(self.name, "Parsing test output for metrics")
         tests_passed_match = re.search(
@@ -288,9 +303,7 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
             combined_output,
             re.DOTALL | re.I,
         )
-        coverage_match = re.search(
-            r"All files\s*\|\s*(\d+\.\d+|\d+)", combined_output
-        )
+        coverage_match = re.search(r"All files\s*\|\s*(\d+\.\d+|\d+)", combined_output)
         tests_passed = int(tests_passed_match.group(1)) if tests_passed_match else 0
         tests_total = int(tests_passed_match.group(2)) if tests_passed_match else 0
         coverage_all_files = float(coverage_match.group(1)) if coverage_match else 0.0
@@ -368,7 +381,8 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
             return
         # Most recent backup dir for this run (timestamped, lexicographically sortable).
         subdirs = sorted(
-            d for d in os.listdir(backups_root)
+            d
+            for d in os.listdir(backups_root)
             if os.path.isdir(os.path.join(backups_root, d))
         )
         if not subdirs:
@@ -401,6 +415,7 @@ class PostTestRunnerAgent(ToolIntegratedAgent):
     def _backup_generated_files(self):
         """Back up generated TypeScript code and test files for inspection."""
         import shutil
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_dir = os.path.join(self.project_root, "backups", timestamp)
         os.makedirs(backup_dir, exist_ok=True)

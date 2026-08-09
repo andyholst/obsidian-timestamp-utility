@@ -10,27 +10,27 @@ services:
         HOST_GID: ${HOST_GID:-1000}
     volumes:
       - ..:/project
-      - /home/asimov/repository/git/projects/obsidian-timestamp-utility/agents/agentics/src:/app/prod
-      - /home/asimov/repository/git/projects/obsidian-timestamp-utility/node_modules:/project/node_modules
+      - ../agents/agentics/src:/app/src
+      - ../node_modules:/project/node_modules
     environment:
       - PROJECT_ROOT=/project
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://127.0.0.1:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://127.0.0.1:11434}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen3.6-35b-a3b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen3.6-35b-a3b}
       - CHANGE=${CHANGE}
       - PYTHONDONTWRITEBYTECODE=1
-    # Rootless nerdctl: these services use `network_mode: host`, so the container shares the
-    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, so the container reaches it
-    # at http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
-    # does NOT resolve under rootless nerdctl and must NOT be used (it returns 000).
+    # Rootless nerdctl: this service uses `network_mode: host`. The LLM host coordinate differs by
+    # platform and is set via `make` (platform-aware OLLAMA_HOST default): Linux -> 127.0.0.1:11434,
+    # macOS/colima -> host.lima.internal:11434 (127.0.0.1 is Connection-refused there, verified).
+    # This compose literal is only a direct-invocation fallback; `host.docker.internal` does NOT
+    # resolve under rootless nerdctl and must NOT be used (it returns 000).
     extra_hosts:
       - host.docker.internal:host-gateway
     network_mode: host
     # Default: run the agentic pipeline against a LOCAL OpenSpec change (no GitHub, no MCP).
     # Override with: docker compose -f docker-compose-files/agents.yaml run --rm agentics \
     #   python -m prod.agentics openspec:<change-name>
-    command: python -m prod.agentics openspec:${CHANGE:-uuid-modal-agentic-generation}
+    command: python3 -B -m prod.agentics openspec:${CHANGE:-uuid-modal-agentic-generation}
 
   unit-test-agents:
     image: agentics
@@ -45,24 +45,26 @@ services:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
       - ..:/project
+      - ../agents/agentics/.cache/tmp:/tmp  # Cache volume for temp files to avoid /tmp space issues
     environment:
       - PROJECT_ROOT=/project
-      - GITHUB_TOKEN=dummy
-      - OLLAMA_HOST=http://127.0.0.1:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - PYTHONPATH=/app
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://127.0.0.1:11434}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen3.6-35b-a3b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen3.6-35b-a3b}
+      - PYTHONPATH=/app/src:/app/tests
       - TEST_FILTER=${TEST_FILTER}
+      - CHANGE=${CHANGE:-uuid-modal-agentic-generation}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-    # Rootless nerdctl: this service uses `network_mode: host`, so the container shares the
-    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, reachable at
-    # http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
-    # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
+    # Rootless nerdctl: this service uses `network_mode: host`. The LLM host coordinate differs by
+    # platform and is set via `make` (platform-aware OLLAMA_HOST default): Linux -> 127.0.0.1:11434,
+    # macOS/colima -> host.lima.internal:11434 (127.0.0.1 is Connection-refused there, verified).
+    # This compose literal is only a direct-invocation fallback; `host.docker.internal` does NOT
+    # resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:
       - host.docker.internal:host-gateway
-    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/unit/ -vv -s --tb=long ${TEST_FILTER}\""]
+    command: ["bash", "-c", "cd /app && eval \"python3 -B -m pytest tests/unit/ -vv -s --tb=long ${TEST_FILTER}\""]
     network_mode: host
 
   integration-test-agents:
@@ -77,30 +79,33 @@ services:
     volumes:
       - ../agents/agentics/src:/app/src
       - ../agents/agentics/tests:/app/tests
-      - ..:/app
       - ..:/project
       - ../logs:/app/logs
       - ../agents/agentics/.cache/huggingface:/tmp/.cache/huggingface
+      - ../agents/agentics/.cache/tmp:/tmp  # Cache volume for temp files to avoid /tmp space issues
+      # NOTE: do NOT mount the whole repo over /app — that would shadow /app/node_modules
+      # (which contains openspec from the image build). Use ..:/project for the repo root
+      # and only mount specific paths under /app/src, /app/tests, etc.
     environment:
-      - PROJECT_ROOT=/app
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
-      - OLLAMA_HOST=http://127.0.0.1:11434
-      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
-      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-sorc/qwen3.5-claude-4.6-opus:9b}
+      - PROJECT_ROOT=/project
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://127.0.0.1:11434}
+      - OLLAMA_REASONING_MODEL=${OLLAMA_REASONING_MODEL:-qwen3.6-35b-a3b}
+      - OLLAMA_CODE_MODEL=${OLLAMA_CODE_MODEL:-qwen3.6-35b-a3b}
       - TEST_ISSUE_URL=${TEST_ISSUE_URL:-https://github.com/andyholst/obsidian-timestamp-utility}
-      - PYTHONPATH=/app
+      - PYTHONPATH=/app/src:/app/tests
       - TEST_FILTER=${TEST_FILTER}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
       - HOST_UID=${HOST_UID:-1000}
       - HOST_GID=${HOST_GID:-1000}
       - PYTHONDONTWRITEBYTECODE=1
-    # Rootless nerdctl: this service uses `network_mode: host`, so the container shares the
-    # host loopback. Ollama is bound to 127.0.0.1:11434 on the host, reachable at
-    # http://127.0.0.1:11434 (verified: 200 from inside the container). `host.docker.internal`
-    # does NOT resolve under rootless nerdctl and must NOT be used (returns 000).
+    # Rootless nerdctl: this service uses `network_mode: host`. The LLM host coordinate differs by
+    # platform and is set via `make` (platform-aware OLLAMA_HOST default): Linux -> 127.0.0.1:11434,
+    # macOS/colima -> host.lima.internal:11434 (127.0.0.1 is Connection-refused there, verified).
+    # This compose literal is only a direct-invocation fallback; `host.docker.internal` does NOT
+    # resolve under rootless nerdctl and must NOT be used (returns 000).
     extra_hosts:
       - host.docker.internal:host-gateway
-    command: ["bash", "-c", "cd /app && eval \"python -m pytest tests/integration/ -vv -s --tb=long ${TEST_FILTER}\""]
+    command: ["bash", "-c", "cd /app && eval \"python3 -B -m pytest tests/integration/ -vv -s --tb=long ${TEST_FILTER}\""]
     network_mode: host
 
 # Rootless nerdctl CNI fix: pin a UNIQUE default-network subnet per compose file so
@@ -115,3 +120,6 @@ networks:
     ipam:
       config:
         - subnet: 10.89.0.0/24
+
+volumes:
+  agentics-node-modules:

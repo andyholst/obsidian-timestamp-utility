@@ -110,17 +110,23 @@ async def create_composable_workflow(
     # Use provided overrides or defaults
     ollama_reasoning = llm_reasoning or (
         _service_manager.ollama_reasoning.client
-        if _service_manager and hasattr(_service_manager, "ollama_reasoning") and _service_manager.ollama_reasoning
+        if _service_manager
+        and hasattr(_service_manager, "ollama_reasoning")
+        and _service_manager.ollama_reasoning
         else None
     )
     ollama_code = llm_code or (
         _service_manager.ollama_code.client
-        if _service_manager and hasattr(_service_manager, "ollama_code") and _service_manager.ollama_code
+        if _service_manager
+        and hasattr(_service_manager, "ollama_code")
+        and _service_manager.ollama_code
         else None
     )
     github_client = github_client or (
         _service_manager.github._client
-        if _service_manager and hasattr(_service_manager, "github") and _service_manager.github
+        if _service_manager
+        and hasattr(_service_manager, "github")
+        and _service_manager.github
         else None
     )
 
@@ -214,7 +220,10 @@ class AgenticsApp:
                     if self.service_manager.ollama_code
                     else None
                 )
-                if ollama_reasoning_client is not None and ollama_code_client is not None:
+                if (
+                    ollama_reasoning_client is not None
+                    and ollama_code_client is not None
+                ):
                     self.composable_workflows = await create_composable_workflow(
                         github_client=self.service_manager.github._client
                         if self.service_manager.github
@@ -308,7 +317,9 @@ class AgenticsApp:
             await self.initialize()
 
         if not validate_github_url(issue_url) and not is_local_change_ref(issue_url):
-            raise ValidationError(f"Invalid GitHub issue URL or OpenSpec change ref: {issue_url}")
+            raise ValidationError(
+                f"Invalid GitHub issue URL or OpenSpec change ref: {issue_url}"
+            )
 
         if self.composable_workflows is None:
             raise AgenticsError(
@@ -357,7 +368,11 @@ class AgenticsApp:
                     valid_urls.append(url)
                 else:
                     invalid_results.append(
-                        {"issue_url": url, "success": False, "error": f"Invalid GitHub issue URL: {url}"}
+                        {
+                            "issue_url": url,
+                            "success": False,
+                            "error": f"Invalid GitHub issue URL: {url}",
+                        }
                     )
 
             result = await self._process_batch_parallel(valid_urls)
@@ -416,6 +431,7 @@ class AgenticsApp:
 
 # Main execution
 if __name__ == "__main__":
+
     async def main():
         """Main async execution function.
 
@@ -446,6 +462,17 @@ if __name__ == "__main__":
             result = await app_instance.process_issue(issue_url)
             log_info(__name__, "Processing completed successfully")
             print(f"Result keys: {list(result.keys())}")
+            # The workflow may return success:false/error WITHOUT raising (e.g. an
+            # LLM connection/circuit-breaker failure inside process_issue). Surface
+            # that as a non-zero exit so a failed generation is never silently
+            # reported as a successful rc-0 run (would leave src/main.ts at baseline).
+            if result.get("success") is False or result.get("error"):
+                print(
+                    f"Error: pipeline reported failure: {result.get('error', 'unknown')} "
+                    f"({result.get('error_type', '')})",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             if result.get("generated_code"):
                 print(f"Generated code length: {len(result['generated_code'])}")
             if result.get("generated_tests"):

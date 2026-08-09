@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import Optional, Dict, Any
 
 
 _MODAL_RE = re.compile(r"class\s+\w*Modal\b.*?extends\s+obsidian\.Modal", re.DOTALL)
@@ -51,6 +52,7 @@ def _repo_root() -> str:
     except Exception:
         pass
     # (2) probe walk-up + well-known container mounts for a dir containing openspec/changes
+    #     AND src/main.ts (prefer the unshadowed repo root, e.g. /project).
     candidates = [here]
     cur = here
     for _ in range(8):
@@ -60,9 +62,14 @@ def _repo_root() -> str:
         candidates.append(parent)
         cur = parent
     candidates += ["/project", "/app", os.getcwd()]
+    best = None
     for c in candidates:
         if c and os.path.isdir(os.path.join(c, "openspec", "changes")):
-            return c
+            if os.path.isfile(os.path.join(c, "src", "main.ts")):
+                return c  # exact match: unshadowed repo root with the TS contract file
+            best = best or c  # keep an openspec/changes match as fallback
+    if best:
+        return best
     # (3) legacy fallback
     return os.path.normpath(os.path.join(here, "..", "..", "..", ".."))
 
@@ -92,10 +99,41 @@ def make_seeded_project_root(prefix: str = "test_project_") -> str:
     os.makedirs(os.path.join(project_dir, "src"), exist_ok=True)
     if os.path.isdir(real_src):
         shutil.copytree(real_src, os.path.join(project_dir, "src"), dirs_exist_ok=True)
-    for fn in ("package.json", "tsconfig.json", "jest.config.js", "manifest.json"):
+    # Copy the build-config files that actually exist. NOTE: package.json declares
+    # "type": "module", so the repo's jest config lives in jest.config.cjs (a .js
+    # config would be loaded as ESM and fail). Copy whichever jest config file is
+    # present so the seeded project's jest phase uses ts-jest instead of falling
+    # back to babel-jest (which cannot parse TS type annotations and runs 0 tests,
+    # tripping PostTestRunner's "test count must grow" guard).
+    for fn in (
+        "package.json",
+        "tsconfig.json",
+        "jest.config.cjs",
+        "jest.config.js",
+        "jest.config.mjs",
+        "manifest.json",
+    ):
         src_f = os.path.join(root, fn)
         if os.path.isfile(src_f):
             shutil.copy2(src_f, os.path.join(project_dir, fn))
+
+    # The temp project has no node_modules, so npm test cannot resolve ts-jest and
+    # jest silently falls back to babel-jest (which cannot parse TS type annotations
+    # and runs 0 tests -> PostTestRunner's "test count must grow" guard trips,
+    # TestRecoveryNeeded -> slow retry loop that blows the integration time budget).
+    # The agentics/unit-test-agents image bakes all devDeps (jest/ts-jest/typescript/
+    # @rollup/plugin-*) into /app/node_modules via Dockerfile `npm install
+    # --production=false`. Symlink it in so the pipeline jest phase sees a real,
+    # Linux-native node_modules without needing a (failing) `npm install`.
+    baked_nm = "/app/node_modules"
+    if os.path.isdir(baked_nm):
+        nm_dst = os.path.join(project_dir, "node_modules")
+        if not os.path.exists(nm_dst):
+            try:
+                os.symlink(baked_nm, nm_dst)
+            except OSError:
+                # Symlinks unavailable (e.g. some bind mounts) -> copy a few dirs.
+                shutil.copytree(baked_nm, nm_dst, dirs_exist_ok=True, symlinks=True)
     return project_dir
 
 
@@ -111,7 +149,7 @@ def plugin_ts_tests_present(project_root: str) -> bool:
     )
 
 
-def run_pipeline_isolated(change: str, issue_url: str | None = None) -> dict:
+def run_pipeline_isolated(change: str, issue_url: Optional[str] = None) -> dict:
     """Run the agentic pipeline in a SUBPROCESS into an isolated temp dir.
 
     Returns a dict with keys:
@@ -128,12 +166,53 @@ def run_pipeline_isolated(change: str, issue_url: str | None = None) -> dict:
         raise RuntimeError("OLLAMA_HOST not set -- isolated pipeline run needs a real Ollama")
 
     root = _repo_root()
-    real_src = os.path.join(root, "src")
     project_dir = tempfile.mkdtemp(prefix=f"e2e_iso_{change}_")
     os.makedirs(os.path.join(project_dir, "src"), exist_ok=True)
-    if os.path.isdir(real_src):
-        shutil.copytree(real_src, os.path.join(project_dir, "src"), dirs_exist_ok=True)
-    for fn in ("package.json", "tsconfig.json", "jest.config.js", "manifest.json"):
+    # Copy the COMMITTED baseline (git HEAD) so the integrator starts from a clean state
+    # (B5). Copying the working tree would pollute the run with previous generations.
+    try:
+        head_src = subprocess.run(
+            ["git", "-c", "safe.directory=*", "-C", root, "show", "HEAD:src/main.ts"],
+            capture_output=True, text=True,
+            env={**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"},
+        )
+        if head_src.returncode == 0 and head_src.stdout.strip():
+            with open(os.path.join(project_dir, "src", "main.ts"), "w", encoding="utf-8") as f:
+                f.write(head_src.stdout)
+        else:
+            # Fallback: copy working tree if git read fails
+            real_src = os.path.join(root, "src")
+            if os.path.isdir(real_src):
+                shutil.copytree(real_src, os.path.join(project_dir, "src"), dirs_exist_ok=True)
+    except Exception:
+        real_src = os.path.join(root, "src")
+        if os.path.isdir(real_src):
+            shutil.copytree(real_src, os.path.join(project_dir, "src"), dirs_exist_ok=True)
+    # Also copy the committed test baseline if available
+    try:
+        head_test = subprocess.run(
+            ["git", "-c", "safe.directory=*", "-C", root, "show", "HEAD:src/__tests__/main.test.ts"],
+            capture_output=True, text=True,
+            env={**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"},
+        )
+        if head_test.returncode == 0 and head_test.stdout.strip():
+            os.makedirs(os.path.join(project_dir, "src", "__tests__"), exist_ok=True)
+            with open(os.path.join(project_dir, "src", "__tests__", "main.test.ts"), "w", encoding="utf-8") as f:
+                f.write(head_test.stdout)
+    except Exception:
+        pass
+    # Copy the build-config files that actually exist, including the jest config
+    # (jest.config.cjs here, since package.json is type:module). Without it the
+    # pipeline's jest phase falls back to babel-jest, can't parse TS type
+    # annotations, runs 0 tests, and PostTestRunner raises "test count did not grow".
+    for fn in (
+        "package.json",
+        "tsconfig.json",
+        "jest.config.cjs",
+        "jest.config.js",
+        "jest.config.mjs",
+        "manifest.json",
+    ):
         src_f = os.path.join(root, fn)
         if os.path.isfile(src_f):
             shutil.copy2(src_f, os.path.join(project_dir, fn))
@@ -161,6 +240,13 @@ def run_pipeline_isolated(change: str, issue_url: str | None = None) -> dict:
                 dirs_exist_ok=True,
             )
 
+    # Make the temp dir a git repo so _assemble_contract_features can read HEAD:src/main.ts
+    # as the committed baseline (B5). Without this, the integrator falls back to the
+    # potentially-polluted existing_content.
+    subprocess.run(["git", "init"], cwd=project_dir, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=project_dir, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "baseline"], cwd=project_dir, capture_output=True)
+
     agentics_src = os.path.normpath(
         os.path.join(_repo_root(), "agents", "agentics", "src")
     )
@@ -176,6 +262,8 @@ def run_pipeline_isolated(change: str, issue_url: str | None = None) -> dict:
 
     target = issue_url or f"openspec:{change}"
 
+    # Use -m src.agentics which will execute __main__.py in the src package
+    # This resolves relative imports correctly (from .config import ...)
     proc = subprocess.run(
         [sys.executable, "-m", "src.agentics", target],
         cwd=agentics_root, capture_output=True, text=True, env=env, timeout=900,

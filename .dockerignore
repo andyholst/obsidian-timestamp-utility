@@ -45,7 +45,6 @@ logs/
 .env.*.local
 
 # Config files not needed for build
-jest.config.cjs
 rollup.config.js
 tsconfig.json
 manifest.json

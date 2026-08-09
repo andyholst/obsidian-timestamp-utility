@@ -38,20 +38,24 @@ class LLMConfig:
 class AgenticsConfig(BaseModel):
     """Centralized configuration for the agentics application."""
 
-    # GitHub configuration
+    # GitHub configuration. The token is OPTIONAL: GitHub public-repository reads
+    # are token-less (per AGENTS.md), so the pipeline runs fine without GITHUB_TOKEN.
+    # When set, it is passed to the GitHub client for authenticated (higher
+    # rate-limit) access; when absent, services.py falls back to unauthenticated
+    # public reads and simply skips constructing a GitHub client.
     github_token: Optional[str] = Field(
         default_factory=lambda: os.getenv("GITHUB_TOKEN")
     )
 
-    # Ollama configuration
+    # Ollama configuration (kept for env compatibility; now targets llama.cpp by default)
     ollama_host: str = Field(
         default_factory=lambda: os.getenv("OLLAMA_HOST", "http://localhost:11434")
     )
     ollama_reasoning_model: str = Field(
-        default_factory=lambda: os.getenv("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+        default_factory=lambda: os.getenv("OLLAMA_REASONING_MODEL", "qwen3.6-35b-a3b")
     )
     ollama_code_model: str = Field(
-        default_factory=lambda: os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+        default_factory=lambda: os.getenv("OLLAMA_CODE_MODEL", "qwen3.6-35b-a3b")
     )
 
     # Circuit breaker configuration
@@ -72,10 +76,14 @@ class AgenticsConfig(BaseModel):
 
     @field_validator("github_token")
     @classmethod
-    def validate_github_token(cls, v: Optional[str]) -> str:
-        if v is None or str(v).strip() == "":
-            raise ValueError("GITHUB_TOKEN must be a non-empty string")
-        # Allow placeholder tokens for testing (e.g. "***" or "test_token")
+    def validate_github_token(cls, v: Optional[str]) -> Optional[str]:
+        # Optional: a missing/empty token is allowed (GitHub public reads are
+        # token-less). Only fail on a non-string value. Normalize empty-string
+        # ("") to None so empty == unset (consistent with the optional design).
+        if v is not None and not isinstance(v, str):
+            raise ValueError("github_token must be a string when provided")
+        if isinstance(v, str):
+            v = v.strip() or None
         return v
 
     def get_reasoning_llm_config(self) -> LLMConfig:
@@ -124,10 +132,9 @@ def init_config(config: Optional[AgenticsConfig] = None) -> AgenticsConfig:
     if config is None:
         config = AgenticsConfig()
     logging.debug(f"init_config: github_token = {repr(config.github_token)}")
-    if config.github_token is None or config.github_token == "":
-        raise ConfigValidationError(
-            "GITHUB_TOKEN environment variable is required and cannot be empty"
-        )
+    # GITHUB_TOKEN is OPTIONAL (GitHub public reads are token-less per AGENTS.md).
+    # No hard requirement here; when absent, services.py skips constructing the
+    # GitHub client and runs unauthenticated public-read access.
     _config = config
 
     # Setup logging with the configured level

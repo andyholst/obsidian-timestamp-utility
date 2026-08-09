@@ -5,7 +5,7 @@ from typing import Optional, Callable, Dict, Any
 from abc import ABC, abstractmethod
 
 from github import Github, Auth
-from langchain_ollama import OllamaLLM
+from langchain_openai import OpenAI
 from langchain.tools import Tool
 
 from .config import LLMConfig, get_config
@@ -44,31 +44,29 @@ class OllamaClient(ServiceClient):
     def __init__(self, config: LLMConfig):
         super().__init__("ollama")
         self.config = config
-        self._client: Optional[OllamaLLM] = None
+        self._client: Optional[OpenAI] = None
 
     def _initialize_client(self) -> None:
-        """Initialize the Ollama client."""
+        """Initialize the LLM client."""
         try:
-            self._client = OllamaLLM(
+            # llama.cpp serves OpenAI-compatible API at /v1, needs api_key (dummy is fine)
+            base_url = self.config.base_url
+            if not base_url.endswith("/v1"):
+                base_url = base_url.rstrip("/") + "/v1"
+            self._client = OpenAI(
                 model=self.config.model,
-                base_url=self.config.base_url,
+                base_url=base_url,
+                api_key="not-needed",
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
-                top_k=self.config.top_k,
-                min_p=self.config.min_p,
                 request_timeout=self.config.request_timeout,
-                extra_params={
-                    "presence_penalty": self.config.presence_penalty,
-                    "num_ctx": self.config.num_ctx,
-                    "num_predict": self.config.num_predict,
-                },
             )
         except Exception as e:
-            log_info(__name__, f"Failed to initialize Ollama client: {str(e)}")
+            log_info(__name__, f"Failed to initialize LLM client: {str(e)}")
             self._client = None
 
     @property
-    def client(self) -> Optional[OllamaLLM]:
+    def client(self) -> Optional[OpenAI]:
         """Lazily initialize and return the Ollama client."""
         if self._client is None:
             self._initialize_client()
@@ -175,7 +173,6 @@ class GitHubClient(ServiceClient):
             return self._client.get_repo(repo_name)
 
         return _get_repo()
-
 
 
 class ServiceManager:

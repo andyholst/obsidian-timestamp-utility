@@ -174,7 +174,9 @@ class PreTestRunnerAgent(BaseAgent):
         try:
             run_install()
         except Exception as e:
-            self.monitor.warning(f"Install command failed after retries: {e}. Continuing without install.")
+            self.monitor.warning(
+                f"Install command failed after retries: {e}. Continuing without install."
+            )
 
         self.monitor.info(f"Running TypeScript typecheck in {self.project_root}")
         try:
@@ -182,13 +184,17 @@ class PreTestRunnerAgent(BaseAgent):
                 "typescript_typecheck_tool", {"cwd": self.project_root}
             )
             if "error" in tsc_result.lower():
-                self.monitor.warning(f"TypeScript typecheck found errors: {tsc_result[:200]}...")
+                self.monitor.warning(
+                    f"TypeScript typecheck found errors: {tsc_result[:200]}..."
+                )
                 # Don't fail on typecheck errors - the code may still be valid
                 # Just log and continue
             else:
                 self.monitor.info("TypeScript typecheck passed.")
         except Exception as e:
-            self.monitor.warning(f"TypeScript typecheck failed: {e}. Continuing anyway.")
+            self.monitor.warning(
+                f"TypeScript typecheck failed: {e}. Continuing anyway."
+            )
         self.monitor.info("tsc execution completed, proceeding to npm test")
         log_info(
             self.name,

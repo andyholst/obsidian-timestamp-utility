@@ -24,8 +24,12 @@ class StateToCodeGenerationStateAdapter(Runnable[State, CodeGenerationState]):
 
         # Build CodeGenerationState
         # Support both flat State dict (requirements at top level) and nested (inside refined_ticket)
-        requirements = input.get("requirements") or refined_ticket.get("requirements", [])
-        acceptance_criteria = input.get("acceptance_criteria") or refined_ticket.get("acceptance_criteria", [])
+        requirements = input.get("requirements") or refined_ticket.get(
+            "requirements", []
+        )
+        acceptance_criteria = input.get("acceptance_criteria") or refined_ticket.get(
+            "acceptance_criteria", []
+        )
         return CodeGenerationState(
             issue_url=issue_url,
             ticket_content=ticket_content,

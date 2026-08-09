@@ -21,6 +21,8 @@ paths = [
   '''(?i).*/dist/.*''',
   '''(?i).*/build/.*''',
   '''(?i).*backups/.*''',
+  # Environment files that contain intentional secrets (GitHub PATs, API keys, etc.).
+  '''(?i).*\.env.*''',
   # Test fixtures that deliberately contain example/placeholder secrets.
   '''(?i)tests/.*secret.*''',
   '''(?i).*fixtures?/.*''',
@@ -38,7 +40,7 @@ regexes = [
 #
 # The built-in gitleaks ruleset focuses on high-entropy / well-known secret
 # formats (AWS keys, Slack tokens, RSA keys, ...). It does NOT flag a low-entropy
-# credential assignment like `PASSWORD='fsdfsdf#"!¤!"'` or `SECRET=abc123`, which is
+# credential assignment like `PASSWORD='fsdfsdf#\"!¤!\"'` or `SECRET=abc123`, which is
 # exactly the kind of password file this repo must catch. Add a conservative rule so
 # the loop secret-scan fails closed on any `KEYWORD = <value>` / `KEYWORD: <value>`
 # assignment with a non-empty value (excluding obvious variable references / empty
@@ -46,7 +48,7 @@ regexes = [
 # working tree, not just committed history.
 [[rules]]
 id = "repo-password-assignment"
-description = "Repo-local: detect explicit password/secret/token assignments (catches low-entropy values the default ruleset misses, e.g. PASSWORD='fsdfsdf#\"!¤!\"')."
+description = "Repo-local: detect explicit password/secret/token assignments (catches low-entropy values the default ruleset misses, e.g. PASSWORD='fsdfsdf#\"!¤!\"').\""
 # Capture the value as the secret. Supports single-quoted, double-quoted, or bare
 # values. RE2 has no lookahead, so the bare-value branch excludes '${' (env-var ref)
 # and '(' (function call) via a negated class. Entropy 0 so even low-entropy

@@ -297,15 +297,18 @@ try {{
                 jest_config = {
                     "preset": "ts-jest",
                     "testEnvironment": "node",
+                    "transform": {"^.+\\\\.tsx?$": "ts-jest"},
                     "collectCoverage": True,
                     "coverageReporters": ["json-summary", "text"],
                     "testTimeout": self.execution_timeout,
                     "setupFilesAfterEnv": [],
                 }
 
-                config_file = os.path.join(temp_dir, "jest.config.js")
+                config_file = os.path.join(temp_dir, "jest.config.cjs")
                 with open(config_file, "w") as f:
-                    f.write(f"module.exports = {json.dumps(jest_config, indent=2)};")
+                    f.write(
+                        f"module.exports = {json.dumps(jest_config, indent=2)};\n"
+                    )
 
                 # Create package.json
                 package_json = {
@@ -325,15 +328,29 @@ try {{
                     json.dump(package_json, f, indent=2)
 
                 # Install dependencies (if npm available)
+                install_ok = True
                 try:
-                    subprocess.run(
+                    res = subprocess.run(
                         ["npm", "install", "--include=dev"],
                         cwd=temp_dir,
                         capture_output=True,
                         timeout=120,
                     )
+                    install_ok = res.returncode == 0 and os.path.isdir(
+                        os.path.join(temp_dir, "node_modules", "ts-jest")
+                    )
                 except Exception:
-                    pass
+                    install_ok = False
+
+                # If ts-jest is not present (offline/install failed), the ts-jest
+                # preset and transform cannot resolve and jest silently falls back to
+                # babel-jest, which cannot strip TS type annotations. Fail loudly
+                # instead of pretending the run is valid.
+                if not install_ok:
+                    print(
+                        f"DEBUG_JEST: ts-jest install failed/could not be resolved in {temp_dir} "
+                        f"(offline env?), bailing out of jest run to avoid a false babel-pass"
+                    )
 
                 # Run Jest
                 result = subprocess.run(

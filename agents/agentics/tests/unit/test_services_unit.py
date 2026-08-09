@@ -138,10 +138,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_initialization_success(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -153,7 +153,7 @@ class TestOllamaClient:
         mock_get_health_monitor.return_value = mock_health_monitor
 
         mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
+        mock_openai_class.return_value = mock_llm_instance
 
         client = OllamaClient(mock_llm_config)
 
@@ -162,27 +162,21 @@ class TestOllamaClient:
         assert client._client is None
         # Accessing the client property triggers initialization
         assert client.client == mock_llm_instance
-        mock_ollama_class.assert_called_once_with(
+        mock_openai_class.assert_called_once_with(
             model="test-model",
-            base_url="http://test.com",
+            base_url="http://test.com/v1",
+            api_key="not-needed",
             temperature=0.7,
             top_p=0.9,
-            top_k=40,
-            min_p=0.0,
             request_timeout=30,
-            extra_params={
-                "presence_penalty": 1.0,
-                "num_ctx": 2048,
-                "num_predict": 512,
-            },
         )
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_initialization_failure(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -193,7 +187,7 @@ class TestOllamaClient:
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
 
-        mock_ollama_class.side_effect = Exception("Init failed")
+        mock_openai_class.side_effect = Exception("Init failed")
 
         client = OllamaClient(mock_llm_config)
 
@@ -201,10 +195,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_health_check_success(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -217,7 +211,7 @@ class TestOllamaClient:
 
         mock_llm_instance = MagicMock()
         mock_llm_instance.invoke.return_value = "Hello response"
-        mock_ollama_class.return_value = mock_llm_instance
+        mock_openai_class.return_value = mock_llm_instance
 
         client = OllamaClient(mock_llm_config)
 
@@ -234,10 +228,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_health_check_no_client(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -248,7 +242,7 @@ class TestOllamaClient:
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
 
-        mock_ollama_class.side_effect = Exception("Init failed")
+        mock_openai_class.side_effect = Exception("Init failed")
 
         client = OllamaClient(mock_llm_config)
 
@@ -258,10 +252,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_health_check_exception(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -273,7 +267,7 @@ class TestOllamaClient:
         mock_get_health_monitor.return_value = mock_health_monitor
 
         mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
+        mock_openai_class.return_value = mock_llm_instance
 
         client = OllamaClient(mock_llm_config)
 
@@ -288,10 +282,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_is_available(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -303,7 +297,7 @@ class TestOllamaClient:
         mock_get_health_monitor.return_value = mock_health_monitor
 
         mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
+        mock_openai_class.return_value = mock_llm_instance
 
         client = OllamaClient(mock_llm_config)
 
@@ -314,10 +308,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_is_available_no_client(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -328,7 +322,7 @@ class TestOllamaClient:
         mock_get_circuit_breaker.return_value = mock_circuit_breaker
         mock_get_health_monitor.return_value = mock_health_monitor
 
-        mock_ollama_class.side_effect = Exception("Init failed")
+        mock_openai_class.side_effect = Exception("Init failed")
 
         client = OllamaClient(mock_llm_config)
 
@@ -338,10 +332,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_invoke_success(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -354,7 +348,7 @@ class TestOllamaClient:
 
         mock_llm_instance = MagicMock()
         mock_llm_instance.invoke.return_value = "LLM response"
-        mock_ollama_class.return_value = mock_llm_instance
+        mock_openai_class.return_value = mock_llm_instance
 
         client = OllamaClient(mock_llm_config)
 
@@ -365,10 +359,10 @@ class TestOllamaClient:
 
     @patch("src.services.get_circuit_breaker")
     @patch("src.services.get_health_monitor")
-    @patch("src.services.OllamaLLM")
+    @patch("src.services.OpenAI")
     def test_ollama_client_invoke_not_available(
         self,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_get_circuit_breaker,
         mock_llm_config,
@@ -381,7 +375,7 @@ class TestOllamaClient:
         mock_health_monitor.is_service_healthy.return_value = False
 
         mock_llm_instance = MagicMock()
-        mock_ollama_class.return_value = mock_llm_instance
+        mock_openai_class.return_value = mock_llm_instance
 
         client = OllamaClient(mock_llm_config)
 
@@ -669,7 +663,7 @@ class TestServiceManager:
     def test_service_manager_initialize_services_no_github_token(
         self,
         mock_github_class,
-        mock_ollama_class,
+        mock_openai_class,
         mock_get_health_monitor,
         mock_health_monitor,
         mock_llm_config,
@@ -685,7 +679,7 @@ class TestServiceManager:
         mock_ollama_reasoning = MagicMock()
         mock_ollama_code = MagicMock()
 
-        mock_ollama_class.side_effect = [mock_ollama_reasoning, mock_ollama_code]
+        mock_openai_class.side_effect = [mock_ollama_reasoning, mock_ollama_code]
 
         manager = ServiceManager(config)
 

@@ -76,9 +76,9 @@ class TestAgenticsAppIntegration:
             github_token=os.environ.get("GITHUB_TOKEN", "test_token"),
             ollama_host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
             ollama_reasoning_model=os.environ.get(
-                "OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"
+                "OLLAMA_REASONING_MODEL", "qwen3.6-35b-a3b"
             ),
-            ollama_code_model=os.environ.get("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b"),
+            ollama_code_model=os.environ.get("OLLAMA_CODE_MODEL", "qwen3.6-35b-a3b"),
         )
 
         app = AgenticsApp(config)

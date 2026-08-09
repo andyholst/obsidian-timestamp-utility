@@ -40,7 +40,9 @@ class DependencyInstallerAgent(BaseAgent):
         if isinstance(refined_ticket, dict):
             npm_packages = refined_ticket.get("npm_packages", [])
         if not npm_packages:
-            npm_packages = getattr(state, "npm_packages", []) or state.get("npm_packages", [])
+            npm_packages = getattr(state, "npm_packages", []) or state.get(
+                "npm_packages", []
+            )
         if not npm_packages:
             self.monitor.info("No npm_packages found in refined_ticket")
             return state
@@ -58,7 +60,8 @@ class DependencyInstallerAgent(BaseAgent):
                 continue
             # Validate package name (only allow alphanumeric, hyphens, @, /)
             import re
-            if re.match(r'^[@a-zA-Z0-9][a-zA-Z0-9/._-]*$', pkg_name):
+
+            if re.match(r"^[@a-zA-Z0-9][a-zA-Z0-9/._-]*$", pkg_name):
                 pkgs.append(pkg_name)
             else:
                 self.monitor.warning("invalid_package_name", {"pkg": pkg_name})

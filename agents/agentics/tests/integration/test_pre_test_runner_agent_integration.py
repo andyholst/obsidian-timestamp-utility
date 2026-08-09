@@ -2,9 +2,21 @@ import pytest
 import os
 from src.pre_test_runner_agent import PreTestRunnerAgent
 from src.state import State
+from _e2e_helpers import make_seeded_project_root, plugin_ts_tests_present
 
-# Path to the real project directory mounted in the test environment
-REAL_PROJECT_ROOT = os.getenv("PROJECT_ROOT", "/home/asimov/repository/git/obsidian-timestamp-utility")
+# Seed an ISOLATED temp PROJECT_ROOT with the real plugin files (src/, package.json,
+# jest.config.cjs, + a node_modules symlink) so PreTestRunner runs npm test against the
+# seeded temp dir — NOT the real repo mounted at /project. This is required because
+# CodeIntegratorAgent writes generated TS back into PROJECT_ROOT on construction; if the
+# seeded temp dir were a real checkout (like /project), a full-pipeline integration run
+# would overwrite the repo's actual src/main.ts with the generated plugin (pollution
+# incident: loop-ts-floor addCommand dropped 9 -> 0 after loop-integration).
+SEEDED_PROJECT_ROOT = make_seeded_project_root(prefix="pre_test_project_")
+
+# In the integration container /app/src is overmounted by the Python agentics source and
+# /project is the real repo mount; seed the TS scaffold is only reachable when the repo
+# tree is available to make_seeded_project_root. Skip cleanly (B17) when it is absent.
+HAS_TS_TESTS = plugin_ts_tests_present(SEEDED_PROJECT_ROOT)
 
 
 @pytest.fixture
@@ -15,16 +27,21 @@ def temp_empty_project(tmp_path):
     return str(project_dir)
 
 
+@pytest.mark.skipif(
+    not HAS_TS_TESTS,
+    reason="plugin TypeScript test scaffold (src/__tests__/main.test.ts) not reachable "
+    "for seeding; PreTestRunner would run npm test against a non-seeded dir",
+)
 def test_pre_test_runner_agent_success():
     """
     Test that PreTestRunnerAgent successfully runs npm install and npm test
-    in the real /project directory, which is mounted in the test environment.
-    Assumes /project contains a valid Node.js project with package.json and tests.
+    in an ISOLATED seeded temp project directory (not the real /project mount),
+    so the run never writes into the repo's actual src/.
     """
-    # Given: A PreTestRunnerAgent instance using the real /project directory
+    # Given: A PreTestRunnerAgent instance using the seeded temp project directory
     agent = PreTestRunnerAgent()
-    agent.project_root = REAL_PROJECT_ROOT  # Use the real /project directory
-    os.environ["PROJECT_ROOT"] = REAL_PROJECT_ROOT
+    agent.project_root = SEEDED_PROJECT_ROOT  # Isolated seeded temp dir
+    os.environ["PROJECT_ROOT"] = SEEDED_PROJECT_ROOT
     state = State()
 
     # When: Processing the state with real npm commands
@@ -70,8 +87,7 @@ def test_strip_ansi_codes():
     """
     # Given: Text with and without ANSI codes
     agent = PreTestRunnerAgent()
-    os.environ["PROJECT_ROOT"] = "/project"
-    text_with_ansi = "\033[31mRed text\033[0m"
+    text_with_ansi = "\x1b[31mRed text\x1b[0m"
     plain_text = "Plain text"
 
     # When: Stripping ANSI codes

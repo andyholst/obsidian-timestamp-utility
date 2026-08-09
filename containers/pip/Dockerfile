@@ -1,7 +1,7 @@
 # pip-requirements resolver container (pip-compile).
 FROM python:3.10-slim
 
-RUN pip install pip-tools
+RUN pip install pip-tools typing_extensions
 
 WORKDIR /app
 

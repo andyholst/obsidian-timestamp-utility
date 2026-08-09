@@ -17,22 +17,17 @@ annotated-types==0.7.0
 anyio==4.12.1
     # via
     #   httpx
-    #   mcp
-    #   sse-starlette
-    #   starlette
+    #   openai
 async-timeout==4.0.3
     # via
     #   aiohttp
     #   langchain
 attrs==25.4.0
-    # via
-    #   aiohttp
-    #   jsonschema
-    #   referencing
-backports-asyncio-runner==1.2.0
-    # via pytest-asyncio
+    # via aiohttp
 black==26.1.0
     # via -r docker-files/pip-requirements/requirements.in
+build==1.5.0
+    # via pip-tools
 certifi==2026.1.4
     # via
     #   httpcore
@@ -47,15 +42,13 @@ charset-normalizer==3.4.4
 click==8.3.1
     # via
     #   black
-    #   uvicorn
+    #   pip-tools
 cryptography==46.0.4
     # via pyjwt
-cuda-bindings==12.9.4
-    # via torch
-cuda-pathfinder==1.3.3
-    # via cuda-bindings
 dataclasses-json==0.6.7
     # via langchain-community
+distro==1.9.0
+    # via openai
 exceptiongroup==1.3.1
     # via
     #   anyio
@@ -76,9 +69,7 @@ fsspec==2026.2.0
 greenlet==3.3.1
     # via sqlalchemy
 h11==0.16.0
-    # via
-    #   httpcore
-    #   uvicorn
+    # via httpcore
 hf-xet==1.2.0
     # via huggingface-hub
 httpcore==1.0.9
@@ -87,12 +78,10 @@ httpx==0.28.1
     # via
     #   langgraph-sdk
     #   langsmith
-    #   mcp
     #   ollama
+    #   openai
 httpx-sse==0.4.3
-    # via
-    #   langchain-community
-    #   mcp
+    # via langchain-community
 huggingface-hub==0.36.2
     # via
     #   sentence-transformers
@@ -108,16 +97,14 @@ iniconfig==2.3.0
     # via pytest
 jinja2==3.1.6
     # via torch
+jiter==0.16.0
+    # via openai
 joblib==1.5.3
     # via scikit-learn
 jsonpatch==1.33
     # via langchain-core
 jsonpointer==3.0.0
     # via jsonpatch
-jsonschema==4.26.0
-    # via mcp
-jsonschema-specifications==2025.9.1
-    # via jsonschema
 langchain==0.3.27
     # via langchain-community
 langchain-community==0.3.31
@@ -128,11 +115,14 @@ langchain-core==0.3.83
     #   langchain
     #   langchain-community
     #   langchain-ollama
+    #   langchain-openai
     #   langchain-text-splitters
     #   langgraph
     #   langgraph-checkpoint
     #   langgraph-prebuilt
 langchain-ollama==0.3.10
+    # via -r docker-files/pip-requirements/requirements.in
+langchain-openai==0.3.35
     # via -r docker-files/pip-requirements/requirements.in
 langchain-text-splitters==0.3.11
     # via langchain
@@ -155,8 +145,6 @@ markupsafe==3.0.3
     # via jinja2
 marshmallow==3.26.2
     # via dataclasses-json
-mcp==1.26.0
-    # via -r docker-files/pip-requirements/requirements.in
 mpmath==1.3.0
     # via sympy
 multidict==6.7.1
@@ -175,47 +163,10 @@ numpy==2.2.6
     #   scikit-learn
     #   scipy
     #   transformers
-nvidia-cublas-cu12==12.8.4.1
-    # via
-    #   nvidia-cudnn-cu12
-    #   nvidia-cusolver-cu12
-    #   torch
-nvidia-cuda-cupti-cu12==12.8.90
-    # via torch
-nvidia-cuda-nvrtc-cu12==12.8.93
-    # via torch
-nvidia-cuda-runtime-cu12==12.8.90
-    # via torch
-nvidia-cudnn-cu12==9.10.2.21
-    # via torch
-nvidia-cufft-cu12==11.3.3.83
-    # via torch
-nvidia-cufile-cu12==1.13.1.3
-    # via torch
-nvidia-curand-cu12==10.3.9.90
-    # via torch
-nvidia-cusolver-cu12==11.7.3.90
-    # via torch
-nvidia-cusparse-cu12==12.5.8.93
-    # via
-    #   nvidia-cusolver-cu12
-    #   torch
-nvidia-cusparselt-cu12==0.7.1
-    # via torch
-nvidia-nccl-cu12==2.27.5
-    # via torch
-nvidia-nvjitlink-cu12==12.8.93
-    # via
-    #   nvidia-cufft-cu12
-    #   nvidia-cusolver-cu12
-    #   nvidia-cusparse-cu12
-    #   torch
-nvidia-nvshmem-cu12==3.4.5
-    # via torch
-nvidia-nvtx-cu12==12.8.90
-    # via torch
 ollama==0.6.1
     # via langchain-ollama
+openai==2.49.0
+    # via langchain-openai
 orjson==3.11.7
     # via
     #   langgraph-sdk
@@ -225,16 +176,20 @@ ormsgpack==1.12.2
 packaging==25.0
     # via
     #   black
+    #   build
     #   huggingface-hub
     #   langchain-core
     #   langsmith
     #   marshmallow
     #   pytest
     #   transformers
+    #   wheel
 pathspec==1.0.4
     # via black
 pillow==12.1.0
     # via sentence-transformers
+pip-tools==7.6.0
+    # via -r docker-files/pip-requirements/requirements.in
 platformdirs==4.5.1
     # via black
 pluggy==1.6.0
@@ -252,38 +207,36 @@ pydantic==2.12.5
     #   langchain-core
     #   langgraph
     #   langsmith
-    #   mcp
     #   ollama
+    #   openai
     #   pydantic-settings
 pydantic-core==2.41.5
     # via pydantic
 pydantic-settings==2.12.0
-    # via
-    #   langchain-community
-    #   mcp
+    # via langchain-community
 pygithub==2.8.1
     # via -r docker-files/pip-requirements/requirements.in
 pygments==2.19.2
     # via pytest
 pyjwt[crypto]==2.11.0
-    # via
-    #   mcp
-    #   pygithub
+    # via pygithub
 pynacl==1.6.2
     # via pygithub
-pytest==9.0.2
+pyproject-hooks==1.2.0
+    # via
+    #   build
+    #   pip-tools
+pytest==8.4.2
     # via
     #   -r docker-files/pip-requirements/requirements.in
     #   pytest-asyncio
     #   pytest-mock
-pytest-asyncio==1.4.0
+pytest-asyncio==0.24.0
     # via -r docker-files/pip-requirements/requirements.in
 pytest-mock==3.15.1
     # via -r docker-files/pip-requirements/requirements.in
 python-dotenv==1.2.1
     # via pydantic-settings
-python-multipart==0.0.22
-    # via mcp
 pytokens==0.4.1
     # via black
 pyyaml==6.0.3
@@ -293,12 +246,10 @@ pyyaml==6.0.3
     #   langchain-community
     #   langchain-core
     #   transformers
-referencing==0.37.0
-    # via
-    #   jsonschema
-    #   jsonschema-specifications
 regex==2026.1.15
-    # via transformers
+    # via
+    #   tiktoken
+    #   transformers
 requests==2.32.5
     # via
     #   huggingface-hub
@@ -307,13 +258,10 @@ requests==2.32.5
     #   langsmith
     #   pygithub
     #   requests-toolbelt
+    #   tiktoken
     #   transformers
 requests-toolbelt==1.0.0
     # via langsmith
-rpds-py==0.30.0
-    # via
-    #   jsonschema
-    #   referencing
 ruff==0.15.0
     # via -r docker-files/pip-requirements/requirements.in
 safetensors==0.7.0
@@ -326,16 +274,12 @@ scipy==1.15.3
     #   sentence-transformers
 sentence-transformers==3.1.1
     # via -r docker-files/pip-requirements/requirements.in
+sniffio==1.3.1
+    # via openai
 sqlalchemy==2.0.46
     # via
     #   langchain
     #   langchain-community
-sse-starlette==3.2.0
-    # via mcp
-starlette==0.52.1
-    # via
-    #   mcp
-    #   sse-starlette
 sympy==1.14.0
     # via torch
 tenacity==9.1.4
@@ -345,25 +289,29 @@ tenacity==9.1.4
     #   langchain-core
 threadpoolctl==3.6.0
     # via scikit-learn
+tiktoken==0.13.0
+    # via langchain-openai
 tokenizers==0.22.2
     # via transformers
 tomli==2.4.0
     # via
     #   black
+    #   build
+    #   pip-tools
     #   pytest
 torch==2.10.0
     # via sentence-transformers
 tqdm==4.67.3
     # via
     #   huggingface-hub
+    #   openai
     #   sentence-transformers
     #   transformers
 transformers==4.57.6
     # via sentence-transformers
-triton==3.6.0
-    # via torch
 typing-extensions==4.15.0
     # via
+    #   -r docker-files/pip-requirements/requirements.in
     #   aiosignal
     #   anyio
     #   black
@@ -371,24 +319,19 @@ typing-extensions==4.15.0
     #   exceptiongroup
     #   huggingface-hub
     #   langchain-core
-    #   mcp
     #   multidict
+    #   openai
     #   pydantic
     #   pydantic-core
     #   pygithub
-    #   pytest-asyncio
-    #   referencing
     #   sqlalchemy
-    #   starlette
     #   torch
     #   typing-inspect
     #   typing-inspection
-    #   uvicorn
 typing-inspect==0.9.0
     # via dataclasses-json
 typing-inspection==0.4.2
     # via
-    #   mcp
     #   pydantic
     #   pydantic-settings
 urllib3==2.6.3
@@ -399,10 +342,10 @@ uuid-utils==0.14.0
     # via
     #   langchain-core
     #   langsmith
-uvicorn==0.40.0
-    # via mcp
 watchdog==6.0.0
     # via -r docker-files/pip-requirements/requirements.in
+wheel==0.47.0
+    # via pip-tools
 xxhash==3.6.0
     # via
     #   langgraph
@@ -411,3 +354,7 @@ yarl==1.22.0
     # via aiohttp
 zstandard==0.25.0
     # via langsmith
+
+# The following packages are considered to be unsafe in a requirements file:
+# pip
+# setuptools

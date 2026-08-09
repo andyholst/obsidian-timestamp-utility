@@ -3,29 +3,35 @@ import time
 from .monitoring import structured_log
 import logging
 from github import Github, Auth
-from langchain_ollama import OllamaLLM
+from langchain_openai import OpenAI
 
-# Environment variables
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+# Environment variables (kept as OLLAMA_* for compatibility with llama.cpp server on port 11434)
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_REASONING_MODEL = os.getenv("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
-OLLAMA_CODE_MODEL = os.getenv("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+OLLAMA_REASONING_MODEL = os.getenv("OLLAMA_REASONING_MODEL", "qwen3.6-35b-a3b")
+OLLAMA_CODE_MODEL = os.getenv("OLLAMA_CODE_MODEL", "qwen3.6-35b-a3b")
 
 monitor = structured_log(__name__)
 
 # GitHub client will be initialized lazily
 github = None
 
-# Initialize Ollama LLM clients
-monitor.info("Initializing Ollama LLM clients")
+# Initialize LLM clients (OpenAI-compatible for llama.cpp)
+monitor.info("Initializing LLM clients (OpenAI-compatible)")
 
 
-class TimedOllamaLLM(OllamaLLM):
-    """Wrapper for OllamaLLM that adds timing logs"""
+def _ensure_v1(url: str) -> str:
+    """Ensure the URL ends with /v1 for OpenAI-compatible endpoints."""
+    url = url.rstrip("/")
+    if not url.endswith("/v1"):
+        url += "/v1"
+    return url
+
+
+class TimedOpenAI(OpenAI):
+    """Wrapper for OpenAI that adds timing logs."""
 
     def __init__(self, *args, model_name="", **kwargs):
         super().__init__(*args, **kwargs)
-        # Store model_name in a way that doesn't conflict with Pydantic
         object.__setattr__(self, "_model_name", model_name)
 
     def invoke(self, *args, **kwargs):
@@ -67,24 +73,20 @@ class TimedOllamaLLM(OllamaLLM):
             raise
 
 
-llm_reasoning = TimedOllamaLLM(
+llm_reasoning = TimedOpenAI(
     model=OLLAMA_REASONING_MODEL,
-    base_url=OLLAMA_HOST,
-    temperature=0.7,  # Lowered to reduce hallucinations
-    top_p=0.7,  # Adjusted for more focused output
-    top_k=20,
-    min_p=0,
+    base_url=_ensure_v1(OLLAMA_HOST),
+    temperature=0.7,
+    top_p=0.7,
+    api_key="not-needed",
     model_name="reasoning",
-    extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
 )
-llm_code = TimedOllamaLLM(
+llm_code = TimedOpenAI(
     model=OLLAMA_CODE_MODEL,
-    base_url=OLLAMA_HOST,
-    temperature=0.7,  # Lowered to reduce hallucinations
-    top_p=0.7,  # Adjusted for more focused output
-    top_k=20,
-    min_p=0,
+    base_url=_ensure_v1(OLLAMA_HOST),
+    temperature=0.7,
+    top_p=0.7,
+    api_key="not-needed",
     model_name="code",
-    extra_params={"presence_penalty": 1.5, "num_ctx": 32768, "num_predict": 32768},
 )
-monitor.info("Ollama LLM clients initialized successfully")
+monitor.info("LLM clients initialized successfully (OpenAI-compatible)")

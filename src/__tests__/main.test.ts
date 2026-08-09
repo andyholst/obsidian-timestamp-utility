@@ -85,7 +85,10 @@ const mockApp: obsidian.App = {
     renderContext: {} as any,
     secretStorage: {} as any,
     isDarkMode: (() => false) as any,
-};
+    plugins: {} as any,
+    normalizePath: jest.fn((path: string) => path),
+    getAvailableTags: jest.fn(() => []),
+} as obsidian.App;
 
 const mockCommands: { [key: string]: obsidian.Command } = {};
 

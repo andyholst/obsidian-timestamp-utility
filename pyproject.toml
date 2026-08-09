@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+# Disable pytest cache to prevent .pyc file generation in containers
+cache_dir = false
+pythonpath = ["agents/agentics/src", "tests"]
+
+[tool.black]
+line-length = 120

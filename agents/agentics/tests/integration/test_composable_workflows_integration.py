@@ -40,6 +40,15 @@ from src.state import CodeGenerationState
 from src.agent_composer import WorkflowConfig
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _cleanup_seeded_project():
+    """Remove the module-level seeded temp project dir after tests (keeps .cache/tmp clean)."""
+    import shutil
+
+    yield
+    shutil.rmtree(_test_project, ignore_errors=True)
+
+
 # Regex pattern to match function definitions
 import asyncio
 import time
@@ -150,6 +159,7 @@ class TestComposableWorkflowsIntegration:
         assert "acceptance_criteria" in result["refined_ticket"]
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_code_generation_workflow_phase(self, composable_workflow):
         """Test the CODE GENERATION workflow phase independently."""
         # Input state from issue processing
@@ -174,6 +184,7 @@ class TestComposableWorkflowsIntegration:
             assert hasattr(result, "generated_tests")
 
     @pytest.mark.integration
+    @pytest.mark.slow
     @pytest.mark.skipif(
         not HAS_TS_TESTS,
         reason="plugin TypeScript test scaffold (src/__tests__/main.test.ts) not "
@@ -260,6 +271,7 @@ class TestComposableWorkflowsIntegration:
         assert isinstance(result, dict)
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_workflow_error_handling(self, composable_workflow):
         """Test error handling in workflow execution."""
         # Use invalid URL to trigger error
@@ -286,6 +298,7 @@ class TestComposableWorkflowsIntegration:
         assert result is not None
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_workflow_state_management(self, composable_workflow):
         """Test that workflow properly manages state between phases."""
         test_repo_url = os.getenv("TEST_ISSUE_URL")
@@ -299,6 +312,7 @@ class TestComposableWorkflowsIntegration:
         # Verify workflow completed
         assert result is not None
 
+    @pytest.mark.slow
     @pytest.mark.skipif(
         not HAS_TS_TESTS,
         reason="plugin TypeScript test scaffold (src/__tests__/main.test.ts) not "
@@ -360,6 +374,7 @@ class TestComposableWorkflowsIntegration:
         assert isinstance(composable_workflow.checkpointer, MemorySaver)
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_full_workflow_with_checkpointer(self, composable_workflow):
         """Test that the full workflow uses checkpointer for state persistence."""
         test_repo_url = os.getenv("TEST_ISSUE_URL")
@@ -380,6 +395,7 @@ class TestComposableWorkflowsIntegration:
         assert "refined_ticket" in result
 
     @pytest.mark.integration
+    @pytest.mark.slow
     def test_workflow_state_persistence_simulation(self, composable_workflow):
         """Test workflow state persistence by checking that intermediate states are maintained."""
         test_repo_url = os.getenv("TEST_ISSUE_URL")

@@ -12,11 +12,11 @@ mkdir -p logs
 case "$action" in
   pre)
     echo "=== PRE-TEST METRICS COLLECTED for ${test_type} at $(date) ===" > "$metrics_file"
-    # Docker collect-only (graceful if not running)
-    if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-      docker compose -f docker-compose-files/agents.yaml ps >> "$metrics_file" 2>/dev/null || echo "No docker services running" >> "$metrics_file"
+    # nerdctl compose collect-only (graceful if not running)
+    if command -v nerdctl &> /dev/null; then
+      nerdctl compose -f docker-compose-files/agents.yaml ps >> "$metrics_file" 2>/dev/null || echo "No nerdctl services running" >> "$metrics_file"
     else
-      echo "Docker not available" >> "$metrics_file"
+      echo "nerdctl not available" >> "$metrics_file"
     fi
     cat "$metrics_file"
     ;;

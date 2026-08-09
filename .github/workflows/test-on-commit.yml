@@ -6,8 +6,53 @@ on:
       - main
 
 jobs:
-  test:
+  # ---------- Host-side hermetic gates (no container runtime needed) ----------
+  # These run with the repo's committed state and need only python3/npx + git.
+  host-hermetic-gates:
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install host deps (pyyaml for check-docs-sync)
+        run: |
+          python3 -m pip install --quiet pyyaml
+          node --version
+          npm --version
+
+      - name: B8 doc-sync gate (no container)
+        run: make check-docs-sync
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+      - name: TS test/command floor vs origin/main (no container, npx jest)
+        run: |
+          npm ci 2>/dev/null || npm install 2>/dev/null || true
+          make loop-ts-floor
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+  # ---------- Container-side hermetic gates (nerdctl compose, no live LLM) ----------
+  # The Makefile is entirely nerdctl compose-based. GitHub-hosted runners ship
+  # docker but NOT nerdctl, so we provision rootless nerdctl here. These stages
+  # are confirmed hermetic (mocked unit tests, build, jest, release dry-run,
+  # secret-scan) — they need NO live Ollama/LLM service, so they run on CI.
+  # Live-LLM stages (loop-unit-real, loop-e2e, loop-integration) are deliberately
+  # NOT included: they require a live Ollama endpoint not present on CI runners.
+  container-hermetic-gates:
+    runs-on: ubuntu-latest
+    env:
+      # The agentics image has no cache on a fresh GitHub runner, so its first
+      # build (apt + git clone + pip) legitimately exceeds the nerdctl PTY
+      # wrapper's default 300s. Give the container gates headroom for cold builds.
+      NERDCTL_PTY_TIMEOUT: "1800"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,12 +68,84 @@ jobs:
       - name: Make scripts executable
         run: find . -name '*.sh' -exec chmod +x {} \;
 
-      - name: Run tests
-        run: make test-app
-        env:
-          REPO_NAME: obsidian-timestamp-utility
+      - name: Ensure writable cache mount targets (container uid 1000)
+        # agents.yaml binds agents/agentics/.cache/tmp -> /tmp and
+        # agents/agentics/.cache/huggingface -> /tmp/.cache/huggingface. On a
+        # fresh checkout those dirs are gitignored and absent, so nerdctl creates
+        # them root-owned -> the container's uid 1000 cannot write /tmp, which
+        # fails the mocked unit tests (PermissionError) and hermetic gates.
+        run: |
+          mkdir -p agents/agentics/.cache/tmp agents/agentics/.cache/huggingface
+          chmod -R a+rwx agents/agentics/.cache
+
+      - name: Provision rootless nerdctl (containerd + buildkit)
+        run: |
+          # GitHub-hosted ubuntu ships docker but NOT nerdctl, and the Makefile is
+          # entirely `nerdctl compose`-based. Provision rootless nerdctl + rootless
+          # containerd + buildkit so the container-side hermetic gates can run.
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y uidmap slirp4netns rootlesskit
+          # nerdctl release tarball also ships containerd-rootless.sh +
+          # containerd-rootless-setuptool.sh + buildkitd-rootless.sh.
+          cd /tmp
+          curl -fsSL -o nerdctl.tgz \
+            "https://github.com/containerd/nerdctl/releases/download/v1.7.7/nerdctl-1.7.7-linux-amd64.tar.gz"
+          tar -xzf nerdctl.tgz
+          sudo install -m 0755 nerdctl /usr/local/bin/nerdctl
+          sudo install -m 0755 containerd-rootless.sh /usr/local/bin/containerd-rootless.sh
+          sudo install -m 0755 containerd-rootless-setuptool.sh /usr/local/bin/containerd-rootless-setuptool.sh
+          sudo install -m 0755 buildkitd-rootless.sh /usr/local/bin/buildkitd-rootless.sh 2>/dev/null || true
+          # Ensure a containerd binary is on PATH (ubuntu's docker image provides it).
+          [ -x "$(command -v containerd)" ] || sudo apt-get install -y containerd.io
+          # CNI plugins are required for nerdctl's default network even when
+          # services use network_mode: host (nerdctl still initialises the
+          # 'bridge' CNI config on first use).
+          sudo mkdir -p /opt/cni/bin
+          curl -fsSL -o cni.tgz \
+            "https://github.com/containernetworking/plugins/releases/download/v1.4.0/cni-plugins-linux-amd64-v1.4.0.tgz"
+          sudo tar -C /opt/cni/bin -xzf cni.tgz
+          nerdctl --version
+          # Start rootless containerd + buildkit (requires subuid/subgid, which the
+          # runner user has on the standard ubuntu image).
+          containerd-rootless-setuptool.sh install || \
+            { echo "rootless containerd install failed"; exit 1; }
+          # install-buildkit wires buildkitd-rootless.sh as a service, but nerdctl
+          # compose ALSO needs the `buildctl` client on PATH. Install it explicitly.
+          curl -fsSL -o buildkit.tgz \
+            "https://github.com/moby/buildkit/releases/download/v0.15.1/buildkit-v0.15.1.linux-amd64.tar.gz"
+          sudo tar -C /usr/local -xzf buildkit.tgz
+          containerd-rootless-setuptool.sh install-buildkit || true
+          export PATH="$PATH:/usr/local/bin"
+          # First `nerdctl info` should now connect to the rootless daemon.
+          nerdctl info 2>&1 | grep -iE "server version|rootless" | head -3
 
       - name: Agentic collection guard (fail fast on dangling imports)
         run: make test-agents-collect
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+      - name: Mocked agent unit tests (fast, no Ollama)
+        run: make test-agents-unit-mock
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+      - name: Release pipeline + README-sync dry-run tests (no GitHub)
+        run: make loop-release-tests
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+      - name: Secret-scanner pytest suite (containerized, real gitleaks)
+        run: make loop-secret-scan-tests
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+      - name: Build the Obsidian plugin (tsc/rollup, exit 0)
+        run: make build-app
+        env:
+          REPO_NAME: obsidian-timestamp-utility
+
+      - name: Run jest on the plugin
+        run: make test-app
         env:
           REPO_NAME: obsidian-timestamp-utility

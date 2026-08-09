@@ -40,7 +40,9 @@ class FetchIssueAgent(BaseAgent):
 
         if is_local_change_ref(url):
             change_name = url.split(":", 1)[1] if ":" in url else url
-            log_info(self.name, f"Local OpenSpec change reference detected: {change_name}")
+            log_info(
+                self.name, f"Local OpenSpec change reference detected: {change_name}"
+            )
             try:
                 loaded = load_change(change_name)
             except FileNotFoundError as e:
@@ -73,7 +75,9 @@ class FetchIssueAgent(BaseAgent):
             self.github = get_service_manager().github
 
         try:
-            log_info(self.name, f"Initializing GitHub API connection for {owner}/{repo}")
+            log_info(
+                self.name, f"Initializing GitHub API connection for {owner}/{repo}"
+            )
             repo_obj = self.github.get_repo(f"{owner}/{repo}")
             log_info(self.name, f"Successfully connected to repository {owner}/{repo}")
 

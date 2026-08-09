@@ -144,9 +144,10 @@ class TestConfigurationIntegration:
         assert valid_config.github_token == "test-token"
         assert valid_config.ollama_host == "http://localhost:11434"
 
-        # Test invalid GitHub token - pydantic raises ValidationError
-        with pytest.raises(Exception):
-            AgenticsConfig(github_token="")
+        # Empty GitHub token is now OPTIONAL (GitHub public reads are token-less):
+        # "" normalizes to None, no exception raised.
+        cfg_no_token = AgenticsConfig(github_token="")
+        assert cfg_no_token.github_token is None
 
         # Test invalid Ollama host
         with pytest.raises(Exception):
@@ -287,9 +288,10 @@ class TestConfigurationIntegration:
     ):
         """Test configuration error handling in full application context."""
         # Test with invalid configuration that should fail during app initialization
-        # Empty github token raises pydantic ValidationError at construction time
-        with pytest.raises(Exception):
-            AgenticsConfig(github_token="")
+        # Empty github token is now OPTIONAL (token-less public reads): "" -> None,
+        # no exception at construction time.
+        cfg_no_token = AgenticsConfig(github_token="")
+        assert cfg_no_token.github_token is None
 
         # Invalid Ollama host also raises at construction time
         with pytest.raises(Exception):
@@ -307,8 +309,8 @@ class TestConfigurationIntegration:
             {
                 "github_token": os.getenv("GITHUB_TOKEN"),
                 "ollama_host": "http://localhost:11434",
-                "ollama_reasoning_model": "sorc/qwen3.5-claude-4.6-opus:9b",
-                "ollama_code_model": "sorc/qwen3.5-claude-4.6-opus:9b",
+                "ollama_reasoning_model": "qwen3.6-35b-a3b",
+                "ollama_code_model": "qwen3.6-35b-a3b",
             },
             # Minimal services (just GitHub)
             {
@@ -321,8 +323,8 @@ class TestConfigurationIntegration:
             {
                 "github_token": os.getenv("GITHUB_TOKEN"),
                 "ollama_host": "http://localhost:11434",
-                "ollama_reasoning_model": "sorc/qwen3.5-claude-4.6-opus:9b",
-                "ollama_code_model": "sorc/qwen3.5-claude-4.6-opus:9b",
+                "ollama_reasoning_model": "qwen3.6-35b-a3b",
+                "ollama_code_model": "qwen3.6-35b-a3b",
                 "circuit_breaker_failure_threshold": 5,
                 "circuit_breaker_recovery_timeout": 60,
                 "github_circuit_breaker_failure_threshold": 3,

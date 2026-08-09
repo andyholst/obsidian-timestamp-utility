@@ -301,8 +301,11 @@ def npm_run_tool(script: str, args: str = "", cwd: str = "") -> str:
 
         # Use Popen with a new process group so we can kill all children on timeout
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            cwd=cwd_path, preexec_fn=os.setsid,
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=cwd_path,
+            preexec_fn=os.setsid,
         )
         try:
             stdout, stderr = proc.communicate(timeout=30)
