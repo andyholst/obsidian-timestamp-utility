@@ -36,7 +36,9 @@ def _slug_to_change_name(slug: str) -> str:
     return os.path.basename(slug.rstrip("/"))
 
 
-def find_change_dir(change_name: str, project_root: Optional[str] = None) -> Optional[Path]:
+def find_change_dir(
+    change_name: str, project_root: Optional[str] = None
+) -> Optional[Path]:
     """Locate the openspec change directory for ``change_name``.
 
     Searches ``<root>/openspec/changes/<change_name>`` and, as a fallback,
@@ -182,7 +184,12 @@ def _derive_title(proposal: str, change_name: str) -> str:
     # Prefer the first markdown H1/H2 in the proposal.
     for line in proposal.splitlines():
         m = re.match(r"^#{1,2}\s+(.*)$", line.strip())
-        if m and m.group(1).lower() not in ("why", "what changes", "capabilities", "impact"):
+        if m and m.group(1).lower() not in (
+            "why",
+            "what changes",
+            "capabilities",
+            "impact",
+        ):
             return m.group(1).strip()
     return change_name.replace("-", " ").title()
 
@@ -247,7 +254,27 @@ def create_change_from_issue(
     import subprocess as _sp
 
     change_name = github_url_to_change_name(url)
-    root = Path(project_root or os.getenv("PROJECT_ROOT", os.getcwd()))
+    # Resolve the project root: use explicit project_root first, then PROJECT_ROOT env var, then
+    # cwd. Only when all three are absent AND /project exists with openspec/changes do we prefer
+    # /project (handles the container bind-mount shadow case where PROJECT_ROOT=/app but the real
+    # repo with openspec/changes is at /project). When project_root IS explicitly provided (e.g.
+    # unit tests), it takes absolute precedence — no /project override.
+    root = None
+    if project_root:
+        root = Path(project_root)  # Explicit parameter always wins
+    else:
+        env_root = os.getenv("PROJECT_ROOT")
+        if env_root:
+            root = Path(env_root)
+        else:
+            root = Path(os.getcwd())
+    # Only prefer /project when we didn't get an explicit project_root or PROJECT_ROOT
+    if not project_root and not os.getenv("PROJECT_ROOT"):
+        if root != Path("/project") and Path("/project").is_dir():
+            project_openspec = Path("/project") / "openspec" / "changes"
+            if project_openspec.is_dir():
+                root = Path("/project")  # Prefer unshadowed repo root
+
     change_dir = root / "openspec" / "changes" / change_name
 
     if change_dir.is_dir() and not force:
@@ -260,9 +287,40 @@ def create_change_from_issue(
     # devDependency) so the call works inside the docker e2e/agentics containers where the bare
     # `openspec` is NOT on PATH; fall back to bare `openspec` for globally-installed setups.
     _openspec_bin = "openspec"
-    _local_bin = root / "node_modules" / ".bin" / "openspec"
-    if _local_bin.is_file():
-        _openspec_bin = str(_local_bin)
+    # Resolve the openspec binary: try multiple locations since the container may
+    # mount the repo at /project but keep node_modules at /app/node_modules.
+    import sys as _sys  # DEBUG: write to stderr so we can see it in test output
+
+    for candidate in (
+        root / "node_modules" / ".bin" / "openspec",  # /project/... or /app/...
+        Path("/app") / "node_modules" / ".bin" / "openspec",  # /app/... fallback
+        Path("/usr/local/lib/node_modules") / ".bin" / "openspec",  # global npm install
+    ):
+        if candidate.is_file():
+            _openspec_bin = str(candidate)
+            _sys.stderr.write(f"DEBUG: found openspec at {candidate}\n")
+            break
+    else:
+        # Fall back to PATH lookup (works if openspec is installed globally or on PATH)
+        import shutil as _sh
+
+        _path_bin = _sh.which("openspec")
+        if _path_bin:
+            _openspec_bin = _path_bin
+            _sys.stderr.write(f"DEBUG: found openspec via PATH at {_path_bin}\n")
+        else:
+            # Final fallback: check common container locations regardless of project_root
+            for alt in (
+                Path("/app/node_modules/.bin/openspec"),
+                Path("/usr/local/bin/openspec"),
+                Path("/usr/bin/openspec"),
+            ):
+                if alt.is_file():
+                    _openspec_bin = str(alt)
+                    _sys.stderr.write(f"DEBUG: found openspec at {alt}\n")
+                    break
+            else:
+                _sys.stderr.write("DEBUG: openspec NOT found at any candidate path\n")
     proc = _sp.run(
         [_openspec_bin, "new", "change", change_name],
         cwd=str(root),
@@ -274,7 +332,10 @@ def create_change_from_issue(
             f"openspec new change failed (rc={proc.returncode}): {proc.stderr.strip()}"
         )
 
-    cap_name = re.sub(r"[^a-z0-9]+", "-", (issue_title or change_name).lower()).strip("-") or change_name
+    cap_name = (
+        re.sub(r"[^a-z0-9]+", "-", (issue_title or change_name).lower()).strip("-")
+        or change_name
+    )
     title_h1 = issue_title or change_name.replace("-", " ").title()
 
     # 2) Write the artifacts the CLI scaffold omitted (proposal / spec / tasks) that the
@@ -285,7 +346,7 @@ def create_change_from_issue(
     proposal = (
         f"## Why\n\n"
         f"This change was seeded from GitHub issue {url} "
-        f"(title: \"{title_h1}\"). The issue is fetched once, then mirrored as a LOCAL "
+        f'(title: "{title_h1}"). The issue is fetched once, then mirrored as a LOCAL '
         f"OpenSpec change so the rest of the agentic pipeline runs entirely offline against "
         f"`openspec:{change_name}` (the B3/B11 source-of-truth rule).\n\n"
         f"## What Changes\n\n"
@@ -348,4 +409,3 @@ def create_change_from_issue(
     )
     (change_dir / "tasks.md").write_text(tasks.strip() + "\n", encoding="utf-8")
     return change_name
-

@@ -62,7 +62,10 @@ def test_create_change_from_issue_invokes_cli_and_writes_artifacts(tmp_path):
     assert change == "ticket20"
     # 1) The CLI was used to scaffold the change directory.
     called_cmd = mock_run.call_args[0][0]
-    assert called_cmd[:3] == ["openspec", "new", "change"]
+    # The openspec binary may be resolved to a full path (e.g. /app/node_modules/.bin/openspec)
+    # or kept as bare "openspec" — both are valid. Just verify it's the openspec CLI.
+    assert "openspec" in called_cmd[0]
+    assert called_cmd[1:3] == ["new", "change"]
     assert "ticket20" in called_cmd
 
     change_dir = tmp_path / "openspec" / "changes" / "ticket20"

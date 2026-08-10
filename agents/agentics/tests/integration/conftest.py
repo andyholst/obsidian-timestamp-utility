@@ -16,9 +16,9 @@ os.environ.setdefault("TEST_ULTRA_FAST_MODE", "1")
 # Default is 300s (5 min), increase to 1800s (30 min) for LLM-heavy tests
 os.environ.setdefault("PYTEST_TIMEOUT", "1800")
 
-# Use sorc/qwen3.5-claude-4.6-opus:9b for both reasoning and code generation
-os.environ.setdefault("OLLAMA_REASONING_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
-os.environ.setdefault("OLLAMA_CODE_MODEL", "sorc/qwen3.5-claude-4.6-opus:9b")
+# Use qwen3.6-35b-a3b for both reasoning and code generation
+os.environ.setdefault("OLLAMA_REASONING_MODEL", "qwen3.6-35b-a3b")
+os.environ.setdefault("OLLAMA_CODE_MODEL", "qwen3.6-35b-a3b")
 
 # Load .env file from project root so GITHUB_TOKEN and other env vars are available
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
@@ -130,9 +130,10 @@ else:
 Pytest configuration and fixtures for integration tests.
 
 These integration tests use real services and require proper environment setup:
-- GITHUB_TOKEN: GitHub API token for repository access
-- OLLAMA_HOST: Ollama server URL (default: http://localhost:11434)
-- TEST_ISSUE_URL: Base URL for test repository issues
+- OLLAMA_HOST: Ollama/llama.cpp server URL (default: http://localhost:11434). On
+  macOS/colima use host.lima.internal:11434 (127.0.0.1 is Connection-refused).
+- TEST_ISSUE_URL: Base URL for test repository issues. GITHUB_TOKEN is NOT required:
+  GitHub public-repository reads are token-less.
 """
 
 import pytest
@@ -143,7 +144,7 @@ import subprocess
 @pytest.fixture(scope="session", autouse=True)
 def validate_integration_test_environment():
     """Validate that required environment variables are set for integration tests."""
-    required_vars = ["GITHUB_TOKEN", "OLLAMA_HOST", "TEST_ISSUE_URL"]
+    required_vars = ["OLLAMA_HOST", "TEST_ISSUE_URL"]
 
     missing_vars = []
     for var in required_vars:

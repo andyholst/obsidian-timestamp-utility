@@ -41,11 +41,23 @@ ENV TRANSFORMERS_CACHE=/tmp/.cache/huggingface
 
 WORKDIR /app
 
+# Add node_modules/.bin to PATH so openspec CLI is accessible
+ENV PATH="/app/node_modules/.bin:${PATH}"
+
+# Install Node.js dev dependencies (provides Linux openspec binary at node_modules/.bin/openspec,
+# used by the agentic pipeline via openspec_loader.py). The repo is bind-mounted at runtime, but the
+# host's node_modules may contain macOS binaries; this gives the container its own Linux-native copy.
+COPY package.json package-lock.json ./
+RUN npm install --production=false && npm cache clean --force
+
 # Create non-root user
 RUN groupadd -r appgroup -g ${HOST_GID} && useradd -r -u ${HOST_UID} -g appgroup appuser
 
 # Set ownership of /app to appuser
 RUN chown -R appuser:appgroup /app
+
+# Clear any __pycache__ from the image layer so bind-mounted source always takes effect
+RUN find /app -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
 # Switch to non-root user
 USER appuser

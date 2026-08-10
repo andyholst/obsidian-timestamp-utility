@@ -21,11 +21,20 @@ class ImplementationPlannerAgent(BaseAgent):
         refined_ticket = state.get("refined_ticket", {})
 
         # In ultra-fast mode, ensure required fields exist without LLM call
-        if refined_ticket.get("implementation_steps") and os.getenv("TEST_ULTRA_FAST_MODE") == "1":
+        if (
+            refined_ticket.get("implementation_steps")
+            and os.getenv("TEST_ULTRA_FAST_MODE") == "1"
+        ):
             log_info(self.name, "Ultra-fast mode: ensuring required fields exist")
-            refined_ticket.setdefault("implementation_steps", [f"Implement {refined_ticket.get('title', 'the feature')}"])
+            refined_ticket.setdefault(
+                "implementation_steps",
+                [f"Implement {refined_ticket.get('title', 'the feature')}"],
+            )
             refined_ticket.setdefault("npm_packages", [])
-            refined_ticket.setdefault("manual_implementation_notes", "Ultra-fast mode: implementation planned without LLM")
+            refined_ticket.setdefault(
+                "manual_implementation_notes",
+                "Ultra-fast mode: implementation planned without LLM",
+            )
             state["refined_ticket"] = refined_ticket
             return state
 
@@ -48,7 +57,10 @@ class ImplementationPlannerAgent(BaseAgent):
         title = refined_ticket.get("title", "the required functionality")
         enhanced.setdefault("implementation_steps", [f"Implement {title}"])
         enhanced.setdefault("npm_packages", [])
-        enhanced.setdefault("manual_implementation_notes", "LLM unavailable; manual implementation required")
+        enhanced.setdefault(
+            "manual_implementation_notes",
+            "LLM unavailable; manual implementation required",
+        )
         return enhanced
 
     def plan_implementation(self, refined_ticket: Dict) -> Dict:

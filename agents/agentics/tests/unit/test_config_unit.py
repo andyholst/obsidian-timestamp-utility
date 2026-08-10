@@ -28,8 +28,8 @@ def mock_env_vars(monkeypatch):
     env_vars = {
         "GITHUB_TOKEN": "test_token",
         "OLLAMA_HOST": "http://localhost:11434",
-        "OLLAMA_REASONING_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
-        "OLLAMA_CODE_MODEL": "sorc/qwen3.5-claude-4.6-opus:9b",
+        "OLLAMA_REASONING_MODEL": "qwen3.6-35b-a3b",
+        "OLLAMA_CODE_MODEL": "qwen3.6-35b-a3b",
     }
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
@@ -86,8 +86,8 @@ class TestAgenticsConfig:
         config = AgenticsConfig()
         assert config.github_token == "test_token"
         assert config.ollama_host == "http://localhost:11434"
-        assert config.ollama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
-        assert config.ollama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.ollama_reasoning_model == "qwen3.6-35b-a3b"
+        assert config.ollama_code_model == "qwen3.6-35b-a3b"
         assert config.circuit_breaker_failure_threshold == 3
         assert config.circuit_breaker_recovery_timeout == 30
         assert config.github_circuit_breaker_failure_threshold == 5
@@ -104,18 +104,20 @@ class TestAgenticsConfig:
         monkeypatch.delenv("OLLAMA_CODE_MODEL", raising=False)
 
         config = AgenticsConfig()
-        assert config.github_token is None  # Will be validated
+        assert config.github_token is None  # Optional: absent when GITHUB_TOKEN unset
         assert config.ollama_host == "http://localhost:11434"
-        assert config.ollama_reasoning_model == "sorc/qwen3.5-claude-4.6-opus:9b"
-        assert config.ollama_code_model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert config.ollama_reasoning_model == "qwen3.6-35b-a3b"
+        assert config.ollama_code_model == "qwen3.6-35b-a3b"
 
-    def test_agentics_config_github_token_validation_error(self, monkeypatch):
-        """Test ConfigValidationError for missing github_token."""
+    def test_agentics_config_github_token_optional(self, monkeypatch):
+        """Test that github_token is OPTIONAL (GitHub public reads are token-less)."""
         monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        with pytest.raises(
-            ConfigValidationError, match="GITHUB_TOKEN environment variable is required"
-        ):
-            init_config(None)
+        config = AgenticsConfig()
+        assert config.github_token is None  # No token -> unauthenticated public reads
+        # init_config must NOT raise when GITHUB_TOKEN is absent
+        global_config = init_config(None)
+        assert global_config is not None
+        assert global_config.github_token is None
 
     def test_agentics_config_ollama_host_validation_error(self, monkeypatch):
         """Test ConfigValidationError for invalid ollama_host."""
@@ -138,7 +140,7 @@ class TestAgenticsConfig:
         config = AgenticsConfig()
         llm_config = config.get_reasoning_llm_config()
         assert isinstance(llm_config, LLMConfig)
-        assert llm_config.model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert llm_config.model == "qwen3.6-35b-a3b"
         assert llm_config.base_url == "http://localhost:11434"
         assert llm_config.temperature == 0.7
         assert llm_config.num_ctx == 4096
@@ -148,7 +150,7 @@ class TestAgenticsConfig:
         config = AgenticsConfig()
         llm_config = config.get_code_llm_config()
         assert isinstance(llm_config, LLMConfig)
-        assert llm_config.model == "sorc/qwen3.5-claude-4.6-opus:9b"
+        assert llm_config.model == "qwen3.6-35b-a3b"
         assert llm_config.base_url == "http://localhost:11434"
         assert llm_config.temperature == 0.7
         assert llm_config.num_ctx == 4096

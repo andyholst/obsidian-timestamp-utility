@@ -13,7 +13,10 @@ from .prompts import ModularPrompts
 from .circuit_breaker import get_circuit_breaker, CircuitBreakerOpenException
 
 
-def _derive_feature_name_from_change(change: str) -> str | None:
+from typing import Optional
+
+
+def _derive_feature_name_from_change(change: str) -> Optional[str]:
     """§6.1 Derive a stable feature name from the OpenSpec change's spec title.
 
     Reads ``openspec/changes/<change>/specs/<change>/spec.md`` (or ``tasks.md``) and returns
@@ -82,7 +85,9 @@ class GeneratorAgent(BaseAgent):
 
             # Read existing tests from disk
             existing_test_content = ""
-            test_file_path = os.path.join(self.project_root, "src", "__tests__", self.test_file)
+            test_file_path = os.path.join(
+                self.project_root, "src", "__tests__", self.test_file
+            )
             if os.path.exists(test_file_path):
                 with open(test_file_path, "r") as f:
                     existing_test_content = f.read()
@@ -95,15 +100,19 @@ class GeneratorAgent(BaseAgent):
                 "FEATURE: " + feature_name + "\n\n"
                 "EXISTING TESTS:\n" + existing_test_content + "\n\n"
                 "Generate 2 describe blocks to ADD to the existing test file:\n"
-                "1. describe('" + method_name + " method', ...) - test the method directly\n"
-                "2. describe('" + feature_name + " command', ...) - test the command callback\n\n"
+                "1. describe('"
+                + method_name
+                + " method', ...) - test the method directly\n"
+                "2. describe('"
+                + feature_name
+                + " command', ...) - test the command callback\n\n"
                 "The command test MUST assert: (a) the command is registered via "
                 "this.addCommand, (b) the generated text is inserted at the editor cursor, "
                 "and (c) a Notice is shown when no active editor is present.\n\n"
                 "Match the existing test style exactly.\n"
                 "Use new TimestampPlugin(mockApp, {} as any) and await plugin.onload().\n"
                 "Verify method return values and editor.replaceSelection calls.\n\n"
-                "OUTPUT ONLY JSON: {\"tests\": \"<jest code>\"}\n"
+                'OUTPUT ONLY JSON: {"tests": "<jest code>"}\n'
                 "The tests field should contain ONLY the 2 inner describe blocks."
             )
             return prompt
@@ -247,8 +256,12 @@ class GeneratorAgent(BaseAgent):
 
         # Ensure requirements and acceptance_criteria are lists of strings
         requirements = [str(r) if not isinstance(r, str) else r for r in requirements]
-        acceptance_criteria = [str(a) if not isinstance(a, str) else a for a in acceptance_criteria]
-        implementation_steps = [str(s) if not isinstance(s, str) else s for s in implementation_steps]
+        acceptance_criteria = [
+            str(a) if not isinstance(a, str) else a for a in acceptance_criteria
+        ]
+        implementation_steps = [
+            str(s) if not isinstance(s, str) else s for s in implementation_steps
+        ]
 
         npm_str = ", ".join(format_package(pkg) for pkg in npm_packages)
         return (

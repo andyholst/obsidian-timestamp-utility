@@ -13,6 +13,7 @@ from src.state import State
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+@pytest.mark.slow
 @pytest.mark.parametrize("case", ["base+base", "base+tool_agent"])
 async def test_sequential_multi_agent_workflow(
     case: str, real_ollama_config, temp_project_dir, dummy_state

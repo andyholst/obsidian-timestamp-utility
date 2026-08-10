@@ -12,6 +12,9 @@ obsidian-timestamp-utility
 # Docker-Compose
 .tools
 
+# Test caches (ephemeral)
+agents/agentics/.cache/tmp/
+
 # build
 main.js
 styles.css

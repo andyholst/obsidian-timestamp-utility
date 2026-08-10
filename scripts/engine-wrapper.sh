@@ -1,13 +1,8 @@
 #!/bin/bash
 
-if command -v nerdctl >/dev/null 2>&1; then
-  CONTAINER_CMD=nerdctl
-elif command -v podman >/dev/null 2>&1; then
-  CONTAINER_CMD=podman
-elif command -v docker >/dev/null 2>&1; then
-  CONTAINER_CMD=docker
-else
-  echo "No supported container runtime found (nerdctl, podman, or docker)." >&2
+CONTAINER_CMD=nerdctl
+if ! command -v "$CONTAINER_CMD" >/dev/null 2>&1; then
+  echo "nerdctl is required but not found on PATH." >&2
   exit 1
 fi
 

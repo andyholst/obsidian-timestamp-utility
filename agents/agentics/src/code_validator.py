@@ -498,12 +498,22 @@ class CodeValidator:
         self.monitor = structured_log(__name__)
         self.test_directory = tempfile.mkdtemp(prefix="ts_validation_")
         self.jest_config = {
+            "preset": "ts-jest",
+            "transform": {"^.+\\\\.tsx?$": "ts-jest"},
             "collectCoverage": True,
             "coverageReporters": ["json", "text"],
             "testTimeout": int(os.getenv("JEST_TIMEOUT", "10000")),
             "setupFilesAfterEnv": [],
             "testEnvironment": "node",
         }
+
+    def __del__(self):
+        """Clean up temp directory when object is destroyed"""
+        try:
+            if hasattr(self, 'test_directory') and self.test_directory:
+                shutil.rmtree(self.test_directory, ignore_errors=True)
+        except Exception:
+            pass
 
     def run_tests(self, test_code: str, source_code: str) -> RunResult:
         """Run Jest tests and collect results"""
@@ -514,7 +524,7 @@ class CodeValidator:
             # Create test files
             source_file = os.path.join(temp_dir, "source.ts")
             test_file = os.path.join(temp_dir, "source.test.ts")
-            jest_config_file = os.path.join(temp_dir, "jest.config.js")
+            jest_config_file = os.path.join(temp_dir, "jest.config.cjs")
 
             # Write source code
             with open(source_file, "w") as f:
@@ -1202,4 +1212,3 @@ def validate_generated_code(
 ) -> ValidationReport:
     """Global function for code validation"""
     return code_validator.validate_typescript_code(code, tests, context)
-

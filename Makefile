@@ -3,7 +3,7 @@ SHELL := /bin/bash
 .DELETE_ON_ERROR:
 .SUFFIXES:
 
-# Load .env file if it exists (for local secrets like GITHUB_TOKEN)
+# Load .env file if it exists (for local secrets like OLLAMA_HOST; GITHUB_TOKEN is optional)
 ifneq (,$(wildcard .env))
 include .env
 export
@@ -16,10 +16,20 @@ HOST_UID  := $(shell id -u)
 HOST_GID  := $(shell id -g)
 export HOST_UID HOST_GID
 
-# Ollama (local LLM that generates the TS code + TS tests)
-OLLAMA_MODEL      ?= sorc/qwen3.5-claude-4.6-opus:9b
-OLLAMA_CODE_MODEL ?= sorc/qwen3.5-claude-4.6-opus:9b
-OLLAMA_HOST       ?= http://localhost:11434
+# Live inference backend: llama.cpp server exposed at the Ollama-compatible port 11434
+# serving model qwen3.6-35b-a3b. Client code keeps the name "Ollama" for env compatibility.
+OLLAMA_MODEL      ?= qwen3.6-35b-a3b
+OLLAMA_CODE_MODEL ?= qwen3.6-35b-a3b
+# Platform-aware default for reaching the host LLM from a --net=host container.
+# - Linux (incl. the documented asimov harness): host loopback is shared, so 127.0.0.1 reaches it.
+# - macOS/colima rootless nerdctl: the shared loopback does NOT reach the host LLM
+#   (Connection refused); the correct coordinate is host.lima.internal:11434 (verified).
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+OLLAMA_HOST       ?= http://host.lima.internal:11434
+else
+OLLAMA_HOST       ?= http://127.0.0.1:11434
+endif
 
 ISSUE_URL         ?= https://github.com/andyholst/obsidian-timestamp-utility/issues/20
 TEST_FILTER       ?=
@@ -56,35 +66,28 @@ RECORD_WORK_CMD ?= cd /project && export PATH=/usr/local/sbin:/usr/local/bin:/us
 # lost. This mirrors the working test-check-docs-sync pattern. All execution is INSIDE
 # unit-test-agents (rootless nerdctl, /project RW) — NO host python3 (B17). HERMES_* is
 # forwarded so record-work.py's prose drafting reaches the project-manager Hermes CLI.
-# docker_run: run a `docker compose ... run` command, providing a PTY when needed.
+# docker_run: run a `nerdctl compose ... run` command, providing a PTY when needed.
 # nerdctl's `compose run` HARDCODES `--interactive --tty`, so the container needs a
 # real console; without one it dies with "provided file is not a console". When stdout
 # IS a terminal (interactive shell, or the loop runner's `setsid script` wrapper) we run
 # the command PLAIN -- this avoids ever NESTING PTYs (which triggers a SIGSTOP deadlock
 # under job control). When stdout is NOT a tty (CI / piped / redirected), we wrap in
-# `setsid script -qec` to synthesize a console. `setsid` detaches the script session so
-# its exit SIGHUP can NOT reach make's later recipe lines (otherwise a plain piped `make`
-# silently dies after the first docker_run call with RC=0). Output still flows to stdout.
-# `< /dev/null` stops `script` from consuming make's stdin. `script` propagates the
-# command's exit code via `_rc` (make exits with it).
-#
-# NOTE: some `script` variants (util-linux on certain hosts) mis-parse a path token from
-# the command string as the typescript output file, causing "script: cannot open /project".
-# To stay version-agnostic we write the command to a temp file and pass ONLY
-# "/bin/sh <tmpfile>" to `script` (no inline paths), so the typescript file is always the
-# explicit trailing `/dev/null`.
+# a Python PTY runner to synthesize a console. The runner creates a pseudo-terminal so
+# nerdctl's compose run --interactive --tty works on all platforms (macOS BSD script lacks -c flag).
+# Output still flows to stdout. `< /dev/null` stops the runner from consuming make's stdin.
+# The runner propagates the command's exit code via `_rc` (make exits with it).
 define docker_run
-	@if [ -t 1 ]; then $(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1); else _drf=$$(mktemp); _dout=$$(mktemp); cat > "$$_drf" <<'DRF_EOF'
-$(if $(COMPOSE_OVERRIDE),$(COMPOSE_OVERRIDE) )$(1)
-DRF_EOF
-script -qec "/bin/sh $$_drf; echo $$? > $$_drf.rc" /dev/null < /dev/null > "$$_dout" 2>&1; _rc=$$(cat $$_drf.rc 2>/dev/null || echo 0); cat "$$_dout"; rm -f "$$_drf" "$$_drf.rc" "$$_dout"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi; fi
+	@nerdctl ps -aq --filter "status=exited" --filter "label=com.docker.compose.project" 2>/dev/null | xargs -r nerdctl rm -f 2>/dev/null || true; _drf=$$(mktemp); _dout=$$(mktemp); _dcmd=$$(mktemp); echo '$(subst ','\'',$(1))' > "$$_dcmd"; python3 scripts/nerdctl_pty.py --file "$$_dcmd" > "$$_dout" 2>&1; _rc=$$?; cat "$$_dout"; rm -f "$$_dout" "$$_dcmd"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi
 endef
 
-DOCKER_SOCK := $(shell \
-	if [ -S /var/run/docker.sock ]; then echo /var/run/docker.sock; \
-	elif [ -S /run/containerd/containerd.sock ]; then echo /run/containerd/containerd.sock; \
+# Use colima nerdctl to avoid socket permission issues on macOS
+define docker_run_colima
+	@nerdctl ps -aq --filter "status=exited" --filter "label=com.docker.compose.project" 2>/dev/null | xargs -r nerdctl rm -f 2>/dev/null || true; _drf=$$(mktemp); _dout=$$(mktemp); _dcmd=$$(mktemp); echo '$(subst ','\'',$(1))' > "$$_dcmd"; python3 scripts/nerdctl_pty.py --file "$$_dcmd" > "$$_dout" 2>&1; _rc=$$?; cat "$$_dout"; rm -f "$$_dout" "$$_dcmd"; if [ $$_rc -ne 0 ]; then exit $$_rc; fi
+endef
+
+NERDCTL_SOCK := $(shell \
+	if [ -S /run/user/$(shell id -u)/containerd/containerd.sock ]; then echo /run/user/$(shell id -u)/containerd/containerd.sock; \
 	elif [ -S $(XDG_RUNTIME_DIR)/containerd/containerd.sock ]; then echo $(XDG_RUNTIME_DIR)/containerd/containerd.sock; \
-	elif [ -S $(XDG_RUNTIME_DIR)/containerd-rootless/api.sock ]; then echo $(XDG_RUNTIME_DIR)/containerd-rootless/api.sock; \
 	else echo ""; fi)
 
 .PHONY: help all \
@@ -107,7 +110,7 @@ DOCKER_SOCK := $(shell \
 .DEFAULT_GOAL := help
 
 help: ## Show this help message
-	@echo "obsidian-timestamp-utility Makefile (docker compose, no Dagger)"
+	@echo "obsidian-timestamp-utility Makefile (nerdctl compose, no Dagger)"
 	@echo "Core dev: build-app test-app run-agentics test"
 	@echo "=================================="
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -117,14 +120,14 @@ all: build-app test-app release ## Full pipeline
 
 # ---- Plugin (TS) build/test via containers/npm ----
 
-build-app: b9-perms ## Build Obsidian plugin via docker compose (containers/npm)
+build-app: b9-perms ## Build Obsidian plugin via nerdctl compose (containers/npm)
 	@echo "Building plugin (npm run build) via containers/npm..."
-	@$(call docker_run, docker compose -f docker-compose-files/tools.yaml run --rm app npm run build)
+	@export NERDCTL_PTY_TIMEOUT=600; $(call docker_run, nerdctl compose -f docker-compose-files/tools.yaml run --rm app npm run build)
 	@echo "Build complete"
 
-test-app: b9-perms ## Test the built plugin via docker compose (containers/npm)
+test-app: b9-perms ## Test the built plugin via nerdctl compose (containers/npm)
 	@echo "Running jest via containers/npm..."
-	@$(call docker_run, docker compose -f docker-compose-files/tools.yaml run --rm app npm test)
+	@export NERDCTL_PTY_TIMEOUT=600; $(call docker_run, nerdctl compose -f docker-compose-files/tools.yaml run --rm app npm test)
 	@echo "=== Plugin test output above ==="
 
 validate-ts: ## Fast TypeScript validation (runs tsc directly)
@@ -148,24 +151,25 @@ validate-tests: ## Fast test validation (runs jest directly)
 	@echo "Test validation complete"
 
 changelog: b9-perms ## Generate CHANGELOG.md: render new work as a '## Unreleased' (or versioned) section and OVERWRITE-merge it onto the curated history (idempotent re-run: no duplicate sections). Run 'make bump-from-changelog' to version it.
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents /project/scripts/gen_changelog.sh) || echo "changelog skipped"
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/gen_changelog.py") || echo "changelog skipped"
 	@$(MAKE) changelog-format
 
 changelog-format: b9-perms ## Normalise CHANGELOG.md with Prettier (markdown-lint clean: tight lists, trimmed whitespace, consistent spacing). Idempotent.
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && node_modules/.bin/prettier --write CHANGELOG.md") || echo "changelog-format skipped"
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && node_modules/.bin/prettier --write CHANGELOG.md") || echo "changelog-format skipped"
 
 bump-from-changelog: b9-perms ## Rename '## Unreleased' -> next version (anchored to released state = tags merged into origin/main, so re-runs do NOT climb), fill gap versions in versions.json with the Obsidian minAppVersion from manifest.json, bump package.json/manifest.json AND the TS test file version literal, re-point v<next> locally. Fail-closed only if already released on the REMOTE.
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py") || echo "bump-from-changelog skipped"
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && python3 /project/scripts/bump_from_changelog.py") || echo "bump-from-changelog skipped"
 	@$(MAKE) changelog-format
 
-release: clean ## Create release + ZIP check (wires scripts/release.sh which generates release_notes.md + the downloadable zip)
-	@if [ -z "$(TAG)" ]; then TAG=$$(node -p "require('./package.json').version"); fi; \
-	 echo "=== release: building artifacts via scripts/release.sh (TAG=$$TAG) ==="; \
-	 TAG="$$TAG" REPO_NAME="$(REPO_NAME)" DRY_RUN="$(DRY_RUN)" bash scripts/release.sh
+release: clean ## Create release + ZIP check (wires scripts/release.py which generates release_notes.md + the downloadable zip)
+	if [ -z "$(TAG)" ]; then TAG=$$(node -p "require('./package.json').version"); fi; \
+	 echo "=== release: building artifacts via scripts/release.py (TAG=$$TAG) ==="; \
+	 echo "=== release: building artifacts via scripts/release.py (TAG=$$TAG) ==="; \
+	 TAG="$$TAG" REPO_NAME="$(REPO_NAME)" DRY_RUN="$(DRY_RUN)" python3 scripts/release.py
 	@echo "Release zip: $(REPO_NAME)-$(TAG).zip"
 
 lint-python: ## Run ruff linting on Python code via compose
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents ruff check agents/agentics/src) || echo "ruff reported issues"
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents ruff check /app/src) || echo "ruff reported issues"
 
 test-validator: ## Dedicated validator test (runs dev mode)
 	@cd scripts/validate-makefile && \
@@ -173,56 +177,58 @@ test-validator: ## Dedicated validator test (runs dev mode)
 			python3 -m venv .venv; \
 		fi && \
 		. .venv/bin/activate && \
-		python -m pip install --upgrade pip -q && \
+		python3 -m pip install --upgrade pip -q && \
 		pip install -q -r requirements.txt --no-cache-dir && \
-		python validate_makefile.py --mode clean
+				python3 validate_makefile.py --mode clean
 	@echo "Validator test completed."
 
 format: ## Format Python code with ruff via compose
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents ruff format agents/agentics/src) || true
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents ruff format /app/src) || true
 
 # ---- Agentic (Python) tests via containers/agents ----
 
 test-agents-unit: ## Unit tests for agents (Ollama)
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents)
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents)
 	@echo "=== Unit test results ==="
 
 test-agents-unit-mock: ## Mocked unit tests (fast, no Ollama)
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e TEST_FILTER=$(TEST_FILTER) unit-test-agents python -m pytest tests/unit/ -q)
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e TEST_FILTER=$(TEST_FILTER) unit-test-agents python3 -m pytest tests/unit/ -q)
 	@echo "=== Mock unit test output above ==="
 
-test-agents-integration: ## Full integration tests (needs GITHUB_TOKEN + Ollama)
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e "TEST_FILTER=$(INTEGRATION_TEST_FILTER)" integration-test-agents)
+test-agents-integration: ## Full integration tests (needs Ollama; GitHub reads are token-less)
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e OLLAMA_HOST=$(OLLAMA_HOST) integration-test-agents bash -c "cd /app && python3 -B -m pytest tests/integration/ -vv -s --tb=long $(INTEGRATION_TEST_FILTER)")
 	@echo "=== Integration test results ==="
 
 test-agents-integration-fast: INTEGRATION_TEST_FILTER = --maxfail=1 -k not slow ## Fast integration tests (fail fast, skip slow)
 test-agents-integration-fast: test-agents-integration
 
-test-agents-e2e: INTEGRATION_TEST_FILTER = -m e2e ## End-to-end tests only
-test-agents-e2e: test-agents-integration
+test-agents-e2e: ## End-to-end tests only (issue-specific e2e suite)
+	@echo "=== E2E agent tests ==="
+	@export NERDCTL_PTY_TIMEOUT=1200; $(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e OLLAMA_HOST=$(OLLAMA_HOST) -e CHANGE=greetings-modal-agentic-generation integration-test-agents bash -c "cd /app && python3 -m pytest tests/integration/*_e2e*.py -vv -s --tb=long")
+	@echo "=== E2E test results ==="
 
 test-agents: lint-python test-agents-unit-mock test-agents-integration ## All agent tests
 test-agents-real: lint-python test-agents-unit test-agents-integration ## Agent tests on REAL logic (no mocks for units; real Ollama/GitHub calls)
 
 test-check-docs-sync: b9-perms ## Hermetic unit tests for scripts/check-docs-sync.py (edge-case fixtures, run INSIDE the unit-test-agents container — no host python3)
 	@echo "=== TEST-CHECK-DOCS-SYNC: pytest tests/test_check_docs_sync.py (in container) ==="
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents bash -c "cd /project && python3 -m pytest tests/test_check_docs_sync.py -q")
 	@echo "=== test-check-docs-sync done ==="
 
 check-docs-sync-and-test: check-docs-sync test-check-docs-sync ## Run the doc-sync gate AND its unit tests (proves it behaves, not just passes)
 
 regen-doc-sync-fixtures: b9-perms ## Regenerate the doc-sync .md fixtures from the CURRENT real docs (anchor-checked; run after any AGENTS.md/skill/harness-doc change), then verify
 	@echo "=== REGEN-DOC-SYNC-FIXTURES (in container) ==="
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/regen_doc_sync_fixtures.py")
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents bash -c "cd /project && python -m pytest tests/test_check_docs_sync.py -q")
+	@$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c 'cd /project && python3 /project/scripts/regen_doc_sync_fixtures.py')
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents bash -c 'cd /project && python3 -m pytest tests/test_check_docs_sync.py -q')
 # Collection guard (audit-mcp-slim-refactor-integrity 4.2): fail fast if any test file has a
 # dangling import / collection error — a slim-refactor that orphans a symbol must surface here
 # instead of reporting a cached "green". Runs hermetic (no Ollama) and is non-zero on any error.
 test-agents-collect: ## CI guard: pytest --collect-only for unit + integration; fails on any collection error
 	@echo "=== Collection guard: unit ==="
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents python -m pytest tests/unit/ --collect-only -q)
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents python3 -m pytest tests/unit/ --collect-only --quiet)
 	@echo "=== Collection guard: integration ==="
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm integration-test-agents python -m pytest tests/integration/ --collect-only -q)
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm integration-test-agents python3 -m pytest tests/integration/ --collect-only --quiet)
 	@echo "=== Collection guard: clean (0 errors) ==="
 verify-agentics-after-run: ## After run-agentics: re-run agentic suite to prove refactored Python is still valid/in-sync
 	@echo "Re-running agentic unit + integration (real) after run-agentics..."
@@ -247,7 +253,7 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 			echo "WARN: $$f not present, nothing to back up"; \
 		fi; \
 	done
-	$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e CHANGE=$(CHANGE) -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e OLLAMA_HOST=$(OLLAMA_HOST) -e OLLAMA_REASONING_MODEL=$(OLLAMA_MODEL) -e OLLAMA_CODE_MODEL=$(OLLAMA_CODE_MODEL) -e PROJECT_ROOT=/project agentics python -m prod.agentics openspec:$(CHANGE))
+	$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e CHANGE=$(CHANGE) -e OLLAMA_HOST=$(OLLAMA_HOST) -e OLLAMA_REASONING_MODEL=$(OLLAMA_MODEL) -e OLLAMA_CODE_MODEL=$(OLLAMA_CODE_MODEL) -e PROJECT_ROOT=/project agentics python3 -m prod.agentics openspec:$(CHANGE))
 	@echo "=== Agentics run complete ==="
 	@ls -la src/main.ts src/__tests__/main.test.ts 2>/dev/null || echo "Note: generated files may be in a different location"
 	@# ---- OMISSION GUARD (contract-aware, per bug 6.2): a shrink is only a genuine ----
@@ -302,9 +308,9 @@ run-agentics: b9-perms ## Run AI agentics on a LOCAL OpenSpec change (CHANGE=<na
 #      Each stage fails the whole run if it fails (no silent green). No git commit/push
 #      (B4/B14). Optional post-check: `make loop-verify CHANGE=<name>` runs openspec
 #      validate + status for the active change.
-check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B32). Runs INSIDE unit-test-agents (no host python3).
-	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — in container ==="
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/check-docs-sync.py")
+check-docs-sync: b9-perms ## B8 doc/loop sync gate (FINAL loop stage) — FAIL if any B8 source-of-truth doc drifts (stage order / loop-ts-floor / B-range B1-B32). Runs on host (no container overhead for text-only gate).
+	@echo "=== B8 DOC-SYNC: verify loop/loop-harness docs agree (stage order, loop-ts-floor, B-range) — host ==="
+	@python3 scripts/check-docs-sync.py
 
 loop-collect: ## Loop gate 0: hermetic collection guard (fail fast on dangling imports)
 	@echo "=== LOOP-HARNESS [collect] collection guard (no dangling imports) ==="
@@ -312,7 +318,7 @@ loop-collect: ## Loop gate 0: hermetic collection guard (fail fast on dangling i
 
 loop-ts-floor: ## Loop gate 0.5: STRICT TS test/command floor — FAIL if current describe/leaf/jest-collected/addCommand counts drop below origin/main (silent feature/test removal guard)
 	@echo "=== LOOP-HARNESS [ts-floor] strict TS test/command surface floor vs origin/main ==="
-	@bash scripts/ts_test_floor.sh
+	@python3 scripts/ts_test_floor.py
 
 loop-unit: ## Loop gate 1: hermetic unit tests (fast, no Ollama/GitHub)
 	@echo "=== LOOP-HARNESS [1/6] unit tests (mocked, hermetic) ==="
@@ -328,7 +334,7 @@ loop-e2e: ## Loop gate 3: standing e2e gates (ticket20 + ticket22 + greetings)
 
 loop-integration: ## Loop gate 4: broad agentic integration suite (B17) — excludes e2e (its own stage) and slow full-pipeline tests
 	@echo "=== LOOP-HARNESS [4/6] integration suite (-m 'integration and not e2e and not slow') ==="
-	@$(MAKE) test-agents-integration INTEGRATION_TEST_FILTER="-m 'integration and not e2e and not slow'"
+	@export NERDCTL_PTY_TIMEOUT=1800; $(MAKE) test-agents-integration INTEGRATION_TEST_FILTER="-m 'integration and not e2e and not slow'"
 
 loop-build-app: ## Loop gate 5: build the Obsidian plugin (tsc/rollup, exit 0)
 	@echo "=== LOOP-HARNESS [5/6] build-app ==="
@@ -340,18 +346,56 @@ loop-test-app: ## Loop gate 6: run jest on the plugin
 
 loop-release-tests: b9-perms ## Loop gate 6.5: release-pipeline + README-sync dry-run tests (root tests/test_*.py). Proves the GitHub release body + zip are built correctly AND the README stays in sync with package.json/CHANGELOG/commands — WITHOUT calling GitHub. Runs INSIDE unit-test-agents.
 	@echo "=== LOOP-HARNESS [6.5] release-pipeline + README-sync dry-run tests ==="
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e DRY_RUN=1 -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && DRY_RUN=1 python -m pytest tests/test_release_pipeline_dryrun.py tests/test_readme_sync.py tests/test_release_notes_bump.py -v")
+	@export NERDCTL_PTY_TIMEOUT=300; $(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e DRY_RUN=1 -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "cd /project && git config --global --add safe.directory /project && DRY_RUN=1 python3 -m pytest tests/test_release_pipeline_dryrun.py tests/test_readme_sync.py tests/test_release_notes_bump.py -v")
 
-loop-harness: ## Full loop-harness: SINGLE source of truth = scripts/run-loop-harness.sh.
-	@# This target delegates to the script so the per-stage timeouts + docker-kill
-	@# logic are ALWAYS applied (never a bare `make` chain that can hang forever).
-	@# The script calls back into these same `loop-*` targets, so what runs is
-	@# identical whether you invoke `make loop-harness` or the script directly.
-	@bash scripts/run-loop-harness.sh
-	@echo "=== LOOP-HARNESS COMPLETE: all gates green in order (collect -> ts-floor -> unit -> unit-real -> e2e -> integration -> build-app -> test-app -> release-tests -> secret-scan-tests -> check-docs-sync) ==="
+# Sentinel file used by loop-harness to accumulate a real (make-visible) status.
+# Each failing stage writes "1" here; the final banner + exit code are driven by its
+# presence. (A plain make var can't carry this: `LOOP_STAGE_STATUS=1` inside a recipe
+# sets a shell var in a subshell invisible to make's ifeq, which silently masked
+# failures and produced a false-green ✅.)
+LOOP_STATUS_FILE := /tmp/.loop-harness-status
 
-loop-trigger: ## B20 mandatory pre-flight: run the loop gate (scripts/run-loop-harness.sh) before claiming done
-	@bash scripts/run-loop-harness.sh
+loop-harness: ## Full loop-harness: runs all stages in order with progress tracking
+	@rm -f $(LOOP_STATUS_FILE)
+	@echo "=== LOOP-HARNESS: running all gates in order ==="
+	@echo ""
+	@echo "Stage 1/11: loop-collect"
+	@$(MAKE) loop-collect || { echo "❌ Stage 1 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 2/11: loop-ts-floor"
+	@$(MAKE) loop-ts-floor || { echo "❌ Stage 2 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 3/11: loop-unit (mocked)"
+	@$(MAKE) loop-unit || { echo "❌ Stage 3 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 4/11: loop-unit-real (live Ollama)"
+	@$(MAKE) loop-unit-real || { echo "❌ Stage 4 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 5/11: loop-e2e"
+	@$(MAKE) loop-e2e || { echo "❌ Stage 5 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 6/11: loop-integration"
+	@$(MAKE) loop-integration || { echo "❌ Stage 6 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 7/11: loop-build-app"
+	@$(MAKE) loop-build-app || { echo "❌ Stage 7 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 8/11: loop-test-app"
+	@$(MAKE) loop-test-app || { echo "❌ Stage 8 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 9/11: loop-release-tests"
+	@$(MAKE) loop-release-tests || { echo "❌ Stage 9 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 10/11: loop-secret-scan-tests"
+	@$(MAKE) loop-secret-scan-tests || { echo "❌ Stage 10 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@echo "Stage 11/11: check-docs-sync"
+	@$(MAKE) check-docs-sync || { echo "❌ Stage 11 FAILED"; echo 1 > $(LOOP_STATUS_FILE); }
+	@echo ""
+	@if [ -f $(LOOP_STATUS_FILE) ]; then echo "❌ LOOP-HARNESS FAILED: one or more stages failed"; exit 1; else echo "✅ LOOP-HARNESS COMPLETE: all 11 stages passed!"; fi
+
+loop-trigger: ## B20 mandatory pre-flight: run the loop gate before claiming done
+	@$(MAKE) loop-harness
 
 loop-verify: ## Loop verify: openspec validate + status for CHANGE (run after loop-harness)
 	@test -n "$(CHANGE)" || { echo "WARN: set CHANGE=<openspec-change-name> to verify a change; skipping."; exit 0; }
@@ -398,19 +442,19 @@ phase7-archive: ## Archive an OpenSpec change (spec only) + auto-emit work-log (
 	@# chmod on ~/.hermes, B17). Falls back to stub if host hermes is unavailable.
 	@$(eval H := /project/backups/record-work-$(CHANGE))
 	@echo "Phase-7 work-log (step 1/3 — container): gathering context + emitting prompt..."
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --emit-prompt $(H).prompt")
+	@$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --emit-prompt $(H).prompt")
 	@echo "Phase-7 work-log (step 2/3 — HOST): hermes -z draft..."
-	@if command -v hermes >/dev/null 2>&1; then \
+	if command -v hermes >/dev/null 2>&1; then \
 	  hermes profile use project-manager 2>/dev/null; \
 	  { hermes -z "$$(cat backups/record-work-$(CHANGE).prompt)" > backups/record-work-$(CHANGE).prose 2>/dev/null; } || true; \
 	fi
 	@echo "Phase-7 work-log (step 3/3 — container): writing entry with prose..."
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --prose-file $(H).prose") || echo "WARN: record-work failed for $(CHANGE) (see above); archive still proceeds."
+	@$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --prose-file $(H).prose") || echo "WARN: record-work failed for $(CHANGE) (see above); archive still proceeds."
 	@rm -f backups/record-work-$(CHANGE).prompt backups/record-work-$(CHANGE).prose 2>/dev/null || true
 	@# B16 (enforce-task-completion-gate): FAILS-CLOSED. Refuse to archive a change
 	@#      with open `- [ ]` tasks. Runs INSIDE the container (no host python3, B17).
 	@echo "B16: checking for open tasks in $(CHANGE) (in container)..."
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "python3 /project/scripts/assert_no_open_tasks_cli.py $(CHANGE)") || { echo "FAIL(B16): $(CHANGE) has open tasks (see above). Tick them in tasks.md, then re-run."; exit 1; }
+	@$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig unit-test-agents sh -c "python3 /project/scripts/assert_no_open_tasks_cli.py $(CHANGE)") || { echo "FAIL(B16): $(CHANGE) has open tasks (see above). Tick them in tasks.md, then re-run."; exit 1; }
 	@# B1: the persistent E2E harness must still exist -- never deleted on archive.
 	@test -f agents/agentics/tests/integration/test_change_driven_ts_generation_e2e.py || { echo "FAIL(B1): persistent e2e harness missing -- do NOT remove it on archive."; exit 1; }
 	@# B4: refuse to touch git. This target archives ONLY the openspec spec; it does
@@ -465,15 +509,15 @@ loop-finish: archive-all-complete ## Green-gated release finalisation: archive-a
 # the container write targets are world-writable under rootless nerdctl. No git commit/push (B4/B14).
 # ---- OpenSpec change scaffolding harness (B15: change dir created via the real `openspec` CLI) ----
 #
-# Wraps scripts/scaffold-openspec-change.sh, which calls `openspec new change <NAME>` (the exact
+# Wraps scripts/scaffold_openspec_change.py, which calls `openspec new change <NAME>` (the exact
 # CLI step a human runs — never hand-writes the directory) then seeds proposal.md / tasks.md /
 # specs/<CAPABILITY>/spec.md from a template and runs `openspec validate`. b9-perms is a prerequisite
 # so the write targets are world-writable under rootless nerdctl. No git commit/push (B4/B14).
 # Usage: make openspec-new NAME=<kebab-name> [DESC="..."] [GOAL="..."] [CAPABILITY=<cap>]
 openspec-new: b9-perms ## Scaffold an OpenSpec change via the openspec CLI + seeded template (NAME required)
-	@if [ -z "$(NAME)" ]; then echo "ERROR: NAME is required. Run: make openspec-new NAME=<kebab-name> [CAPABILITY=<cap>] [DESC=...] [GOAL=...]"; echo "--- script usage ---"; bash scripts/scaffold-openspec-change.sh --help; exit 1; fi
+	if [ -z "$(NAME)" ]; then echo "ERROR: NAME is required. Run: make openspec-new NAME=<kebab-name> [CAPABILITY=<cap>] [DESC=...] [GOAL=...]"; python3 scripts/scaffold_openspec_change.py --help; exit 1; fi
 	@echo "=== OPENSPEC-NEW: scaffolding change $(NAME) ==="
-	@bash scripts/scaffold-openspec-change.sh --name $(NAME) $(if $(DESC),--desc "$(DESC)",) $(if $(GOAL),--goal "$(GOAL)",) $(if $(CAPABILITY),--capability $(CAPABILITY),)
+	@python3 scripts/scaffold_openspec_change.py --name $(NAME) $(if $(DESC),--desc "$(DESC)",) $(if $(GOAL),--goal "$(GOAL)",) $(if $(CAPABILITY),--capability $(CAPABILITY),)
 	@echo "=== OPENSPEC-NEW complete: review openspec/changes/$(NAME)/ ==="
 
 wt-create: ## Create an isolated git worktree for an OpenSpec change: git worktree add worktrees/<name> -b feat/<name> (REPO_ROOT/node_modules symlinked in). Never touches the parent working tree.
@@ -491,7 +535,7 @@ wt-create: ## Create an isolated git worktree for an OpenSpec change: git worktr
 # itself is unrestricted). Parallel-safe: unique compose project name otu-<name> per flow.
 openspec-flow: ## Agent-driven change lifecycle CONFINED to a worktree: create worktree -> scaffold -> generate -> loop gate -> archive -> finalize (squash in worktree) -> (--push) PR. Args: NAME=<change> [PUSH=1] [NO_AGENTICS=1] [NO_LOOP=1]
 	@test -n "$(NAME)" || { echo "ERROR: NAME=<change> required. Run: make openspec-flow NAME=<kebab-name> [PUSH=1]"; exit 1; }
-	@bash scripts/openspec-change-flow.sh --name $(NAME) $(if $(PUSH),--push,) $(if $(NO_AGENTICS),--no-agentics,) $(if $(NO_LOOP),--no-loop,)
+	@python3 scripts/openspec_change_flow.py --name $(NAME) $(if $(PUSH),--push,) $(if $(NO_AGENTICS),--no-agentics,) $(if $(NO_LOOP),--no-loop,)
 
 openspec-redeliver: ## Re-enter the worktree, regenerate/re-squash, and FORCE-PUSH to the SAME PR branch (feat/<name>) after corrections. Guarded against main/protected refs. Args: NAME=<change> [PUSH_REMOTE=origin]
 	@test -n "$(NAME)" || { echo "ERROR: NAME=<change> required. Run: make openspec-redeliver NAME=<kebab-name>"; exit 1; }
@@ -515,7 +559,7 @@ openspec-redeliver: ## Re-enter the worktree, regenerate/re-squash, and FORCE-PU
 # pr-resolve + squash-commits are mutually exclusive on a reviewed branch.
 pr-resolve: ## B28b: fetch + print PR comments/review threads for BRANCH via gh (no commit/push). Usage: make pr-resolve BRANCH=<branch>
 	@test -n "$(BRANCH)" || { echo "ERROR: BRANCH=<branch> required. Run: make pr-resolve BRANCH=<branch>"; exit 1; }
-	@bash scripts/pr_resolve.sh $(BRANCH)
+	@python3 scripts/pr_resolve.py $(BRANCH)
 
 # ---- PR-review stability (B29): two-way interaction — comment the fix + commit on green gate ----
 # B29a: post a PR comment (the agent signals a fix to the participant). B29b: resolve-and-comment =
@@ -524,11 +568,11 @@ pr-resolve: ## B28b: fetch + print PR comments/review threads for BRANCH via gh 
 pr-comment: ## B29a: post BODY as a comment on the open PR for BRANCH via gh (no commit/push). Usage: make pr-comment BRANCH=<branch> BODY="<text>"
 	@test -n "$(BRANCH)" || { echo "ERROR: BRANCH=<branch> required."; exit 1; }
 	@test -n "$(BODY)" || { echo "ERROR: BODY=\"<text>\" required."; exit 1; }
-	@bash scripts/pr_comment.sh $(BRANCH) "$(BODY)"
+	@python3 scripts/pr_comment.py $(BRANCH) "$(BODY)"
 
 pr-resolve-and-comment: ## B29b: fetch PR threads (pr_resolve.sh); agent fixes; run loop-harness; on GREEN commit normally, post fix comments, push normally (no squash/force). Usage: make pr-resolve-and-comment BRANCH=<branch>
 	@test -n "$(BRANCH)" || { echo "ERROR: BRANCH=<branch> required."; exit 1; }
-	@bash scripts/pr_resolve.sh $(BRANCH)
+	@python3 scripts/pr_resolve.py $(BRANCH)
 	@echo "=== B29b: apply fixes for the threads above, then 'make loop-harness'. On GREEN: ==="
 	@echo "  1) git commit -m '<type>(<scope>): <fix> (resolves PR comment)'  (NORMAL, non-squashed)"
 	@echo "  2) make pr-comment BRANCH=$(BRANCH) BODY=\"Fixed in <sha>: <summary> — resolves <comment>\""
@@ -538,20 +582,20 @@ pr-resolve-and-comment: ## B29b: fetch PR threads (pr_resolve.sh); agent fixes; 
 record-work-prompt: b9-perms ## Steps 1+2 of the hermes handoff: container emit-prompt + host hermes -z (used by record-work)
 	@$(eval H := /project/backups/record-work-$(CHANGE))
 	@echo "(step 1/3 — container): gathering context + emitting prompt..."
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --emit-prompt $(H).prompt")
+	@$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --emit-prompt $(H).prompt")
 	@echo "(step 2/3 — HOST): hermes -z drafting..."
-	@if command -v hermes >/dev/null 2>&1; then hermes profile use project-manager 2>/dev/null; fi
-	@if command -v hermes >/dev/null 2>&1; then hermes -z "$$(cat backups/record-work-$(CHANGE).prompt)" > backups/record-work-$(CHANGE).prose 2>/dev/null || true; fi
+	if command -v hermes >/dev/null 2>&1; then hermes profile use project-manager 2>/dev/null; fi
+	if command -v hermes >/dev/null 2>&1; then hermes -z "$$(cat backups/record-work-$(CHANGE).prompt)" > backups/record-work-$(CHANGE).prose 2>/dev/null || true; fi
 
 record-work: b9-perms ## Phase 7 work-log: write agent-wiki/YYYY-MM-DD-<change>.md via hermes handoff (container prompts, host drafts, container writes — no host python3, no chmod on ~/.hermes)
 	@test -n "$(CHANGE)" || { echo "ERROR: set CHANGE=<openspec-change-name> (e.g. make record-work CHANGE=uuid-modal-agentic-generation)"; exit 1; }
 	@$(eval H := /project/backups/record-work-$(CHANGE))
 	@$(eval L := backups/record-work-$(CHANGE))
 	@echo "=== RECORD-WORK: agent-wiki entry for $(CHANGE) ==="
-	@if [ ! -f $(L).prose ]; then echo "(prompt/prose absent — running steps 1+2 via record-work-prompt)"; $(MAKE) --quiet record-work-prompt CHANGE=$(CHANGE); fi
-	@if [ ! -f $(L).prose ]; then echo "WARN: no prose handoff — will use stub body"; fi
+	if [ ! -f $(L).prose ]; then echo "(prompt/prose absent — running steps 1+2 via record-work-prompt)"; $(MAKE) --quiet record-work-prompt CHANGE=$(CHANGE); fi
+	if [ ! -f $(L).prose ]; then echo "WARN: no prose handoff — will use stub body"; fi
 	@echo "(step 3/3 — container): writing entry with prose..."
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --prose-file $(H).prose")
+	@$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm -e GIT_CONFIG_GLOBAL=/tmp/gitconfig -e HERMES_PROFILE=project-manager unit-test-agents sh -c "$(RECORD_WORK_CMD) --prose-file $(H).prose")
 	@rm -f $(L).prompt $(L).prose 2>/dev/null || true
 	@echo "=== RECORD-WORK complete: review agent-wiki/$$(date +%Y-%m-%d)-$(CHANGE).md ==="
 
@@ -578,7 +622,7 @@ squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed 
 	@# B30d (explicit override): ALLOW_SQUASH=1 lets the user deliberately bypass the guard
 	@# (e.g. a local pre-merge cleanup the reviewer agreed to). OFF by default; ALWAYS prints a
 	@# loud warning so the rewrite is never silent. Does NOT bypass B30a (no revert).
-	@if [ "$$(echo $${ALLOW_SQUASH:-0})" = "1" ]; then \
+	if [ "$$(echo $${ALLOW_SQUASH:-0})" = "1" ]; then \
 		echo "B30d: ALLOW_SQUASH=1 set -- OVERRIDING the pre-PR squash guard on purpose."; \
 		echo "B30d: WARNING: this rewrites history on branch $$BRANCH. You asked for it explicitly."; \
 	else \
@@ -658,7 +702,7 @@ squash-commits: ## Squash ALL commits ahead of `main` into ONE thoroughly-typed 
 loop-final: ## B32: review-approved finalisation of an OPEN PR: fresh loop-harness (green) -> squash -> changelog -> force-with-lease push the feature branch. Requires APPROVED=1 + BRANCH=<feat/...>. Refuses main.
 	@test "$$(echo $${APPROVED:-0})" = "1" || { echo "LOOP-FINAL: FAIL-CLOSED -- APPROVED=1 required (set ONLY after an explicit human PR approval). Aborting: no squash, no force-push."; exit 1; }
 	@test -n "$(BRANCH)" || { echo "LOOP-FINAL: ERROR -- BRANCH=<feat/...> required."; exit 1; }
-	@if [ "$(BRANCH)" = "main" ] || [ "$(BRANCH)" = "origin/main" ]; then echo "LOOP-FINAL: REFUSING to finalise/force-push main."; exit 1; fi
+	if [ "$(BRANCH)" = "main" ] || [ "$(BRANCH)" = "origin/main" ]; then echo "LOOP-FINAL: REFUSING to finalise/force-push main."; exit 1; fi
 	@CUR=$$(git rev-parse --abbrev-ref HEAD 2>/dev/null); \
 	if [ "$$CUR" != "$(BRANCH)" ]; then echo "LOOP-FINAL: ERROR -- checked-out branch '$$CUR' != BRANCH '$(BRANCH)'. Checkout the feature branch first."; exit 1; fi
 	@echo "=== LOOP-FINAL (B32): human-approved. Running FRESH loop-harness before any history rewrite ==="
@@ -696,7 +740,7 @@ install-git-hooks: ## Wire the per-commit `commit-msg` + `pre-commit` hooks into
 	@mkdir -p .git/hooks
 	@cp -f git-hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
 	@test -f git-hooks/pre-commit || { echo "HOOKS: git-hooks/pre-commit missing -- skipping pre-commit install."; } || true
-	@if [ -f git-hooks/pre-commit ]; then \
+	if [ -f git-hooks/pre-commit ]; then \
 		chmod +x git-hooks/pre-commit; \
 		cp -f git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit; \
 		echo "HOOKS: installed .git/hooks/pre-commit (trailing-whitespace auto-fix)."; \
@@ -743,7 +787,7 @@ bump-version: ## Bump the Obsidian plugin version (Obsidian way): package.json +
 	@command -v jq  >/dev/null 2>&1 || { echo "BUMP: jq required -- aborting."; exit 1; }
 	@# Guard: only bump when new generated plugin TS actually exists in src/main.ts vs origin/main
 	@# (the committed baseline the branch forked from). Fall back to HEAD if origin/main is absent.
-	@if [ ! -f src/main.ts ]; then echo "BUMP: src/main.ts missing -- refusing to bump (no plugin code)."; exit 1; fi; \
+	if [ ! -f src/main.ts ]; then echo "BUMP: src/main.ts missing -- refusing to bump (no plugin code)."; exit 1; fi; \
 	BASE=$$(git rev-parse --verify origin/main 2>/dev/null || echo "HEAD"); \
 	if git diff --quiet $$BASE -- src/main.ts && [ -z "$$(git ls-files --others --exclude-standard src/main.ts)" ]; then \
 		echo "BUMP: no new plugin TS code in src/main.ts vs $$BASE -- refusing to bump (nothing to release)."; exit 1; \
@@ -767,7 +811,7 @@ bump-version: ## Bump the Obsidian plugin version (Obsidian way): package.json +
 
 release-notes: ## Refresh the README "Release / Changelog" block to the current version, categorized by commit type (mirrors the changelog sections).
 	@command -v node >/dev/null 2>&1 || { echo "RELNOTES: node required -- aborting."; exit 1; }
-	@$(call docker_run, docker compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/update-release-notes.py README.md")
+	@$(call docker_run, nerdctl compose -f docker-compose-files/agents.yaml run --rm unit-test-agents sh -c "cd /project && python3 /project/scripts/update-release-notes.py README.md")
 
 tag-release: ## Create a LOCAL git tag v<version> (NO push -- B14). Run AFTER squash-commits.
 	@command -v node >/dev/null 2>&1 || { echo "TAG: node required -- aborting."; exit 1; }
@@ -835,12 +879,11 @@ release-flow: ## Canonical local release flow: squash (typed, commitlint-gated) 
 # ---- Checks ----
 
 check-deps: check-ollama check-issue-url ## Verify external dependencies
-check-github: ## Validate GitHub token (only needed for integration tests)
-	@if [ -z "$(GITHUB_TOKEN)" ]; then echo "Error: GITHUB_TOKEN is required for integration tests" >&2; exit 1; fi
-	@echo "GITHUB_TOKEN present."
+check-github: ## GitHub token no longer required — public reads are token-less
+	@echo "GITHUB_TOKEN is optional (GitHub public-repository reads are token-less)."
 
 check-issue-url: ## Validate ISSUE_URL for agentics
-	@if [ -z "$(ISSUE_URL)" ] || ! echo "$(ISSUE_URL)" | grep -q '^https'; then echo "Error: Valid ISSUE_URL (https://...) is required" >&2; exit 1; fi
+	if [ -z "$(ISSUE_URL)" ] || ! echo "$(ISSUE_URL)" | grep -q '^https'; then echo "Error: Valid ISSUE_URL (https://...) is required" >&2; exit 1; fi
 
 check-ollama: ## Check Ollama availability
 	@code=$$(curl -s -o /dev/null -w '%{http_code}' $(OLLAMA_HOST)/api/tags || echo 000); \
@@ -879,23 +922,17 @@ collect-tests: ## Collect test files (used by CI)
 
 generate-requirements: ## Regenerate agents/agentics/requirements.txt from docker-files/pip-requirements/requirements.in (via pip-compile container)
 	@echo "Compiling requirements.in -> agents/agentics/requirements.txt (pip-compile)"
-	$(call docker_run, docker compose -f docker-compose-files/pip.yaml run --rm pip)
+	$(call docker_run, nerdctl compose -f docker-compose-files/pip.yaml run --rm pip)
 	@echo "Regenerated agents/agentics/requirements.txt"
 
 collect-executed: ## Collect executed tests (used by CI)
 	@echo "Collecting executed tests..."
 	@find agents/agentics/tests -name '*.py' -path '*integration*' -o -name '*.py' -path '*unit*' | sort
 
-stop-containers: ## Stop all project containers
-	@if command -v nerdctl >/dev/null 2>&1; then \
-		nerdctl ps -q --filter label=com.docker.compose.project 2>/dev/null | xargs -r nerdctl stop 2>/dev/null || true; \
-		echo "Stopped compose containers (nerdctl)."; \
-	elif command -v docker >/dev/null 2>&1; then \
-		docker ps -q --filter label=com.docker.compose.project 2>/dev/null | xargs -r docker stop 2>/dev/null || true; \
-		echo "Stopped compose containers (docker)."; \
-	else \
-		echo "No container runtime found — skipping."; \
-	fi
+stop-containers: ## Stop all project containers (nerdctl only)
+	@echo "Stopping all running containers (nerdctl only)..."
+	nerdctl ps -q --filter label=com.docker.compose.project 2>/dev/null | xargs -r nerdctl stop 2>/dev/null || true; \
+	echo "Stopped compose containers (nerdctl)."
 
 # ---- Cleanup (no Dagger) ----
 
@@ -926,7 +963,7 @@ clean-oci: ## Fast OCI nuke (nerdctl prune best practice)
 # suite INSIDE the `gitleaks-tests` compose container
 # (docker-compose-files/gitleaks-tests.yaml), exercising the REAL gitleaks binary.
 # The Makefile NEVER shells out to `python3 scripts/secret_scanner.py` or a bare
-# host `gitleaks` binary for the scan — docker compose only (B9). The Python
+# host `gitleaks` binary for the scan — nerdctl compose only (B9). The Python
 # wrapper remains the LOCAL fail-closed hook guard (git-hooks/), not a Makefile command.
 # There is exactly ONE canonical loop scan entry: loop-secret-scan-tests.
 #
@@ -944,9 +981,6 @@ secret-scan-image: ## Build the gitleaks secret-scanning container image (base, 
 	@echo "SECRET-SCAN: building $(GITLEAKS_IMAGE) (gitleaks $(GITLEAKS_VERSION))..."
 	@nerdctl build -f containers/gitleaks/Dockerfile \
 		--build-arg GITLEAKS_VERSION=$(GITLEAKS_VERSION) \
-		-t $(GITLEAKS_IMAGE) . \
-		|| docker build -f containers/gitleaks/Dockerfile \
-		--build-arg GITLEAKS_VERSION=$(GITLEAKS_VERSION) \
 		-t $(GITLEAKS_IMAGE) .
 
 # Standalone secret scan (NOT a loop-harness stage). Runs the gitleaks repo scan
@@ -954,28 +988,26 @@ secret-scan-image: ## Build the gitleaks secret-scanning container image (base, 
 # --staged) and CI (.github/workflows/trufflehog.yml). Kept as a Makefile target so it
 # can be invoked on demand. Honours .gitignore + .gitleaks.toml allowlists.
 # A detected secret fails (non-zero).
-loop-secret-scan: ## gitleaks secret scan of the repo, containerized (docker compose only).
+loop-secret-scan: ## gitleaks secret scan of the repo, containerized (nerdctl compose only).
 	@echo "LOOP-SECRET-SCAN: scanning repository with gitleaks (container)..."
 	@rm -f .gitleaks-report.json
-	@set +e; script -qec "docker compose -f $(GITLEAKS_COMPOSE) run --rm gitleaks" /dev/null >/dev/null 2>&1; RC=$$?; set -e; \
-	if [ $$RC -ne 0 ] && [ -s .gitleaks-report.json ]; then \
+	$(call docker_run,nerdctl compose -f $(GITLEAKS_COMPOSE) run --rm gitleaks) || { \
 		echo "LOOP-SECRET-SCAN: SECRETS DETECTED -- loop blocked."; \
 		echo "LOOP-SECRET-SCAN: findings (file | rule | line):"; \
 		python3 scripts/print_gitleaks_report.py .gitleaks-report.json || true; \
 		rm -f .gitleaks-report.json; exit 1; \
-	fi; \
+	}; \
 	rm -f .gitleaks-report.json; \
 	echo "LOOP-SECRET-SCAN: clean."
 
 # MANDATORY loop-harness gate: run the secret-scanner's OWN pytest suite, containerized.
 # Builds the gitleaks-tests image (real gitleaks + pytest) and runs
-# tests/test_secret_scanner*.py inside the container (docker compose only, B9).
+# tests/test_secret_scanner*.py inside the container (nerdctl compose only, B9).
 # Verifies the scanner's detection logic itself — no mocks on detection.
 loop-secret-scan-tests: ## [LOOP] run secret-scanner pytest suite (containerized, real gitleaks).
 	@echo "LOOP-SECRET-SCAN-TESTS: building test image + running suite (container)..."
 	@$(MAKE) secret-scan-tests-image
-	@script -qec "docker compose -f $(GITLEAKS_TESTS_COMPOSE) run --rm gitleaks-tests" /dev/null \
-		|| { echo "LOOP-SECRET-SCAN-TESTS: tests FAILED -- loop blocked."; exit 1; }
+	$(call docker_run,nerdctl compose -f $(GITLEAKS_TESTS_COMPOSE) run --rm gitleaks-tests) || { echo "LOOP-SECRET-SCAN-TESTS: tests FAILED -- loop blocked."; exit 1; }
 	@echo "LOOP-SECRET-SCAN-TESTS: all passed."
 
 # Non-scan helper: run the pytest suites that exercise the Python wrapper
@@ -989,8 +1021,6 @@ secret-scan-tests-image: ## Build the gitleaks + pytest test image.
 	@echo "SECRET-SCAN: building test image (extends $(GITLEAKS_IMAGE))..."
 	@$(MAKE) secret-scan-image
 	@nerdctl build -f containers/gitleaks-tests/Dockerfile \
-		-t $(GITLEAKS_TESTS_IMAGE) . \
-		|| docker build -f containers/gitleaks-tests/Dockerfile \
 		-t $(GITLEAKS_TESTS_IMAGE) .
 
 .PHONY: secret-scan-image secret-scan-tests-image loop-secret-scan test-secret-scanner

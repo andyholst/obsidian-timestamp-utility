@@ -2,7 +2,39 @@
 
 This changelog tracks updates to the Obsidian Timestamp Utility plugin, which allows users to insert timestamps and rename files with timestamp prefixes in Obsidian.
 
+## Unreleased
+### ✨ New Features
+
+- **feat(codebase): fix indentation, remove dead code, support hyphenated tags, expand formatting coverage (#75)**
+  - Fix indentation in src/main.ts for UUID v7 and Base64 commands (lines 153-192)
+  - Remove dead code methods: generateUuidV7(), encodeBase64(), decodeBase64() from TimestampPlugin
+  - Update tag regex in src/taskProcessor.ts to support hyphenated tags like #my-tag
+  - Expand .prettierrc.json formatting coverage to all source and test files via Makefile
+  - Update tests to use Base64Modal methods instead of removed plugin methods
+  - Create OpenSpec change for codebase quality improvements
+  - Mark all tasks as complete in tasks.md
+  - Archive OpenSpec change (specs merged, change dir moved to archive/)
+  - All 65 tests pass, build succeeds.
+
+### 📝 Documentation
+
+- **docs(openspec): add codebase-quality-improvements OpenSpec change + program.md rule (#77)**
+  - * docs(openspec): add codebase-quality-improvements change files alongside merged TS code
+  - * docs(program): add rule that PR branches must contain both code changes and OpenSpec files together
+  - * chore(openspec): archive codebase-quality-improvements change (before merge)
+
+### 🔍 Changes
+
+- **test auro researh (#73)**
+
 ## 0.4.16
+
+
+
+
+
+
+
 ### 🐞 Bug Fixes
 
 - **fix(release): repair bump-from-changelog and release dry-run flow**
@@ -17,13 +49,13 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - final check-docs-sync gate stays green.
   - Makefile and scripts/run-loop-harness.sh updated to keep the
   - canonical stage list (loop-collect -> loop-ts-floor -> loop-unit
-  -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app
-  -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync).
+    -> loop-unit-real -> loop-e2e -> loop-integration -> loop-build-app
+    -> loop-test-app -> loop-secret-scan-tests -> check-docs-sync).
   - Release pipeline fixes:
   - scripts/release.sh rewritten to follow the B22 local-only order:
   - squash-commits (typed, commitlint-gated) -> bump-local (Obsidian
   - way: package.json + manifest.json + versions.json) -> changelog
-  -> release-notes. No push, no squash once a PR is under review.
+    -> release-notes. No push, no squash once a PR is under review.
   - scripts/bump_from_changelog.py corrected to derive the next version
   - from the latest released tag (max of GitHub-released tags and
   - committed package/versions at HEAD, plus one patch), ignoring
@@ -60,10 +92,16 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 ## 0.4.15
 
+
+
+
+
+
+
 ### ✨ New Features
 
 - **feat(loop): B26 — agent may commit/push own branch after loop gate is green; B12 worktree-PR delivery (#55)**
-  - * feat(pr): enforce no-squash and no-revert governance on open PRs
+  - - feat(pr): enforce no-squash and no-revert governance on open PRs
   - This change codifies the agent's PR delivery governance as durable
   - loop-harness behaviours (B27-B30) and wires the worktree-confined
   - delivery flow into the OpenSpec pipeline. The motivation: open PRs
@@ -116,14 +154,14 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - tests/test_check_docs_sync.py extended to cover the new drift
   - fixtures (in_sync, drift_b_range_low, drift_reorder,
   - drift_stage_removed, in_sync_ascii, in_sync_en_dash).
-  - src/__tests__/main.test.ts adjusted to the new command contract.
+  - src/**tests**/main.test.ts adjusted to the new command contract.
   - package.json / manifest.json / versions.json bumped.
   - agent-wiki entries recorded for the no-squash review and the
   - uuid-modal agentic generation work.
-  - * docs(changelog): regenerate CHANGELOG from squashed PR governance commit
+  - - docs(changelog): regenerate CHANGELOG from squashed PR governance commit
   - regenerated via make changelog after squashing B28 B29 B30 B30d into one commit
   - no behaviour change; changelog only
-  - * feat(pr): add PR stability & worktree-flow governance
+  - - feat(pr): add PR stability & worktree-flow governance
   - Introduce PR lifecycle governance that keeps an open PR stable while still
   - letting the human override it deliberately.
   - PR stability (B28/B29/B30):
@@ -145,7 +183,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - gets its own linked worktree; delivery is the PR push (never a file copy
   - back to the parent) and corrections redeliver via force-with-lease to the
   - same PR branch. scripts/openspec-change-flow.sh orchestrates new -> worktree
-  -> generate -> verify -> archive -> deliver, with
+    -> generate -> verify -> archive -> deliver, with
   - docker-compose-files/worktree-override.yaml isolating each change via
   - COMPOSE_PROJECT_NAME=otu-<name>.
   - Loop-harness sync (B8): AGENTS.md, docs/openspec-engineering-loop-harness.md
@@ -159,7 +197,7 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - the same order.
   - Docs: agent-wiki entries record each change's verification-against-spec and
   - README documents the worktree flow. manifest.json/package.json/versions.json
-  - bumped accordingly; src/__tests__/main.test.ts updated to match.
+  - bumped accordingly; src/**tests**/main.test.ts updated to match.
 
 - **feat(loop): enforce host-background make exec and reviewed-squash PR delivery**
   - Mandate that long-running verification targets execute on the REAL host via
@@ -211,6 +249,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - agent-wiki/index.md.
 
 ## 0.4.14
+
+
+
+
 
 
 
@@ -322,6 +364,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **feat(loop): add openspec intake gate, lint hook, docs-sync guards (#53)**
@@ -422,6 +468,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
   - xoxb-…) appear in tests; no real keys are committed.
 
 ## 0.4.12
+
+
+
+
 
 
 
@@ -538,6 +588,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **feat(loop): add commitlint-gated squash-commits and release automation**
@@ -600,6 +654,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **add task command to convert reminders to calendar tasks**
@@ -620,6 +678,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **refactored Makefile to run containerd**
@@ -635,6 +697,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **updated README.md file based on the new containerd bash wrapper script.**
 
 ## 0.4.7
+
+
+
+
 
 
 
@@ -666,6 +732,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **added Code Extractor Agent**
@@ -683,6 +753,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **implement clarify ticket agent**
@@ -691,6 +765,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **TicketClarityAgent will set better conditions to generate TS code and tests for other agents.**
 
 ## 0.4.4
+
+
+
+
 
 
 
@@ -706,11 +784,19 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ⚡ Performance Improvements
 
 - **added test coverage of the Obsidian plugin code**
 
 ## 0.4.2
+
+
+
+
 
 
 
@@ -743,6 +829,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **implemented Ticket interpreter Node**
@@ -753,6 +843,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **updated the README.md file how to run the agents and test them.**
 
 ## 0.4.0
+
+
+
+
 
 
 
@@ -773,12 +867,20 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### 🐞 Bug Fixes
 
 - **aligned with modern Obsidian plugin standards**
 - **replaced assume what file you edit code with actual file you edit on code.**
 
 ## 0.3.0
+
+
+
+
 
 
 
@@ -795,6 +897,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### ✨ New Features
 
 - **add rename file with timestamp & heading**
@@ -805,6 +911,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **updated README.md file how to use the new rename command with timestamp & title as filename**
 
 ## 0.1.8
+
+
+
+
 
 
 
@@ -820,12 +930,20 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### 🐞 Bug Fixes
 
 - **fixed automatic release for pr merge**
 - **simplified the release.sh to generate release notes based on CHANGELOG.md file**
 
 ## 0.1.6
+
+
+
+
 
 
 
@@ -839,12 +957,20 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### 🐞 Bug Fixes
 
 - **did a tag release for Obsidian plugin release**
 - **the release script should work as supposed to**
 
 ## 0.1.4
+
+
+
+
 
 
 
@@ -857,11 +983,19 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 
 
 
+
+
+
+
 ### 🐞 Bug Fixes
 
 - **fixed proper version tagging to comply with Obsidian plugin release policy**
 
 ## 0.1.2
+
+
+
+
 
 
 
@@ -871,6 +1005,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **bumped the version of the Timestamp Utility to be released for the Obsidian community**
 
 ## 0.1.1
+
+
+
+
 
 
 
@@ -903,6 +1041,10 @@ This changelog tracks updates to the Obsidian Timestamp Utility plugin, which al
 - **added missings versions.json file for Obsidian plugin**
 
 ## 0.1.0
+
+
+
+
 
 
 

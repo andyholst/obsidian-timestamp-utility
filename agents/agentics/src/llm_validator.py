@@ -556,4 +556,3 @@ def validate_llm_response(
 ) -> Dict[str, Any]:
     """Global function for LLM response validation"""
     return response_validator.validate_response(response, response_type, context)
-

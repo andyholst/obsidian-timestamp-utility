@@ -2,7 +2,9 @@ import os
 import logging
 import re
 import json
+import sys
 import subprocess
+import glob as _glob
 from .tool_integrated_agent import ToolIntegratedAgent
 from .tools import (
     read_file_tool,
@@ -11,6 +13,7 @@ from .tools import (
     npm_install_tool,
 )
 from .state import State
+from typing import Optional
 from .utils import safe_json_dumps, remove_thinking_tags, log_info
 from .prompts import ModularPrompts
 
@@ -48,11 +51,17 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         Integrate generated code and tests into project files based on relevant code and test files.
         Updates existing files if present, otherwise creates new ones under src/ and src/__tests__/.
         """
+        print(f"DEBUG PROCESS START: state keys={list(state.keys())}", file=sys.stderr)
+        print(f"DEBUG PROCESS START: generated_code length={len(state.get('generated_code', ''))}", file=sys.stderr)
+        print(f"DEBUG PROCESS START: CHANGE env={os.getenv('CHANGE')}", file=sys.stderr)
         log_info(
             self.name,
             f"Before processing in {self.name}: {safe_json_dumps(state, indent=2)}",
         )
         log_info(self.name, "Starting code integration process")
+        print(f"DEBUG INTEGRATION START: state keys={list(state.keys())}", file=sys.stderr)
+        print(f"DEBUG INTEGRATION START: relevant_code_files={state.get('relevant_code_files', [])}", file=sys.stderr)
+        print(f"DEBUG INTEGRATION START: CHANGE env={os.getenv('CHANGE')}", file=sys.stderr)
         try:
             # Handle proposed JS dependencies first
             proposed_js_deps = state.get("proposed_js_deps", [])
@@ -121,45 +130,64 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
 
             # B11 hardening: this plugin's generated TS MUST land in the canonical files
             # (src/main.ts and src/__tests__/main.test.ts). Force them into the relevant
-            # lists whenever they exist on disk, so the deterministic merge floor
+            # lists ALWAYS (even if they don't exist on disk yet) so the deterministic merge floor
             # (generate_updated_code_file / integrate_test_contract) ALWAYS processes them —
             # even if the LLM fails to flag them as relevant. This guarantees the OpenSpec
             # spec contract (## Contract / ## Test Contract) is always injected into the
             # real plugin files, never into a stray new file.
+
+            # DEBUG: Log the entire integration flow
+            log_info(self.name, f"DEBUG INTEGRATION START: relevant_code_files={len(relevant_code_files)}, relevant_test_files={len(relevant_test_files)}")
+            log_info(self.name, f"DEBUG CHANGE env: {os.getenv('CHANGE')}")
+
             canonical_code = os.path.join(self.project_root, "src", "main.ts")
             canonical_test = os.path.join(
                 self.project_root, "src", "__tests__", "main.test.ts"
             )
-            if check_file_exists_tool(canonical_code):
-                if not any(
-                    f["file_path"].endswith("src/main.ts") for f in relevant_code_files
-                ):
-                    relevant_code_files.append(
-                        {
-                            "file_path": os.path.relpath(
-                                canonical_code, self.project_root
-                            ),
-                            "content": read_file_tool(canonical_code),
-                        }
-                    )
-            if check_file_exists_tool(canonical_test):
-                if not any(
-                    f["file_path"].endswith("src/__tests__/main.test.ts")
-                    for f in relevant_test_files
-                ):
-                    relevant_test_files.append(
-                        {
-                            "file_path": os.path.relpath(
-                                canonical_test, self.project_root
-                            ),
-                            "content": read_file_tool(canonical_test),
-                        }
-                    )
+            # ALWAYS force canonical files into relevant lists (don't check existence)
+            if not any(
+                f["file_path"].endswith("src/main.ts") for f in relevant_code_files
+            ):
+                existing_content = read_file_tool(canonical_code) if check_file_exists_tool(canonical_code) else ""
+                relevant_code_files.append(
+                    {
+                        "file_path": os.path.relpath(
+                            canonical_code, self.project_root
+                        ),
+                        "content": existing_content,
+                    }
+                )
+            if not any(
+                f["file_path"].endswith("src/__tests__/main.test.ts")
+                for f in relevant_test_files
+            ):
+                existing_test = read_file_tool(canonical_test) if check_file_exists_tool(canonical_test) else ""
+                relevant_test_files.append(
+                    {
+                        "file_path": os.path.relpath(
+                            canonical_test, self.project_root
+                        ),
+                        "content": existing_test,
+                    }
+                )
 
-            # If no generated code/tests, skip integration
-            if not state.get("generated_code") or not state.get("generated_tests"):
-                log_info(self.name, "No generated code/tests; skipping integration")
+            # If no generated code/tests, fall back to the DETERMINISTIC floor instead of
+            # skipping integration. The spec contract is the source of truth and the floor
+            # (generate_updated_code_file -> _assemble_contract_features /
+            # integrate_test_contract) injects the contract into the existing baseline with
+            # an EMPTY LLM block. This makes the guarantee LLM-independent: a generation
+            # failure (LLM empty / APIConnectionError) can no longer silently leave
+            # src/main.ts at the un-contracted baseline -- the floor still runs and lands
+            # the spec-mandated command/Modal. Only when there is NO contract do we truly
+            # have nothing to inject and skip.
+            has_contract = bool(self._expected_contract_for_change(os.getenv("CHANGE")))
+            if (not state.get("generated_code") or not state.get("generated_tests")) and not has_contract:
+                log_info(self.name, "No generated code/tests and no change contract; skipping integration")
                 return state
+            if not state.get("generated_code"):
+                log_info(self.name, "No generated_code; letting the deterministic floor run against baseline")
+            if not state.get("generated_tests"):
+                log_info(self.name, "No generated_tests; letting the deterministic floor run against baseline")
             log_info(
                 self.name,
                 f"Task details received: {json.dumps(task_details, indent=2)}",
@@ -203,25 +231,42 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             )
 
             if not code_content or not test_content:
-                self.monitor.error("content_empty", data={"type": "code_or_test"})
-                raise ValueError("Code or test content is empty")
+                # When a change contract exists, the deterministic floor can still run on
+                # the baseline with empty LLM content (the spec owns the injected code/tests).
+                # Only with NO contract is empty content truly a hard failure.
+                if not has_contract:
+                    self.monitor.error("content_empty", data={"type": "code_or_test"})
+                    raise ValueError("Code or test content is empty")
 
             if relevant_code_files or relevant_test_files:
-                log_info(self.name, "Processing existing files for update")
-                # Update existing code files
+                # DEBUG: Trace contract injection flow
+                import sys as _sys
+                print(f"DEBUG INTEGRATION: relevant_code_files={len(relevant_code_files)}", file=_sys.stderr)
+                print(f"DEBUG CHANGE env: {os.getenv('CHANGE')}", file=_sys.stderr)
+
                 for file_data in relevant_code_files:
                     rel_file_path = file_data["file_path"]
                     abs_file_path = os.path.join(self.project_root, rel_file_path)
                     existing_content = file_data["content"]
-                    log_info(self.name, f"Processing code file: {rel_file_path}")
-                    log_info(
-                        self.name, f"Existing content length: {len(existing_content)}"
-                    )
-                    log_info(self.name, f"Existing content: {existing_content}")
+                    print(f"DEBUG Processing code file: {rel_file_path}", file=_sys.stderr)
+
+                    # DEBUG: Trace contract injection
+                    change_env = os.getenv("CHANGE")
+                    print(f"DEBUG CHANGE env var: {change_env}", file=_sys.stderr)
+
+                    contract = self._expected_contract_for_change(change_env)
+                    print(f"DEBUG Contract result: {bool(contract)}", file=_sys.stderr)
+                    if contract:
+                        print(f"DEBUG Contract keys: {list(contract.keys())}", file=_sys.stderr)
+                        print(f"DEBUG Has command_id: {'command_id' in contract}", file=_sys.stderr)
+                        print(f"DEBUG Has contract_ts: {'contract_ts' in contract}", file=_sys.stderr)
+
                     updated_content = self.generate_updated_code_file(
-                        existing_content, code_content,
-                        self._expected_contract_for_change(os.getenv("CHANGE")),
+                        existing_content,
+                        code_content,
+                        contract,
                     )
+                    print(f"DEBUG Updated content length: {len(updated_content)}", file=_sys.stderr)
                     log_info(
                         self.name,
                         f"Generated updated content length: {len(updated_content)}",
@@ -286,6 +331,14 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                     code_content,
                     self._expected_contract_for_change(os.getenv("CHANGE")),
                 )
+                log_info(self.name, f"DEBUG: assembled_code length={len(assembled_code)}")
+                if "insert-greetings" in assembled_code:
+                    log_info(self.name, "✓ DEBUG: Contract command injected!")
+                else:
+                    log_info(self.name, "✗ DEBUG: Contract command NOT injected!")
+                    # Debug: check what's in the code
+                    log_info(self.name, f"DEBUG: Code contains 'addCommand': {'addCommand' in assembled_code}")
+                    log_info(self.name, f"DEBUG: Code contains 'TimestampPlugin': {'TimestampPlugin' in assembled_code}")
                 self.create_file(new_code_file, assembled_code)
                 self.create_file(new_test_file, test_content)
                 # B11/B10: even when the pipeline creates a NEW test file, apply the
@@ -295,9 +348,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 # the spec contract is always injected).
                 contract = self._expected_contract_for_change(os.getenv("CHANGE"))
                 if contract:
-                    test_content = self.integrate_test_contract(
-                        test_content, contract
-                    )
+                    test_content = self.integrate_test_contract(test_content, contract)
                     self.create_file(new_test_file, test_content)
                 state["relevant_code_files"] = [
                     {
@@ -325,7 +376,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             raise
 
     @staticmethod
-    def _expected_contract_for_change(change: str | None) -> dict | None:
+    def _expected_contract_for_change(change: Optional[str]) -> Optional[dict]:
         """Parse the OpenSpec-mandated command contract from the change's spec/tasks.
 
         Looks for lines like:  `id: 'insert-uuid-v7'`, `name: 'Insert UUID v7 ...'`,
@@ -339,6 +390,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # (the worktree may lag the main tree's uncommitted tasks.md edits).
         roots = []
         proj = os.getenv("PROJECT_ROOT", "/project")
+        log_info("CodeIntegrator", f"DEBUG _expected_contract_for_change: change={change}, proj={proj}")
         # Search active changes first, then archived changes (openspec archive moves the
         # dir to openspec/changes/archive/<name> once a change ships). Mirrors
         # openspec_loader.find_change_dir so contract tests stay valid after archiving
@@ -350,29 +402,51 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         try:
             top = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
-                cwd=proj, capture_output=True, text=True,
+                cwd=proj,
+                capture_output=True,
+                text=True,
             )
             if top.returncode == 0 and top.stdout.strip():
                 top_root = top.stdout.strip()
-                change_roots.extend([
-                    os.path.join(top_root, "openspec", "changes"),
-                    os.path.join(top_root, "openspec", "changes", "archive"),
-                ])
+                change_roots.extend(
+                    [
+                        os.path.join(top_root, "openspec", "changes"),
+                        os.path.join(top_root, "openspec", "changes", "archive"),
+                    ]
+                )
         except Exception:
             pass
         candidates = []
-        for r in change_roots:
-            candidates.append(os.path.join(r, change, "specs", change, "spec.md"))
-            candidates.append(os.path.join(r, change, "tasks.md"))
+        # Separate active roots from archive roots
+        active_roots = [r for r in change_roots if os.path.basename(r) != "archive"]
+        archive_roots = [os.path.join(r, "archive") for r in active_roots]
+
+        # Add files from ACTIVE changes only (not from archive paths)
+        for r in active_roots:
+            # Use glob to find spec.md since the spec directory name may differ from change name
+            specs_dir = os.path.join(r, change, "specs")
+            if os.path.isdir(specs_dir):
+                for spec_file in _glob.glob(os.path.join(specs_dir, "**", "spec.md"), recursive=True):
+                    candidates.append(spec_file)
+            tasks_path = os.path.join(r, change, "tasks.md")
+            if os.path.isfile(tasks_path):
+                candidates.append(tasks_path)
+
         # Date-prefixed archived variants (openspec archive renames the dir
-        # YYYY-MM-DD-<change>): <archive>/<date>-<change>/{specs/<change>/spec.md,tasks.md}
-        import glob as _glob
-        for r in change_roots:
-            archive_root = os.path.join(r, "archive") if os.path.basename(r) != "archive" else r
-            for dated in _glob.glob(os.path.join(archive_root, "*-" + change)):
-                if os.path.isdir(dated):
-                    candidates.append(os.path.join(dated, "specs", change, "spec.md"))
-                    candidates.append(os.path.join(dated, "tasks.md"))
+        # YYYY-MM-DD-<change>): find spec.md dynamically since spec dir name may differ.
+        # Only use archived versions if NO active change exists.
+        if not any(os.path.isfile(os.path.join(r, change, "tasks.md")) for r in active_roots):
+            for r in archive_roots:
+                archived_versions = sorted(_glob.glob(os.path.join(r, "*-" + change)))
+                for dated in archived_versions[-1:]:  # Only the latest version
+                    if os.path.isdir(dated):
+                        specs_dir = os.path.join(dated, "specs")
+                        if os.path.isdir(specs_dir):
+                            for spec_file in _glob.glob(os.path.join(specs_dir, "**", "spec.md"), recursive=True):
+                                candidates.append(spec_file)
+                        tasks_path = os.path.join(dated, "tasks.md")
+                        if os.path.isfile(tasks_path):
+                            candidates.append(tasks_path)
         text = ""
         for p in candidates:
             if os.path.isfile(p):
@@ -454,7 +528,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # sits between the heading and the ```ts fence). This guarantees contract_ts contains
         # ALL markers (COMMAND / GENERATOR / MODAL) so the deterministic floor always injects.
         cblocks = re.findall(
-            r"// === CONTRACT_(?:COMMAND|GENERATOR|MODAL) ===[^\n]*\n.*?(?=// === |$)",
+            r"// === CONTRACT_(?:COMMAND|GENERATOR|MODAL) ===[^\n]*\n.*?(?=// === |\Z)",
             text,
             re.DOTALL,
         )
@@ -469,7 +543,10 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         return contract or None
 
     def generate_updated_code_file(
-        self, existing_content: str, new_code: str, expected_contract: dict | None = None
+        self,
+        existing_content: str,
+        new_code: str,
+        expected_contract: Optional[dict] = None,
     ) -> str:
         """Integrate new code into the existing file MERGING (never replacing).
 
@@ -483,6 +560,22 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         honor it BEFORE merging (so the injected command uses the exact id/name/Modal class the
         OpenSpec spec mandates -- OpenSpec spec always wins over LLM naming).
         """
+        log_info(self.name, f"DEBUG generate_updated_code_file: START")
+        log_info(self.name, f"DEBUG generate_updated_code_file: existing_content length={len(existing_content)}")
+        log_info(self.name, f"DEBUG generate_updated_code_file: new_code length={len(new_code)}")
+        log_info(self.name, f"DEBUG generate_updated_code_file: expected_contract present={expected_contract is not None}")
+        if expected_contract:
+            log_info(self.name, f"DEBUG generate_updated_code_file: contract keys={list(expected_contract.keys())}")
+            log_info(self.name, f"DEBUG generate_updated_code_file: command_id={expected_contract.get('command_id', 'N/A')}")
+
+        # CRITICAL DEBUG: Print the entire function entry to verify it's being called
+        print(f"=== GENERATE_UPDATED_CODE_FILE ENTRY ===", file=sys.stderr)
+        print(f"existing_content length: {len(existing_content)}", file=sys.stderr)
+        print(f"new_code length: {len(new_code)}", file=sys.stderr)
+        print(f"expected_contract present: {expected_contract is not None}", file=sys.stderr)
+        if expected_contract:
+            print(f"contract keys: {list(expected_contract.keys())}", file=sys.stderr)
+            print(f"command_id: {expected_contract.get('command_id', 'N/A')}", file=sys.stderr)
         try:
             merged_new = new_code
             if expected_contract:
@@ -490,9 +583,15 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 # is the SOLE authoritative source of the command/Modal/generator (spec wins
                 # over LLM under-delivery). We do NOT normalize the LLM block here -- that
                 # would duplicate the authoritative injection. Strip happens inside assembly.
-                merged = self._assemble_contract_features(existing_content, new_code, expected_contract)
+                merged = self._assemble_contract_features(
+                    existing_content, new_code, expected_contract
+                )
             else:
-                merged_new = self._normalize_to_contract(new_code, expected_contract) if expected_contract else new_code
+                merged_new = (
+                    self._normalize_to_contract(new_code, expected_contract)
+                    if expected_contract
+                    else new_code
+                )
                 merged = self.integrate_code_deterministic(existing_content, merged_new)
             # When the OpenSpec spec mandates a contract, the deterministic assembly is the
             # SOLE authoritative source (B13/B11): it MUST win unconditionally, regardless of
@@ -521,7 +620,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         return self.integrate_code_with_llm(existing_content, new_code)
 
     @staticmethod
-    def _ensure_contract_present(content: str, contract: dict | None) -> str:
+    def _ensure_contract_present(content: str, contract: Optional[dict]) -> str:
         """Unconditionally guarantee the spec contract pieces are present in `content`.
 
         Idempotent: appends ONLY the pieces that are absent (by string check), so re-runs
@@ -537,12 +636,24 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             return content
 
         def _slice(marker: str) -> str:
-            m = re.search(
-                rf"// === {re.escape(marker)} ===[^\n]*\n\s*(.*?)(?=// === |\\Z)",
-                raw,
-                re.DOTALL,
-            )
-            return m.group(1).strip() if m else ""
+            # Find the marker position, then find the next marker OR ``` fence, extract between them.
+            # This avoids regex greedy/dotall issues entirely.
+            header = f"// === {marker} ==="
+            start = raw.find(header)
+            if start == -1:
+                return ""
+            content_start = raw.find("\n", start) + 1
+            next_marker = raw.find("// === ", content_start)
+            next_fence = raw.find("\n```", content_start)
+            if next_marker == -1 and next_fence == -1:
+                return raw[content_start:].strip()
+            elif next_marker == -1:
+                end = next_fence
+            elif next_fence == -1:
+                end = next_marker
+            else:
+                end = min(next_marker, next_fence)
+            return raw[content_start:end].strip()
 
         command_body = _slice("CONTRACT_COMMAND")
         generator_fn = _slice("CONTRACT_GENERATOR")
@@ -553,41 +664,63 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         result = content
         # 1) Command: ensure the contract command id is present inside onload().
         if cid and f"id: '{cid}'" not in result:
-            # Insert just before the closing brace of onload()/TimestampPlugin; simplest:
-            # append inside the last `async onload()` block's closing. Fallback: append at
-            # end of the plugin class. We inject before the plugin class closing brace.
-            insert_at = result.rfind("}")
-            if insert_at != -1:
-                result = result[:insert_at] + "\n" + command_body + "\n" + result[insert_at:]
-        # 2) Generator method inside TimestampPlugin. Idempotent: skip if the method name
-        # token is ALREADY present anywhere (covers both the assembled and the guaranteed
-        # form, regardless of indentation), so re-runs never duplicate the method.
-        if generator_fn and "generateUuidV7" in generator_fn and "generateUuidV7" not in result:
-            # Insert before the TimestampPlugin class closing brace.
+            # Find the TimestampPlugin class and insert inside its onload() method.
+            # Look for `async onload()` within TimestampPlugin and find its closing brace.
             lines = result.split("\n")
             open_idx = None
             for i, ln in enumerate(lines):
-                if re.search(r"class\s+TimestampPlugin\b", ln):
+                if re.search(r"(?:export\s+default\s+)?class\s+TimestampPlugin\b", ln):
                     open_idx = i
                     break
-            insert_idx = len(lines)
+            insert_at = len(result)  # Default: end of file
             if open_idx is not None:
                 depth = 0
-                inside = False
+                inside_onload = False
                 for j in range(open_idx, len(lines)):
                     depth += lines[j].count("{") - lines[j].count("}")
-                    if "{" in lines[j]:
-                        inside = True
-                    if inside and depth <= 0:
-                        insert_idx = j
+                    if "async onload()" in lines[j] or "onload()" in lines[j]:
+                        inside_onload = True
+                    if inside_onload and depth <= 0:
+                        # Found the closing brace of onload()
+                        insert_at = sum(len(lines[k]) + 1 for k in range(j + 1))
                         break
-            lines = (
-                lines[:insert_idx]
-                + [""]
-                + generator_fn.rstrip("\n").split("\n")
-                + lines[insert_idx:]
-            )
-            result = "\n".join(lines)
+            if insert_at != len(result):
+                result = result[:insert_at] + "\n" + command_body + "\n" + result[insert_at:]
+        # 2) Generator method inside TimestampPlugin. Idempotent: skip if ALL method names
+        # are already present (covers both the assembled and the guaranteed form,
+        # regardless of indentation), so re-runs never duplicate methods.
+        if generator_fn and generator_fn.strip():
+            # Extract all method names from the generator function(s)
+            # Only match actual method definitions (not helper functions assigned to variables)
+            _gen_names = re.findall(r"^(?!const\s|let\s|var\s)(\w+)\s*\(", generator_fn, re.MULTILINE)
+            # Check if ANY of the method names are missing from the result
+            any_missing = any(name not in result for name in _gen_names)
+            if any_missing:
+                # Insert before the TimestampPlugin class closing brace.
+                lines = result.split("\n")
+                open_idx = None
+                for i, ln in enumerate(lines):
+                    if re.search(r"(?:export\s+default\s+)?class\s+TimestampPlugin\b", ln):
+                        open_idx = i
+                        break
+                insert_idx = len(lines)
+                if open_idx is not None:
+                    depth = 0
+                    inside = False
+                    for j in range(open_idx, len(lines)):
+                        depth += lines[j].count("{") - lines[j].count("}")
+                        if "{" in lines[j]:
+                            inside = True
+                        if inside and depth <= 0:
+                            insert_idx = j
+                            break
+                lines = (
+                    lines[:insert_idx]
+                    + [""]
+                    + generator_fn.rstrip("\n").split("\n")
+                    + lines[insert_idx:]
+                )
+                result = "\n".join(lines)
         # 3) Modal class as a TOP-LEVEL module member (never nested).
         if modal and f"class {modal} extends obsidian.Modal" not in result:
             result = result.rstrip("\n") + "\n\n" + modal_class.rstrip("\n") + "\n"
@@ -637,8 +770,10 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             for i, ln in enumerate(lines):
                 m = re.search(r"new\s+(\w*Modal)\(this\.app\)\.open\(\)", ln)
                 if m:
-                    lines[i] = ln.replace(f"new {m.group(1)}(this.app).open()",
-                                          f"new {modal}(this.app).open()")
+                    lines[i] = ln.replace(
+                        f"new {m.group(1)}(this.app).open()",
+                        f"new {modal}(this.app).open()",
+                    )
                     break
         return "\n".join(lines)
 
@@ -659,14 +794,27 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         raw = (contract or {}).get("contract_ts")
         if not raw:
             return {}
+
         # Split the contract block by the marker comments the spec author wrote.
         def _slice(marker: str) -> str:
-            m = re.search(
-                rf"// === {re.escape(marker)} ===[^\n]*\n\s*(.*?)(?=// === |\Z)",
-                raw,
-                re.DOTALL,
-            )
-            return m.group(1).strip() if m else ""
+            # Find the marker position, then find the next marker OR ``` fence, extract between them.
+            # This avoids regex greedy/dotall issues entirely.
+            header = f"// === {marker} ==="
+            start = raw.find(header)
+            if start == -1:
+                return ""
+            content_start = raw.find("\n", start) + 1
+            next_marker = raw.find("// === ", content_start)
+            next_fence = raw.find("\n```", content_start)
+            if next_marker == -1 and next_fence == -1:
+                return raw[content_start:].strip()
+            elif next_marker == -1:
+                end = next_fence
+            elif next_fence == -1:
+                end = next_marker
+            else:
+                end = min(next_marker, next_fence)
+            return raw[content_start:end].strip()
 
         command_body = _slice("CONTRACT_COMMAND")
         generator_fn = _slice("CONTRACT_GENERATOR")
@@ -701,15 +849,33 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         dropped (it would otherwise duplicate / conflict). Existing commands in `main.ts`
         are preserved. No LLM, no omission of existing logic.
         """
+        log_info(self.name, f"DEBUG _assemble_contract_features: START")
+        log_info(self.name, f"DEBUG _assemble_contract_features: contract keys={list(contract.keys())}")
+        log_info(self.name, f"DEBUG _assemble_contract_features: has command_id={'command_id' in contract}")
+        log_info(self.name, f"DEBUG _assemble_contract_features: has contract_ts={'contract_ts' in contract}")
+
         feat = self._spec_driven_feature_for_contract(contract)
+        log_info(self.name, f"DEBUG _assemble_contract_features: feat={bool(feat)}, keys={list(feat.keys()) if feat else 'None'}")
         if not feat:
+            log_info(self.name, "DEBUG _assemble_contract_features: returning early (no feat)")
             return self.integrate_code_deterministic(existing_content, new_code)
+
         cid = contract["command_id"]
         modal = contract["modal_class"]
         # Build the injected CODE from the contract: ONLY the authoritative command body is
         # injected into onload(). The Modal class + generator are appended AFTER the merge
         # (idempotent: only if not already present).
         injected = feat["command_body"].rstrip("\n")
+        log_info(self.name, f"DEBUG _assemble_contract_features: cid={cid}, modal={modal}")
+        log_info(self.name, f"DEBUG _assemble_contract_features: generator_fn length={len(feat.get('generator_fn', ''))}")
+        log_info(self.name, f"DEBUG _assemble_contract_features: injected length={len(injected)}")
+        log_info(self.name, f"DEBUG _assemble_contract_features: injected preview={injected[:300]}")
+
+        # Check if injected contains this.addCommand(
+        if "this.addCommand(" in injected:
+            log_info(self.name, f"DEBUG _assemble_contract_features: injected contains this.addCommand(")
+        else:
+            log_info(self.name, f"DEBUG _assemble_contract_features: WARNING - injected does NOT contain this.addCommand(")
 
         # B13 — SPEC IS THE SOLE SOURCE OF TRUTH for contract features. Rebuild from the
         # COMMITTED baseline (git HEAD) and inject ONLY the contract pieces. The LLM's
@@ -720,15 +886,35 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # CONTRACT_COMMAND body is inline and CONTRACT_GENERATOR supplies generateUuidV7).
         base_src = existing_content
         proj = os.getenv("PROJECT_ROOT", "/project")
+
+        # If no baseline exists (e.g. e2e tests in isolated temp dirs), build a minimal scaffold
+        # so the contract injection has something to merge against.
+        if not base_src or not base_src.strip():
+            base_src = _build_minimal_plugin_scaffold(modal, feat)
+
         try:
             import subprocess as _sp
+
             # Under rootless nerdctl the container uid (1000) does not own the bind-mounted
             # repo, so plain `git` aborts with "dubious ownership". Pass `-c safe.directory=*`
             # (and neutralize global/system gitconfig) so the committed-read works.
             head = _sp.run(
-                ["git", "-c", "safe.directory=*", "-C", proj, "show", "HEAD:src/main.ts"],
-                capture_output=True, text=True,
-                env={**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"},
+                [
+                    "git",
+                    "-c",
+                    "safe.directory=*",
+                    "-C",
+                    proj,
+                    "show",
+                    "HEAD:src/main.ts",
+                ],
+                capture_output=True,
+                text=True,
+                env={
+                    **os.environ,
+                    "GIT_CONFIG_GLOBAL": "/dev/null",
+                    "GIT_CONFIG_SYSTEM": "/dev/null",
+                },
             )
             if head.returncode == 0 and head.stdout.strip():
                 base_src = head.stdout
@@ -739,30 +925,66 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # command / modal / generator (none are present in a fresh baseline, but this guards
         # re-runs against any stale state).
         cleaned_existing = base_src
+        log_info(self.name, f"DEBUG STRIPPERS: baseline length={len(cleaned_existing)}")
         for blk in self._extract_balanced_blocks(cleaned_existing, "this.addCommand("):
             if re.search(rf"id:\s*'{re.escape(cid)}'", blk):
+                log_info(self.name, f"DEBUG STRIPPERS: removing addCommand block with id={cid}")
                 cleaned_existing = cleaned_existing.replace(blk, "")
         for blk in self._extract_balanced_blocks(cleaned_existing, "class "):
             if re.search(rf"\b{re.escape(modal)}\b", blk):
+                log_info(self.name, f"DEBUG STRIPPERS: removing class block with modal={modal}")
                 cleaned_existing = cleaned_existing.replace(blk, "")
+
+        log_info(self.name, f"DEBUG STRIPPERS: cleaned length={len(cleaned_existing)}")
+        log_info(self.name, f"DEBUG STRIPPERS: contains insert-greetings after strip={'insert-greetings' in cleaned_existing}")
         # STRIP any existing generator-method definition from the baseline so the authoritative
         # spec generator is the ONLY one present. Derive the method name(s) from the spec's
         # `generator_fn` (name-agnostic -- not hard-coded to `generateUuidV7`, so base64's
         # `encodeBase64`/`decodeBase64` and any future generator are handled too). Match the
         # method DEFINITION line (`<name>(` at line start) -- never the call site
         # `this.<name>()` -- so call sites are preserved. This removes any stale/wrong variant
-        # and makes the spec authoritative.
-        _gen_names = re.findall(r"^\s*(\w+)\s*\(", feat.get("generator_fn", ""), re.MULTILINE)
+        # and makes the spec authoritative. Only match actual method definitions, not helper
+        # functions assigned to variables (e.g., `const hex = (...)`).
+        _gen_names = re.findall(
+            r"^(?!const\s|let\s|var\s)(\w+)\s*\(", feat.get("generator_fn", ""), re.MULTILINE
+        )
         for _gname in _gen_names:
             for blk in self._extract_balanced_blocks(cleaned_existing, f"{_gname}("):
                 cleaned_existing = cleaned_existing.replace(blk, "")
 
         # Merge: baseline + the authoritative contract command ONLY (no LLM code).
         merged = self.integrate_code_deterministic(cleaned_existing, injected)
+        log_info(self.name, f"DEBUG MERGE: cleaned_existing length={len(cleaned_existing)}, injected length={len(injected)}, merged length={len(merged)}")
+        log_info(self.name, f"DEBUG MERGE: contains insert-greetings after merge={'insert-greetings' in merged}")
+
         # The generated Modal MUST be a TOP-LEVEL class (not nested inside TimestampPlugin).
         # It is appended at the very END of the file (idempotent: only if absent).
+        log_info(self.name, f"DEBUG _assemble_contract_features: checking for modal '{modal}' in merged")
+        log_info(self.name, f"DEBUG _assemble_contract_features: modal_class length={len(feat.get('modal_class', ''))}")
+
+        # Check what's actually in the merged content around the modal check
+        if f"class {modal} extends obsidian.Modal" in merged:
+            log_info(self.name, f"DEBUG MERGE: Modal already present - checking if it's the RIGHT one")
+            # Find where it appears
+            idx = merged.find(f"class {modal} extends obsidian.Modal")
+            log_info(self.name, f"DEBUG MERGE: context around modal at index {idx}")
+            log_info(self.name, merged[max(0,idx-200):idx+500])
+        else:
+            log_info(self.name, f"DEBUG MERGE: Modal NOT present - will append")
+            # Append the modal class at the end
+            if feat.get("modal_class"):
+                log_info(self.name, f"DEBUG MERGE: appending modal_class from contract")
+                merged = (
+                    merged.rstrip("\n") + "\n\n" + feat["modal_class"].rstrip("\n") + "\n"
+                )
+
         if f"class {modal} extends obsidian.Modal" not in merged:
-            merged = merged.rstrip("\n") + "\n\n" + feat["modal_class"].rstrip("\n") + "\n"
+            log_info(self.name, f"DEBUG _assemble_contract_features: appending modal")
+            merged = (
+                merged.rstrip("\n") + "\n\n" + feat["modal_class"].rstrip("\n") + "\n"
+            )
+        else:
+            log_info(self.name, f"DEBUG _assemble_contract_features: modal already present, skipping append")
         # Guarantee a SINGLE authoritative contract command: if the (fragile) strippers above
         # missed an LLM-emitted duplicate of id `cid`, keep only the FIRST such command block
         # and drop the rest. This prevents a late-registered LLM command from shadowing the
@@ -790,7 +1012,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             # `class TimestampPlugin` and brace-match to its closing '}'.
             open_idx = None
             for i, ln in enumerate(lines):
-                if re.search(r"class\s+TimestampPlugin\b", ln):
+                if re.search(r"(?:export\s+default\s+)?class\s+TimestampPlugin\b", ln):
                     open_idx = i
                     break
             insert_idx = len(lines)
@@ -817,6 +1039,21 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 + lines[insert_idx:]
             )
             merged = "\n".join(lines)
+
+        # FINAL DEBUG: Check what we're about to return
+        log_info(self.name, f"DEBUG _assemble_contract_features: FINAL merged length={len(merged)}")
+        log_info(self.name, f"DEBUG _assemble_contract_features: contains insert-greetings={'insert-greetings' in merged}")
+        log_info(self.name, f"DEBUG _assemble_contract_features: contains GreetingsModal={'GreetingsModal' in merged}")
+
+        # If we have the contract but no modal/command, something went wrong - log the actual content
+        if feat.get("command_id") and "insert-greetings" not in merged:
+            log_info(self.name, f"DEBUG _assemble_contract_features: ERROR - command_id present but insert-greetings missing!")
+            # Show a snippet around where it should be
+            if "TimestampPlugin" in merged:
+                idx = merged.find("TimestampPlugin")
+                log_info(self.name, f"DEBUG _assemble_contract_features: context around TimestampPlugin:")
+                log_info(self.name, merged[max(0,idx-100):idx+500])
+
         return merged
 
     @staticmethod
@@ -891,9 +1128,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             ln for ln in new_code.split("\n") if ln.strip().startswith("import")
         ]
         existing_import_set = set(
-            ln.strip()
-            for ln in existing_lines
-            if ln.strip().startswith("import")
+            ln.strip() for ln in existing_lines if ln.strip().startswith("import")
         )
         unique_new_imports = [
             imp for imp in new_imports if imp.strip() not in existing_import_set
@@ -924,7 +1159,9 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
             existing_lines = [
                 ln
                 for ln in existing_lines
-                if not re.match(r"\s*import\s*\{\s*Notice\s*\}\s*from\s*['\"]obsidian['\"];", ln)
+                if not re.match(
+                    r"\s*import\s*\{\s*Notice\s*\}\s*from\s*['\"]obsidian['\"];", ln
+                )
             ]
 
         # Drop a *wholly unused* `import * as obsidian from 'obsidian'` so the
@@ -933,9 +1170,9 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # at all (e.g. a plain command with no Modal). This is deterministic merge
         # hygiene, not hand-editing generated bodies.
         merged_so_far = "\n".join(existing_lines)
-        if re.search(r"\bimport\s+\*\s+as\s+obsidian\b", merged_so_far) and not re.search(
-            r"\bobsidian\.\w", merged_so_far
-        ):
+        if re.search(
+            r"\bimport\s+\*\s+as\s+obsidian\b", merged_so_far
+        ) and not re.search(r"\bobsidian\.\w", merged_so_far):
             existing_lines = [
                 ln
                 for ln in existing_lines
@@ -953,7 +1190,9 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
 
         # --- command registrations (inject into onload) ---
         commands = self._extract_balanced_blocks(new_code, "this.addCommand(")
+        log_info(self.name, f"DEBUG CMD MERGE: new_code length={len(new_code)}, commands found={len(commands)}")
         if commands:
+            log_info(self.name, f"DEBUG CMD MERGE: first command preview={commands[0][:200]}")
             # locate onload body: the last existing addCommand block, else after `onload() {`
             last_cmd_idx = -1
             for k in range(len(existing_lines) - 1, -1, -1):
@@ -1006,7 +1245,10 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         return self.integrate_tests_manually(existing_content, new_tests)
 
     def integrate_test_contract(
-        self, existing_content: str, expected_contract: dict | None, baseline_content: str | None = None
+        self,
+        existing_content: str,
+        expected_contract: Optional[dict],
+        baseline_content: Optional[str] = None,
     ) -> str:
         """B10/B11: deterministically inject the SPEC-OWNED regression tests from the change's
         `## Test Contract` block into `main.test.ts`.
@@ -1029,14 +1271,16 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         if not test_ts:
             return existing_content
 
-        m = re.search(
+        # Find ALL test contract blocks (not just the first). Multiple contracts
+        # exist when the spec defines several tests (e.g. encode + decode base64).
+        test_blocks = re.findall(
             r"// === TEST_CONTRACT_[A-Z0-9_]+ ===[^\n]*\n\s*(.*?)(?=// === END_TEST_CONTRACT|// === TEST_CONTRACT_|\Z)",
             test_ts,
             re.DOTALL,
         )
-        if not m:
+        if not test_blocks:
             return existing_content
-        test_body = m.group(1).rstrip()
+        test_body = "\n\n".join(b.rstrip() for b in test_blocks if b.strip())
 
         # B11: the spec Test Contract is the SOLE source of truth for regression tests.
         # The LLM test output is only a fallback and is DISCARDED entirely here — otherwise
@@ -1057,13 +1301,28 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # NOTE: under rootless nerdctl the container uid (1000) does NOT own the bind-mounted
         # repo, so plain `git` aborts with "dubious ownership". Pass `-c safe.directory=*`
         # (and env GIT_CONFIG_GLOBAL=/dev/null) so the committed-read works inside the container.
-        baseline_src = baseline_content if baseline_content is not None else existing_content
+        baseline_src = (
+            baseline_content if baseline_content is not None else existing_content
+        )
         _committed_src = None
         try:
             _g = subprocess.run(
-                ["git", "-c", "safe.directory=*", "-C", proj, "show", "HEAD:src/__tests__/main.test.ts"],
-                capture_output=True, text=True,
-                env={**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_SYSTEM": "/dev/null"},
+                [
+                    "git",
+                    "-c",
+                    "safe.directory=*",
+                    "-C",
+                    proj,
+                    "show",
+                    "HEAD:src/__tests__/main.test.ts",
+                ],
+                capture_output=True,
+                text=True,
+                env={
+                    **os.environ,
+                    "GIT_CONFIG_GLOBAL": "/dev/null",
+                    "GIT_CONFIG_SYSTEM": "/dev/null",
+                },
             )
             if _g.returncode == 0 and _g.stdout.strip():
                 _committed_src = _g.stdout
@@ -1109,7 +1368,11 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 j = i
                 while j < len(baseline_lines):
                     depth += _brace_delta(baseline_lines[j])
-                    if j > i and depth <= 0 and baseline_lines[j].strip() in ("}", "});"):
+                    if (
+                        j > i
+                        and depth <= 0
+                        and baseline_lines[j].strip() in ("})", "});", "}")
+                    ):
                         i = j + 1
                         break
                     j += 1
@@ -1126,7 +1389,8 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # Keep the FIRST such block; remove every subsequent one (open -> matching close) so the
         # structural shell is always unique and balanced.
         tp_opens = [
-            i for i, l in enumerate(cleaned)
+            i
+            for i, l in enumerate(cleaned)
             if l.strip().startswith("describe('TimestampPlugin',")
         ]
         if len(tp_opens) > 1:
@@ -1135,11 +1399,15 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 depth = 0
                 for j in range(open_idx, len(cleaned)):
                     depth += _brace_delta(cleaned[j])
-                    if j > open_idx and depth <= 0 and cleaned[j].strip() in ("}", "});"):
+                    if (
+                        j > open_idx
+                        and depth <= 0
+                        and cleaned[j].strip() in ("}", "});")
+                    ):
                         remove_ranges.append((open_idx, j))
                         break
             for a, b in sorted(remove_ranges, reverse=True):
-                cleaned = cleaned[:a] + cleaned[b + 1:]
+                cleaned = cleaned[:a] + cleaned[b + 1 :]
 
         # Locate the single top-level `describe('TimestampPlugin')` (the committed baseline has
         # exactly one; this is our structural shell).
@@ -1173,7 +1441,7 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         # producing TS1005 '}' expected.)
         top_close_idx = None
         for j in range(len(cleaned) - 1, top_open_idx, -1):
-            if cleaned[j].strip() in ("}", "});"):
+            if cleaned[j].strip() in ("})", "});", "}"):
                 top_close_idx = j
                 break
         if top_close_idx is None:
@@ -1203,7 +1471,9 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
         try:
             top = subprocess.run(
                 ["git", "rev-parse", "--show-toplevel"],
-                cwd=proj, capture_output=True, text=True,
+                cwd=proj,
+                capture_output=True,
+                text=True,
             )
             if top.returncode == 0 and top.stdout.strip():
                 roots.append(os.path.join(top.stdout.strip(), "openspec", "changes"))
@@ -1478,3 +1748,4 @@ class CodeIntegratorAgent(ToolIntegratedAgent):
                 "file_creation_failed", data={"file_path": file_path, "error": str(e)}
             )
             raise
+# UNIQUE_MARKER_1786063731

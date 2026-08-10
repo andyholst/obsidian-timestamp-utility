@@ -82,7 +82,9 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
             code_structure = json.dumps(inputs.get("code_structure", {}))
             tool_context = self._gather_tool_context(inputs)
             raw_refined_ticket = inputs.get("raw_refined_ticket", "")
-            original_ticket_content = inputs.get("original_ticket_content", "") or inputs.get("ticket_content", "")
+            original_ticket_content = inputs.get(
+                "original_ticket_content", ""
+            ) or inputs.get("ticket_content", "")
             task_details_str = self._format_task_details(inputs)
             existing_code_content = self._get_existing_code_content(inputs)
             # Fallback: read existing code from disk
@@ -112,9 +114,13 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                     if contract:
                         bits = []
                         if contract.get("command_id"):
-                            bits.append(f"command id MUST be exactly '{contract['command_id']}'")
+                            bits.append(
+                                f"command id MUST be exactly '{contract['command_id']}'"
+                            )
                         if contract.get("command_name"):
-                            bits.append(f"command name MUST be exactly '{contract['command_name']}'")
+                            bits.append(
+                                f"command name MUST be exactly '{contract['command_name']}'"
+                            )
                         if contract.get("modal_class"):
                             bits.append(
                                 f"the feature MUST be an `obsidian.Modal` subclass named '{contract['modal_class']}'"
@@ -159,7 +165,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
                     "  // The onload() method should already have this.addCommand() calls\n"
                     "  // Add your new this.addCommand() inside onload()\n"
                     "}  // <-- this is the final closing brace\n\n"
-                    "OUTPUT ONLY JSON: {\"code\": \"<typescript>\", \"method_name\": \"<name>\", \"command_id\": \"<id>\"}\n"
+                    'OUTPUT ONLY JSON: {"code": "<typescript>", "method_name": "<name>", "command_id": "<id>"}\n'
                     "The code field should contain ONLY the new method and the new this.addCommand() call."
                 )
             return prompt
@@ -500,9 +506,7 @@ class CodeGeneratorAgent(ToolIntegratedAgent):
         # Post-process generated code to fix common issues
         generated_code = generated_code.replace("CodeMirror.Editor", "obsidian.Editor")
         generated_code = generated_code.replace("TFile", "obsidian.TFile")
-        generated_code = generated_code.replace(
-            "obsidian.TFile", "obsidian.TFile"
-        )
+        generated_code = generated_code.replace("obsidian.TFile", "obsidian.TFile")
         # NOTE: do NOT rewrite `obsidian.Modal` -> `obsidian.MarkdownView`. The OpenSpec
         # contract mandates `UuidV7Modal extends obsidian.Modal`; that rewrite silently
         # broke the spec contract. Modal subclasses stay as authored by the spec/LLM.
@@ -701,7 +705,9 @@ this.addCommand({{
             log_info(self.name, f"Using {source} with {len(requirements)} requirements")
             # Always generate code - no skipping for vague tickets
             log_info(self.name, "Generating code for all tickets, even vague ones")
-            _reqs = getattr(state, "requirements", None) or state.get("requirements", [])
+            _reqs = getattr(state, "requirements", None) or state.get(
+                "requirements", []
+            )
             self._log_structured(
                 "info",
                 "task_processing",

@@ -51,13 +51,18 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
     ) -> CodeGenerationState:
         """Generate code and tests. In ultra-fast mode, skip iterative refinement."""
         import os
+
         if os.getenv("TEST_ULTRA_FAST_MODE") == "1":
             # Fast path: single-pass code + test generation, no refinement loop
             log_info(self.name, "Ultra-fast mode: single-pass generation")
             code_state = self._generate_initial_code(state)
             test_state = self.test_generator.generate(code_state)
             result_state = CodeGenerationState(
-                **{**code_state.__dict__, "generated_tests": test_state.generated_tests, "relevant_test_files": test_state.relevant_test_files}
+                **{
+                    **code_state.__dict__,
+                    "generated_tests": test_state.generated_tests,
+                    "relevant_test_files": test_state.relevant_test_files,
+                }
             )
             # Set basic validation result for test compatibility
             try:
@@ -73,10 +78,12 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
                 "issues": validation.get("issues", []),
             }
             result_state = result_state.with_validation_history([history_entry])
-            result_state = result_state.with_feedback({
-                "iteration_count": 1,
-                "validation_history": [history_entry],
-            })
+            result_state = result_state.with_feedback(
+                {
+                    "iteration_count": 1,
+                    "validation_history": [history_entry],
+                }
+            )
             return result_state
         """Generate code and tests collaboratively with iterative refinement"""
 
@@ -328,7 +335,14 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
             score = min(100, base_score + structure_bonus)
 
             # Fail if there are untested methods or critical structural issues
-            has_critical_issues = bool(untested_methods) or "describe(" not in state.generated_tests or ("it(" not in state.generated_tests and "test(" not in state.generated_tests)
+            has_critical_issues = (
+                bool(untested_methods)
+                or "describe(" not in state.generated_tests
+                or (
+                    "it(" not in state.generated_tests
+                    and "test(" not in state.generated_tests
+                )
+            )
             passed = score >= 40 and not has_critical_issues
 
             result = {
@@ -432,7 +446,9 @@ class CollaborativeGenerator(Runnable[CodeGenerationState, CodeGenerationState])
             if not self._validate_typescript_code(code):
                 code = self._correct_typescript_code(code, state)
 
-            return refined_state.with_code(code, method_name, command_id).with_tests(tests)
+            return refined_state.with_code(code, method_name, command_id).with_tests(
+                tests
+            )
 
         except Exception as e:
             self._log_structured(
@@ -597,15 +613,51 @@ Manual Implementation Notes: {state.manual_implementation_notes}
         method_pattern = r"(?:public|private|protected)?\s*(?:async)?\s*(\w+)\s*\("
         matches = re.findall(method_pattern, code)
         # Filter out common JS built-in methods and keywords
-        ignore = {"if", "for", "while", "constructor", "log", "addCommand",
-                  "addEventListener", "removeEventListener", "setTimeout",
-                  "setInterval", "clearTimeout", "clearInterval", "parseInt",
-                  "parseFloat", "isNaN", "isFinite", "encodeURI", "decodeURI",
-                  "encodeURIComponent", "decodeURIComponent", "eval",
-                  "require", "module", "exports", "console", "JSON", "Math",
-                  "Object", "Array", "String", "Number", "Boolean", "Date",
-                  "RegExp", "Error", "Map", "Set", "Promise", "Symbol",
-                  "parseInt", "parseFloat", "isNaN", "isFinite"}
+        ignore = {
+            "if",
+            "for",
+            "while",
+            "constructor",
+            "log",
+            "addCommand",
+            "addEventListener",
+            "removeEventListener",
+            "setTimeout",
+            "setInterval",
+            "clearTimeout",
+            "clearInterval",
+            "parseInt",
+            "parseFloat",
+            "isNaN",
+            "isFinite",
+            "encodeURI",
+            "decodeURI",
+            "encodeURIComponent",
+            "decodeURIComponent",
+            "eval",
+            "require",
+            "module",
+            "exports",
+            "console",
+            "JSON",
+            "Math",
+            "Object",
+            "Array",
+            "String",
+            "Number",
+            "Boolean",
+            "Date",
+            "RegExp",
+            "Error",
+            "Map",
+            "Set",
+            "Promise",
+            "Symbol",
+            "parseInt",
+            "parseFloat",
+            "isNaN",
+            "isFinite",
+        }
         return [m for m in matches if m not in ignore and not m.startswith("_")]
 
     def _extract_tested_methods_from_tests(self, tests: str) -> list:
@@ -616,11 +668,28 @@ Manual Implementation Notes: {state.manual_implementation_notes}
         method_pattern = r"\.(\w+)\(\)"
         matches = re.findall(method_pattern, tests)
         # Filter out common test framework methods
-        ignore = {"toBe", "toEqual", "toBeTruthy", "toBeFalsy", "toBeDefined",
-                  "toBeUndefined", "toBeNull", "toContain", "toHaveLength",
-                  "toThrow", "toHaveBeenCalled", "toHaveBeenCalledWith",
-                  "toStrictEqual", "toMatchObject", "toMatchSnapshot",
-                  "rejects", "resolves", "not", "length", "constructor"}
+        ignore = {
+            "toBe",
+            "toEqual",
+            "toBeTruthy",
+            "toBeFalsy",
+            "toBeDefined",
+            "toBeUndefined",
+            "toBeNull",
+            "toContain",
+            "toHaveLength",
+            "toThrow",
+            "toHaveBeenCalled",
+            "toHaveBeenCalledWith",
+            "toStrictEqual",
+            "toMatchObject",
+            "toMatchSnapshot",
+            "rejects",
+            "resolves",
+            "not",
+            "length",
+            "constructor",
+        }
         return [m for m in set(matches) if m not in ignore]
 
     def _create_refinement_feedback(self, issues: list) -> str:

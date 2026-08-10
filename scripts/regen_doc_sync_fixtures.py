@@ -122,7 +122,10 @@ def regen() -> None:
         old, new = _derive_b_range_drift(rel)
         b_anchors[rel] = (old, new)
         p = d / rel
-        p.write_text(p.read_text(encoding="utf-8").replace(old, new))
+        # Replace ALL occurrences to ensure the gate detects drift — if we only
+        # drift one occurrence, remaining valid B1-B32 phrases pass b_range_ok.
+        text = p.read_text(encoding="utf-8")
+        p.write_text(text.replace(old, new))
 
     # Drift scenario 2: a stage (loop-e2e) REMOVED from the canonical chain in
     # EVERY sync .md file. Proves the gate reacts when a B-step / stage is pulled

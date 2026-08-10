@@ -111,33 +111,36 @@ class TestCodeIntegratorAgentProcess:
         # Then: State is returned unchanged
         assert result == state
 
-    @patch.dict(os.environ, {"PROJECT_ROOT": "/test/root", "CHANGE": ""})
     def test_process_no_files_with_content(
-        self, mock_llm_client, sample_state, temp_project_root
+        self, mock_llm_client, sample_state, temp_project_root, monkeypatch
     ):
         # Given: No relevant files but generated content
+        # PROJECT_ROOT must point at a WRITABLE dir: the temp_project_root fixture
+        # (a real temp dir) rather than a hardcoded /test/root, which is not
+        # writable by the non-root container uid on CI.
+        monkeypatch.setenv("PROJECT_ROOT", temp_project_root)
+        monkeypatch.setenv("CHANGE", "")
         state = sample_state.copy()
         state["relevant_code_files"] = []
         state["relevant_test_files"] = []
 
         agent = CodeIntegratorAgent(mock_llm_client)
 
-        # B11 hardening: the create-new path writes the canonical plugin files
-        # (src/main.ts, src/__tests__/main.test.ts) via generate_updated_code_file +
-        # create_file. generate_filename was removed (dead code); the canonical
-        # paths are fixed. The deterministic contract assembly is applied inside
-        # generate_updated_code_file, so create_file is called twice (code + test).
-        with patch.object(agent, "create_file") as mock_create:
+        # B11 hardening: even with no relevant files flagged, the canonical plugin files
+        # (src/main.ts, src/__tests__/main.test.ts) are ALWAYS forced into the relevant lists
+        # so the deterministic merge floor processes them via update_file (never create_file).
+        # generate_filename was removed (dead code); the canonical paths are fixed.
+        with patch.object(agent, "update_file") as mock_update:
             # When: Processing
             result = agent.process(state)
 
-        # Then: New files are created and state is updated
+        # Then: canonical code + test files are updated (mocked)
         assert "relevant_code_files" in result
         assert "relevant_test_files" in result
         assert len(result["relevant_code_files"]) == 1
         assert len(result["relevant_test_files"]) == 1
-        # Verify create_file was called for the canonical code + test files
-        assert mock_create.call_count == 2
+        # Verify update_file was called for the canonical code + test files
+        assert mock_update.call_count == 2
 
     @patch.dict(os.environ, {"PROJECT_ROOT": "/test/root"})
     def test_process_with_existing_files(self, mock_llm_client, sample_state):

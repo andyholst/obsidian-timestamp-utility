@@ -3,22 +3,18 @@ services:
     build:
       context: ..
       dockerfile: containers/npm/Dockerfile
-    stdin_open: false
-    tty: false
+    stdin_open: true
+    network_mode: host
     volumes:
-    - ../:/app
-    - /home/asimov/repository/git/projects/obsidian-timestamp-utility/node_modules:/app/node_modules
+    - ../src:/app/src
+    - ../rollup.config.js:/app/rollup.config.js
+    - ../package.json:/app/package.json
+    - ../manifest.json:/app/manifest.json
+    - ../jest.config.cjs:/app/jest.config.cjs
+    - ../dist:/app/dist
     working_dir: /app
     environment:
     - TAG=${TAG:-v0.1.0}
     - REPO_NAME=${REPO_NAME:-obsidian-timestamp-utility}
-
-# Rootless nerdctl CNI fix: unique default-network subnet (see agents.yaml note).
-# 10.88.0.0/24 is verified free on this host.
-networks:
-  default:
-    name: otu-tools-default
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.88.0.0/24
+    extra_hosts:
+    - host.docker.internal:host-gateway

@@ -14,19 +14,15 @@ if ! command_exists curl; then
     exit 1
 fi
 
-if ! command_exists docker && ! command_exists podman && ! command_exists nerdctl; then
-    echo "Error: A container runtime (Docker, Podman, or Nerdctl) is required but not found."
-    echo "Install one (Docker recommended) before proceeding."
+if ! command_exists nerdctl; then
+    echo "Error: A container runtime (nerdctl) is required but not found."
+    echo "Install nerdctl before proceeding."
     exit 1
 fi
 
 # Check if runtime is running/accessible
-if command_exists docker; then
-    docker info >/dev/null 2>&1 || { echo "Error: Docker is installed but not running or inaccessible."; exit 1; }
-elif command_exists nerdctl; then
+if command_exists nerdctl; then
     nerdctl info >/dev/null 2>&1 || { echo "Error: Nerdctl is installed but not running or inaccessible."; exit 1; }
-elif command_exists podman; then
-    podman info >/dev/null 2>&1 || { echo "Error: Podman is installed but not running or inaccessible."; exit 1; }
 fi
 
 mkdir -p bin

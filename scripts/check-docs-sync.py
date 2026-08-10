@@ -33,7 +33,7 @@ SYNC_FILES = [
     "Makefile",
     "AGENTS.md",
     "hermes/skills/openspec-loop-harness.md",
-    "scripts/run-loop-harness.sh",
+    "scripts/run_loop_harness.py",
     "docs/openspec-engineering-loop-harness.md",
 ]
 # Narrative docs that MUST declare the full B-behaviour range (B1 up to B_RANGE_MIN).
@@ -56,14 +56,16 @@ CANONICAL_STAGE_ORDER_FALLBACK = [
     "loop-integration",
     "loop-build-app",
     "loop-test-app",
+    "loop-release-tests",
+    "loop-secret-scan-tests",
 ]
-B_RANGE_MIN_FALLBACK = 25
+B_RANGE_MIN_FALLBACK = 32
 
 
 def derive_contract(repo_root: Path) -> tuple[list[str], int]:
     """Derive the B8 contract from the AUTHORITATIVE sources, NOT hardcoded constants.
 
-    - stage order: parsed from `scripts/run-loop-harness.sh` STAGES=(...), with the
+    - stage order: parsed from `scripts/run_loop_harness.py` STAGES array, with the
       final `check-docs-sync` gate stage dropped (that is the gate itself, not a loop stage).
     - B-range upper bound: max B<digit> referenced across the narrative sync docs
       (they literally declare the range, e.g. "B1-B25").
@@ -73,12 +75,18 @@ def derive_contract(repo_root: Path) -> tuple[list[str], int]:
     bump AGENTS.md to B26 and the gate follows — no Python edit required.
     """
     stages = list(CANONICAL_STAGE_ORDER_FALLBACK)
-    runner = repo_root / "scripts/run-loop-harness.sh"
+    runner = repo_root / "scripts/run_loop_harness.py"
     if runner.exists():
         txt = runner.read_text(encoding="utf-8", errors="replace")
-        m = re.search(r"STAGES=\(([^)]*)\)", txt)
+        # Parse STAGES = [...] from Python file
+        # Match STAGES = [ then capture everything until the closing ]
+        m = re.search(r'STAGES\s*=\s*\[(.+?)\]', txt, re.DOTALL)
         if m:
-            parsed = m.group(1).split()
+            parsed_str = m.group(1)
+            # Extract stage names from the list - each quoted string is a stage name
+            parsed = re.findall(r'"([^"]+)"', parsed_str)
+            # Filter to only valid stage names (alphanumeric, dash, underscore)
+            parsed = [p for p in parsed if re.match(r'^[a-z][a-z0-9_-]*$', p)]
             if parsed and parsed[-1] == "check-docs-sync":
                 parsed = parsed[:-1]  # drop the gate itself
             if len(parsed) >= 2:
@@ -244,7 +252,7 @@ def check_docs_sync(repo_root: Path, cwd: Path) -> list[str]:
         text = path.read_text(encoding="utf-8", errors="replace")
         problems: list[str] = []
         if not ordered_stages_present(text, stages):
-            problems.append("8-stage order (loop-collect->loop-ts-floor->...->loop-test-app) missing/misordered")
+            problems.append("10-stage order (loop-collect->loop-ts-floor->...->loop-secret-scan-tests) missing/misordered")
         if GUARD_TOKEN not in text:
             problems.append(f"guard token {GUARD_TOKEN!r} missing")
         # B-range applies to ALL sync files (no longer exempting Makefile/runner):

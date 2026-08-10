@@ -13,7 +13,6 @@ from tenacity import (
 
 from .base_agent import BaseAgent
 from .state import State
-from langchain_ollama import OllamaLLM
 from langchain.prompts import PromptTemplate
 from github import Github, GithubException
 from .utils import safe_json_dumps, remove_thinking_tags, log_info, parse_json_response
@@ -48,7 +47,9 @@ class TicketClarityAgent(BaseAgent):
     def _simplify_and_extract(self, ticket_content: str) -> Dict:
         """Single LLM call to extract requirements and plan from ticket."""
         # Truncate ticket content to avoid overwhelming the model
-        truncated = ticket_content[:1500] if len(ticket_content) > 1500 else ticket_content
+        truncated = (
+            ticket_content[:1500] if len(ticket_content) > 1500 else ticket_content
+        )
 
         prompt = f"""Analyze this GitHub issue for an Obsidian plugin and extract structured information.
 
@@ -81,7 +82,11 @@ Output JSON only (no markdown, no explanations):
                     parsed.setdefault("affected_files", ["src/main.ts"])
                     # Ensure description is never empty - fall back to ticket content
                     if not parsed.get("description", "").strip():
-                        parsed["description"] = ticket_content[:300] if ticket_content else "Feature implementation from ticket"
+                        parsed["description"] = (
+                            ticket_content[:300]
+                            if ticket_content
+                            else "Feature implementation from ticket"
+                        )
                     # Ensure title is never empty
                     if not parsed.get("title", "").strip():
                         parsed["title"] = "Feature Implementation"
@@ -103,7 +108,7 @@ Output JSON only (no markdown, no explanations):
                 # Skip markdown headers and empty lines
                 if not line.startswith("#") and not line.startswith("```"):
                     # Clean up markdown
-                    cleaned = re.sub(r'[\*\-\•\d]+\.?\s*', '', line).strip()
+                    cleaned = re.sub(r"[\*\-\•\d]+\.?\s*", "", line).strip()
                     if cleaned and len(cleaned) > 10:
                         requirements.append(cleaned)
             if len(requirements) >= 8:
@@ -116,7 +121,10 @@ Output JSON only (no markdown, no explanations):
             "title": "Feature Implementation",
             "description": ticket_content[:200],
             "requirements": requirements[:10],
-            "acceptance_criteria": [f"Requirement {i+1} works correctly" for i in range(min(3, len(requirements)))],
+            "acceptance_criteria": [
+                f"Requirement {i + 1} works correctly"
+                for i in range(min(3, len(requirements)))
+            ],
             "implementation_steps": requirements[:5],
             "npm_packages": [],
             "affected_files": ["src/main.ts"],

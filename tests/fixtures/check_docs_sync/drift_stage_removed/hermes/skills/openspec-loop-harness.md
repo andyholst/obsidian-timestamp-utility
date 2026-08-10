@@ -188,7 +188,7 @@ The whole system is a concrete implementation of two disciplines. Grasp these be
   - **Hermes terminal CLI:** converts / creates tasks / starts the flow ONLY IF the command/text
     contains `openspec` (case-insensitive). Requests without `openspec` are exempt.
   After the change validates, the agent runs `make openspec-flow NAME=<name>` (or
-  `scripts/openspec-change-flow.sh --name <name>`), which creates a dedicated worktree `feat/<name>`,
+  `scripts/openspec_change_flow.py --name <name>`), which creates a dedicated worktree `feat/<name>`,
   scaffolds the change INSIDE it, generates + runs the loop gate inside it, archives on green,
   finalizes (squash in the worktree), and — with PUSH=1/`--push` — delivers by pushing `feat/<name>`
   as the PR. ALL artifacts stay in the worktree; the parent working tree is NEVER touched
@@ -277,7 +277,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
   `AGENTS.md`, `skill_view openspec-loop-harness` first. Never leave the two files describing
   different behaviour. The full B8 sync set (enforced by `make check-docs-sync`, the FINAL loop
   stage) also includes `Makefile`, `docs/openspec-engineering-loop-harness.md`, and
-  `scripts/run-loop-harness.sh` — all MUST agree on the 11-stage order (loop-collect → loop-ts-floor
+  `scripts/run_loop_harness.py` — all MUST agree on the 11-stage order (loop-collect → loop-ts-floor
   → loop-unit → loop-unit-real → loop-e2e → loop-integration → loop-build-app → loop-test-app →
   loop-release-tests → loop-secret-scan-tests → check-docs-sync), the `loop-ts-floor` guard, and the B1–B32 range; a drift
   there fails the loop.
@@ -390,7 +390,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       collection guard — fail fast on dangling imports, rule 4 below) → `loop-ts-floor` (STRICT TS
       test/command floor — FAIL if the current branch's `describe`/leaf `it`/`test`/jest-collected/
       `addCommand` counts drop below `origin/main`; the silent feature/test-removal guard) → `loop-unit`
-      (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks) 
+      (mocked, hermetic) → `loop-unit-real` (REAL agent unit tests on live Ollama, no mocks)
       (the 3 standing B1/B3 e2e gates) → `loop-integration` (broad agentic integration suite) →
       `loop-build-app` → `loop-test-app`. Each stage fails the whole run (no silent green). Rules for the
       integration tests:
@@ -444,7 +444,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
  `127.0.0.1:11434` reaches the live Ollama on the docker host), so they must RUN (not skip) — fix
  root resolution, never add an OLLAMA skip guard. (Closed the gap where `test_greetings_contract_unit.py` + `test_slim_refactor_invariants_unit.py` failed post-archive, and where `test_ticket20/ticket22/greetings` e2e errored on `FileNotFoundError: 'openspec'` due to `/app` root resolution.)
     - **(B20) NEVER declare a change "done" without running the loop gate first — hard pre-flight.** Before claiming any OpenSpec change complete (or "harness green/aligned/fixed"), run the gate and report real output:
-      1. **Preferred:** `bash scripts/run-loop-harness.sh` (wrapper over `make loop-harness`) — all stages: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real`  → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-secret-scan-tests` → `check-docs-sync`. Also `make loop-trigger`.
+      1. **Preferred:** `python3 scripts/run_loop_harness.py` (wrapper over `make loop-harness`) — all stages: `loop-collect` → `loop-ts-floor` → `loop-unit` → `loop-unit-real`  → `loop-integration` → `loop-build-app` → `loop-test-app` → `loop-release-tests` → `loop-secret-scan-tests` → `check-docs-sync`. Also `make loop-trigger`.
       2. **If full `make loop-harness` can't finish** (live Ollama absent for `loop-e2e`/`loop-unit-real`, or npm build times out), STILL run the hermetic gates `make loop-collect` + `make loop-ts-floor` + `make loop-unit` (no external dep) — they MUST be green before any "done".
       3. **Report honestly:** actual per-stage PASS/SKIP/FAIL with the failing stage named. Never say "done/green" if `loop-unit`/`loop-collect` is red; fix the root cause and re-run. Rationale: the agent previously finished work (incl. AGENTS.md/skill edits) WITHOUT running the gate, leaving `make loop-unit` red. B20 makes the gate mandatory so regressions are caught before "done". (B4/B14: no git commit/push from the gate.)
     - **(B21) HITL is OPT-IN and loop-excluded — never a blocking prompt in automation.** `HITLNode`
@@ -541,7 +541,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       a UNIQUE branch (`wt/<name>` during work, `feat/<name>` on delivery), and a UNIQUE compose
       project name (`COMPOSE_PROJECT_NAME=otu-<name>`). Many agents can each iterate in their own
       sandbox and deliver their own distinct PR branch concurrently with no collision. (4) **This is the
-      default flow:** `make openspec-flow NAME=<name>` (and `wt-create`, `openspec-change-flow.sh`)
+      default flow:** `make openspec-flow NAME=<name>` (and `wt-create`, `openspec_change_flow.py`)
       create the local `wt/<name>` sandbox, run the gate, and — on green — automatically promote + push
       + open the `feat/<name>` PR. `PUSH=1`/`--push` is retained as an explicit alias but is now the
       default behaviour, not an opt-in. B8: mirror in AGENTS.md + harness doc.
@@ -555,7 +555,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
       unavailable; only blocks when `gh` confirms an engaged PR).
       (2) **B28b gh-driven PR resolution:** when the prompt says "go to the PR for `<branch>`" (or
       "resolve the PR comments" / "address the review"), run `make pr-resolve BRANCH=<branch>` (→
-      `scripts/pr_resolve.sh`), which uses `gh` to fetch + print the PR's comments and review threads;
+      `scripts/pr_resolve.py`), which uses `gh` to fetch + print the PR's comments and review threads;
       the agent follows each **strictly**, fixes the code, commits as a NORMAL (non-squashed)
       Conventional commit, and pushes **normally** (never `--force`, never squash). The script commits/
       pushes nothing itself; `pr-resolve` and `squash-commits` are mutually exclusive on a reviewed
@@ -563,7 +563,7 @@ These are standing rules for the agent (also in `AGENTS.md`). They are enforced 
     - **(B29) TWO-WAY PR INTERACTION — COMMENT THE FIX + COMMIT ON GREEN GATE.** Extends B28 with
       agent→participant signalling so a human reviewer can resolve threads:
       (1) **B29a Comment the fix:** after applying a code fix for a PR comment/review thread, post a
-      PR comment (`make pr-comment BRANCH=<b> BODY=<text>` → `scripts/pr_comment.sh` → `gh pr comment`)
+      PR comment (`make pr-comment BRANCH=<b> BODY=<text>` → `scripts/pr_comment.py` → `gh pr comment`)
       summarizing the fix and linking the fixing sha (e.g. `Fixed in <sha>: <summary> — resolves
       <comment>`). Gives the participant a visible, resolvable signal.
       (2) **B29b Commit on green gate (no squash):** when resolving an open PR's comments, run
